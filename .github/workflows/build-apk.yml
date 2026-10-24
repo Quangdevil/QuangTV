@@ -38,6 +38,9 @@ jobs:
       - name: Flutter dependencies
         working-directory: upstream/flutter_app
         run: flutter pub get
+      - name: Analyze QuangTV Dart code
+        working-directory: upstream/flutter_app
+        run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_web_screen.dart
       - name: Compile Android debug APK
         working-directory: upstream/flutter_app
         run: flutter build apk --debug --target-platform android-arm64
