@@ -33,7 +33,9 @@ jobs:
           flutter-version: '3.44.4'
           channel: stable
           cache: true
-      - name: Apply QuangTV UI integration\n        run: python3 scripts/patch_quangtv.py\n      - name: Flutter dependencies
+      - name: Apply QuangTV UI integration
+        run: python3 scripts/patch_quangtv.py
+      - name: Flutter dependencies
         working-directory: upstream/flutter_app
         run: flutter pub get
       - name: Compile Android debug APK
