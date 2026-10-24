@@ -245,6 +245,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         })),
         ],
         if (section == 0) ...[
+          const Divider(),
+          const Text('Kênh đã xem gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          for (final url in recentChannels)
+            for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => c.url == url && (!hiddenUrls.contains(c.url) || unlocked)))
+              ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playProtected(c)),
+        ],
+        if (section == 0) ...[
           const SizedBox(height: 12),
           const Divider(),
           const Text('VTV · Xem lại phim và chương trình',
@@ -255,7 +262,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         if (section == 4) ...[
           const Text('Kênh yêu thích', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => favorites.contains(c.url) && (!hiddenUrls.contains(c.url) || unlocked)))
-            ListTile(leading: const Icon(Icons.favorite), title: Text(c.name), onTap: () => _playProtected(c), trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => _toggleFavorite(c))),
+            Dismissible(
+              key: ValueKey('favorite_${c.url}'),
+              direction: DismissDirection.endToStart,
+              background: Container(color: Colors.red.shade700, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.heart_broken, color: Colors.white)),
+              onDismissed: (_) => _toggleFavorite(c),
+              child: ListTile(leading: const Icon(Icons.favorite), title: Text(c.name), onTap: () => _playProtected(c), trailing: IconButton(tooltip: 'Bỏ yêu thích', icon: const Icon(Icons.favorite), onPressed: () => _toggleFavorite(c))),
+            ),
           const Divider(),
           const Text('Xem gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           for (final url in recentChannels)
