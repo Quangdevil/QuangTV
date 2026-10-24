@@ -19,6 +19,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   int section = 0;
   List<String> youtubeHistory = [];
   final youtubeSearch = TextEditingController();
+  Set<String> favorites = {};
+  List<String> recentChannels = [];
   bool loading = false;
   String error = '';
 
@@ -32,6 +34,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     final prefs = await SharedPreferences.getInstance();
     urlController.text = prefs.getString('quangtv_playlist') ?? defaultUrl;
     youtubeHistory = prefs.getStringList('quangtv_youtube_search_history') ?? [];
+    favorites = (prefs.getStringList('quangtv_favorites') ?? []).toSet();
+    recentChannels = prefs.getStringList('quangtv_recent_channels') ?? [];
     if (mounted) setState(() {});
     await _load();
   }
@@ -72,6 +76,21 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     }
   }
 
+  Future<void> _toggleFavorite(Channel c) async {
+    setState(() { if (!favorites.add(c.url)) favorites.remove(c.url); });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('quangtv_favorites', favorites.toList());
+  }
+
+  Future<void> _playChannel(Channel c) async {
+    recentChannels = [c.url, ...recentChannels.where((url) => url != c.url)].take(30).toList();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('quangtv_recent_channels', recentChannels);
+    if (!mounted) return;
+    setState(() {});
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(channel: c)));
+  }
+
   Future<void> _searchYoutube(String query) async {
     query = query.trim();
     if (query.isEmpty) return;
@@ -99,7 +118,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       appBar: AppBar(title: const Text('QuangTV · TV & Podcast')),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
         SegmentedButton<int>(
-          segments: const [ButtonSegment(value: 0, label: Text('TV')), ButtonSegment(value: 1, label: Text('YouTube')), ButtonSegment(value: 2, label: Text('Podcast')), ButtonSegment(value: 3, label: Text('Radio'))],
+          segments: const [ButtonSegment(value: 0, label: Text('TV')), ButtonSegment(value: 1, label: Text('YouTube')), ButtonSegment(value: 2, label: Text('Podcast')), ButtonSegment(value: 3, label: Text('Radio')), ButtonSegment(value: 4, label: Text('Ưa thích'))],
           selected: {section},
           onSelectionChanged: (values) => setState(() => section = values.first),
         ),
@@ -122,8 +141,19 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         SizedBox(height: 280, child: ListView.builder(itemCount: shown.length, itemBuilder: (context, i) {
           final channel = shown[i];
           return ListTile(dense: true, leading: const Icon(Icons.live_tv), title: Text(channel.name),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(channel: channel))));
+            trailing: IconButton(tooltip: 'Ưa thích', icon: Icon(favorites.contains(channel.url) ? Icons.favorite : Icons.favorite_border), onPressed: () => _toggleFavorite(channel)),
+            onTap: () => _playChannel(channel));
         })),
+        ],
+        if (section == 4) ...[
+          const Text('Kênh yêu thích', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          for (final c in channels.where((c) => favorites.contains(c.url)))
+            ListTile(leading: const Icon(Icons.favorite), title: Text(c.name), onTap: () => _playChannel(c), trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => _toggleFavorite(c))),
+          const Divider(),
+          const Text('Xem gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          for (final url in recentChannels)
+            for (final c in channels.where((c) => c.url == url))
+              ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playChannel(c)),
         ],
         if (section == 1) ...[
           const Text('YouTube', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
