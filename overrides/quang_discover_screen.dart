@@ -17,6 +17,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   final searchController = TextEditingController();
   List<Channel> channels = [];
   int section = 0;
+  List<String> youtubeHistory = [];
+  final youtubeSearch = TextEditingController();
   bool loading = false;
   String error = '';
 
@@ -29,6 +31,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   Future<void> _restore() async {
     final prefs = await SharedPreferences.getInstance();
     urlController.text = prefs.getString('quangtv_playlist') ?? defaultUrl;
+    youtubeHistory = prefs.getStringList('quangtv_youtube_search_history') ?? [];
+    if (mounted) setState(() {});
     await _load();
   }
 
@@ -69,6 +73,12 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   }
 
   Future<void> _searchYoutube(String query) async {
+    query = query.trim();
+    if (query.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    youtubeHistory = [query, ...youtubeHistory.where((x) => x != query)].take(30).toList();
+    await prefs.setStringList('quangtv_youtube_search_history', youtubeHistory);
+    if (mounted) setState(() {});
     final uri = Uri.https('www.youtube.com', '/results', {'search_query': query});
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
@@ -77,6 +87,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   void dispose() {
     urlController.dispose();
     searchController.dispose();
+    youtubeSearch.dispose();
     super.dispose();
   }
 
@@ -116,7 +127,12 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         ],
         if (section == 1) ...[
           const Text('YouTube', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const Text('Dùng YouTube chính thức để đăng nhập, xem đăng ký và danh sách phát.'),
+          const Text('Không cần đăng nhập để tìm và xem video công khai. Lịch sử tìm kiếm lưu trên máy.'),
+          TextField(controller: youtubeSearch, textInputAction: TextInputAction.search, onSubmitted: _searchYoutube,
+            decoration: InputDecoration(hintText: 'Tìm video YouTube', prefixIcon: const Icon(Icons.search), suffixIcon: IconButton(icon: const Icon(Icons.arrow_forward), onPressed: () => _searchYoutube(youtubeSearch.text)))),
+          const SizedBox(height: 8),
+          const Text('Lịch sử tìm kiếm'),
+          for (final query in youtubeHistory) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(query), onTap: () => _searchYoutube(query)),
           FilledButton.icon(onPressed: () => launchUrl(Uri.parse('https://www.youtube.com/'), mode: LaunchMode.externalApplication), icon: const Icon(Icons.play_circle), label: const Text('Mở YouTube')),
         ],
         if (section == 2) ...[
