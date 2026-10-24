@@ -269,11 +269,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
               onDismissed: (_) => _toggleFavorite(c),
               child: ListTile(leading: const Icon(Icons.favorite), title: Text(c.name), onTap: () => _playProtected(c), trailing: IconButton(tooltip: 'Bỏ yêu thích', icon: const Icon(Icons.favorite), onPressed: () => _toggleFavorite(c))),
             ),
-          const Divider(),
-          const Text('Xem gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          for (final url in recentChannels)
-            for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => c.url == url && (!hiddenUrls.contains(c.url) || unlocked)))
-              ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playProtected(c)),
+
         ],
         if (section == 1) ...[
           const Text('YouTube', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
