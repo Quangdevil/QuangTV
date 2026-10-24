@@ -3,16 +3,18 @@ import shutil
 shutil.copyfile('overrides/quang_discover_screen.dart', 'upstream/flutter_app/lib/screens/quang_discover_screen.dart')
 shutil.copyfile('overrides/quang_web_screen.dart', 'upstream/flutter_app/lib/screens/quang_web_screen.dart')
 shutil.copyfile('overrides/quang_audio_screen.dart', 'upstream/flutter_app/lib/screens/quang_audio_screen.dart')
+shutil.copyfile('overrides/quang_update_screen.dart', 'upstream/flutter_app/lib/screens/quang_update_screen.dart')
 pubspec=Path('upstream/flutter_app/pubspec.yaml')
 pubspec.write_text(pubspec.read_text().replace('  # UI', '  webview_flutter: ^4.10.0\n  xml: ^6.5.0\n  # UI', 1))
 p=Path("upstream/flutter_app/lib/screens/home_screen.dart")
 s=p.read_text()
 anchor="import 'package:flutter/material.dart';"
 assert anchor in s
-s=s.replace(anchor,anchor+"\nimport 'package:url_launcher/url_launcher.dart';\nimport 'quang_discover_screen.dart';",1)
+s=s.replace(anchor,anchor+"\nimport 'package:url_launcher/url_launcher.dart';\nimport 'quang_discover_screen.dart';\nimport 'quang_update_screen.dart';",1)
 anchor="        actions: ["
 assert anchor in s
 s=s.replace(anchor,"""        actions: [
+          IconButton(tooltip: 'Cập nhật QuangTV', icon: const Icon(Icons.system_update), onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangUpdateScreen())); }),
           // QuangTV navigation: one discover screen, no overlay stacks.
           IconButton(
             tooltip: 'YouTube & Podcasts',
