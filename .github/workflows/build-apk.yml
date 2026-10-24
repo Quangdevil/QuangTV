@@ -7,7 +7,7 @@ concurrency:
   group: quangtv-android-build
   cancel-in-progress: true
 permissions:
-  contents: read
+  contents: write
 jobs:
   android:
     runs-on: ubuntu-24.04
@@ -77,3 +77,13 @@ jobs:
           path: QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish signed APK to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="1.3.0"
+          TAG="quangtv-v${VERSION}-build${{ github.run_number }}"
+          APK="QuangTV-v${VERSION}-build${{ github.run_number }}-arm64.apk"
+          gh release create "$TAG" "$APK" --title "QuangTV v${VERSION} (build ${{ github.run_number }})" --notes "QuangTV signed Android APK. Install over previous QuangTV releases without uninstalling." --latest
