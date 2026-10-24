@@ -168,7 +168,7 @@ kotlin = kotlin.replace(anchor, ota + anchor, 1)
 activity.write_text(kotlin)
 manifest = Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
 m = manifest.read_text()
-m = m.replace('<uses-permission android:name="android.permission.INTERNET"/>', '<uses-permission android:name="android.permission.INTERNET"/>\\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>', 1)
+m = m.replace('<uses-permission android:name="android.permission.INTERNET"/>', '<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>', 1)
 m = m.replace('        <!-- Background audio foreground service', '''        <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.updateprovider"
