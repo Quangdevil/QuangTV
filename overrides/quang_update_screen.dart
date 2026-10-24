@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
 
 class QuangUpdateScreen extends StatefulWidget {
   const QuangUpdateScreen({super.key});
@@ -52,13 +52,20 @@ class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
     }
   }
 
+  static const installer = MethodChannel('quangtv/update');
   Future<void> download() async {
     final url = assetUrl;
-    if (url == null) return;
-    final uri = Uri.parse(url);
-    if (uri.scheme != 'https' || uri.host != 'github.com') return;
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không mở được liên kết tải APK')));
+    if (url == null || busy) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'https' || uri.host != 'github.com') return;
+    setState(() { busy = true; message = 'Đang tải APK và chuẩn bị cập nhật…'; });
+    try {
+      await installer.invokeMethod<void>('install', {'url': url});
+      if (mounted) setState(() => message = 'Đã mở trình cài đặt Android. Xác nhận Cập nhật để hoàn tất.');
+    } on PlatformException catch (e) {
+      if (mounted) setState(() => message = 'Cập nhật thất bại: ${e.message}');
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -75,7 +82,7 @@ class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
         if (assetUrl != null) ...[
           const SizedBox(height: 12),
           FilledButton.icon(onPressed: download, icon: const Icon(Icons.download),
-            label: Text('Tải APK ${latestVersion ?? ''}')),
+            label: Text('Tải và cập nhật ${latestVersion ?? ''}')),
           const Text('Android sẽ yêu cầu xác nhận cài bản cập nhật. Không cần gỡ ứng dụng cũ.'),
         ],
       ]))),
