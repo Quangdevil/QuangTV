@@ -1,0 +1,47 @@
+name: Build QuangTV APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout QuangTV build recipe
+        uses: actions/checkout@v4
+      - name: Checkout pinned MIT TV Viewer source
+        uses: actions/checkout@v4
+        with:
+          repository: tv-viewer-app/tv_viewer
+          ref: 188df516a8acb4a2fda0d65fed8b6199c734603f
+          path: upstream
+          persist-credentials: false
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Flutter 3.44.4
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+          cache: true
+      - name: Flutter dependencies
+        working-directory: upstream/flutter_app
+        run: flutter pub get
+      - name: Compile Android debug APK
+        working-directory: upstream/flutter_app
+        run: flutter build apk --debug --target-platform android-arm64
+      - name: Verify APK exists
+        run: test -s upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+      - name: Publish APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuangTV-V1-Android-arm64-APK
+          path: upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
