@@ -185,6 +185,45 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c)));
   }
 
+  Future<void> _removeRecent(String url) async {
+    setState(() => recentChannels.removeWhere((item) => item == url));
+    await (await SharedPreferences.getInstance()).setStringList('quangtv_recent_channels', recentChannels);
+  }
+
+  Future<void> _clearRecents() async {
+    final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Xóa toàn bộ lịch sử xem?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Xóa tất cả')),
+      ],
+    ));
+    if (confirm != true || !mounted) return;
+    setState(() => recentChannels.clear());
+    await (await SharedPreferences.getInstance()).remove('quangtv_recent_channels');
+  }
+
+  Future<void> _openPodcast(int appleId, String title) async {
+    try {
+      final uri = Uri.https('itunes.apple.com', '/lookup', {'id': '$appleId', 'entity': 'podcast'});
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) throw Exception('Danh mục HTTP ${response.statusCode}');
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final results = data['results'] as List<dynamic>? ?? [];
+      if (results.isEmpty) throw Exception('Không tìm thấy chương trình');
+      final feed = (results.first as Map<String, dynamic>)['feedUrl'] as String?;
+      if (feed == null || Uri.tryParse(feed)?.scheme != 'https') throw Exception('Không có RSS HTTPS hợp lệ');
+      if (!mounted) return;
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: title, feedUrl: feed)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không tải được podcast: $e')));
+    }
+  }
+
+  void _openRadio(String title, String url) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: title, streamUrl: url)));
+  }
+
   Future<void> _searchYoutube(String query) async {
     query = query.trim();
     if (query.isEmpty) return;
@@ -246,10 +285,20 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         ],
         if (section == 0) ...[
           const Divider(),
-          const Text('Kênh đã xem gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Row(children: [
+            const Expanded(child: Text('Kênh đã xem gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            if (recentChannels.isNotEmpty) TextButton.icon(onPressed: _clearRecents, icon: const Icon(Icons.delete_sweep), label: const Text('Xóa tất cả')),
+          ]),
           for (final url in recentChannels)
             for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => c.url == url && (!hiddenUrls.contains(c.url) || unlocked)))
-              ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playProtected(c)),
+              Dismissible(
+                key: ValueKey('recent_$url'),
+                direction: DismissDirection.horizontal,
+                background: Container(color: Colors.red.shade700, alignment: Alignment.centerLeft, padding: const EdgeInsets.all(12), child: const Icon(Icons.delete, color: Colors.white)),
+                secondaryBackground: Container(color: Colors.red.shade700, alignment: Alignment.centerRight, padding: const EdgeInsets.all(12), child: const Icon(Icons.delete, color: Colors.white)),
+                onDismissed: (_) => _removeRecent(url),
+                child: ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playProtected(c), trailing: IconButton(tooltip: 'Xóa lịch sử kênh', icon: const Icon(Icons.close), onPressed: () => _removeRecent(url))),
+              ),
         ],
         if (section == 0) ...[
           const SizedBox(height: 12),
@@ -283,7 +332,12 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         ],
         if (section == 2) ...[
           const Text('Podcast · Phát trong QuangTV', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const Text('Nhập RSS podcast có tệp âm thanh để xem danh sách tập và nghe trực tiếp.'),
+          const Text('Thư viện podcast tiếng Việt · Chọn để nghe ngay'),
+          ListTile(leading: const Icon(Icons.child_care), title: const Text('Chú Mèo Đi Dép · Kho truyện cổ tích'), subtitle: const Text('Truyện gia đình, cổ tích cho trẻ'), onTap: () => _openPodcast(1532630528, 'Chú Mèo Đi Dép')),
+          ListTile(leading: const Icon(Icons.account_balance_wallet), title: const Text('VOV · Kinh tế Tài chính'), subtitle: const Text('Kinh tế, tài chính và kinh doanh'), onTap: () => _openPodcast(1447843388, 'VOV Kinh tế Tài chính')),
+          ListTile(leading: const Icon(Icons.business_center), title: const Text('Business Insights · Vietsuccess'), subtitle: const Text('Quản trị, lãnh đạo, phát triển con người'), onTap: () => _openPodcast(1569229068, 'Business Insights')),
+          const Divider(),
+          const Text('Hoặc nhập RSS podcast của bạn'),
           const SizedBox(height: 12),
           TextField(controller: podcastFeed, keyboardType: TextInputType.url,
             decoration: const InputDecoration(prefixIcon: Icon(Icons.rss_feed), hintText: 'https://.../podcast.xml', border: OutlineInputBorder())),
@@ -297,7 +351,11 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         ],
         if (section == 3) ...[
           const Text('Radio · Nghe trong QuangTV', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const Text('Phát luồng âm thanh trực tiếp, không chuyển sang ứng dụng VOV. Nhập URL luồng radio hợp lệ (không phải trang web).'),
+          const Text('Chọn đài để nghe ngay, không cần nhập URL.'),
+          ListTile(leading: const Icon(Icons.traffic), title: const Text('VOV Giao thông Hà Nội · FM 91'), onTap: () => _openRadio('VOV Giao thông Hà Nội', 'https://play.vovgiaothong.vn/live/gthn/playlist.m3u8')),
+          ListTile(leading: const Icon(Icons.traffic), title: const Text('VOV Giao thông TP.HCM'), onTap: () => _openRadio('VOV Giao thông TP.HCM', 'https://play.vovgiaothong.vn/live/gthcm/playlist.m3u8')),
+          const Divider(),
+          const Text('Hoặc nhập nguồn phát radio riêng'),
           const SizedBox(height: 12),
           TextField(controller: radioStream, keyboardType: TextInputType.url,
             decoration: const InputDecoration(prefixIcon: Icon(Icons.radio), hintText: 'https://.../live.mp3', border: OutlineInputBorder())),
