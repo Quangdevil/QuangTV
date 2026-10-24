@@ -55,7 +55,7 @@ class _QuangAudioScreenState extends State<QuangAudioScreen> {
     setState(() { loading = true; error = null; playing = title; });
     try {
       await player.setUrl(url);
-      await player.play();
+      player.play();
     } catch (e) {
       if (mounted) setState(() => error = 'Không phát được: $e');
     } finally {
