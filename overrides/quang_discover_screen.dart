@@ -146,6 +146,25 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
             onTap: () => _playChannel(channel));
         })),
         ],
+        if (section == 0) ...[
+          const SizedBox(height: 12),
+          const Divider(),
+          const Text('VTV · Xem lại phim và chương trình',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Mở kho xem lại chính thức của VTVgo ngay trong QuangTV. Nội dung phụ thuộc VTVgo và quyền phát.'),
+          ListTile(
+            leading: const Icon(Icons.movie_filter_outlined),
+            title: const Text('VTVgo · Phim và chương trình xem lại'),
+            subtitle: const Text('Chọn phim, tập hoặc chương trình trên VTVgo'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => QuangWebScreen(
+                title: 'VTVgo · Xem lại',
+                initialUrl: Uri.parse('https://vtvgo.vn/'),
+              ),
+            )),
+          ),
+        ],
         if (section == 4) ...[
           const Text('Kênh yêu thích', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           for (final c in channels.where((c) => favorites.contains(c.url)))
