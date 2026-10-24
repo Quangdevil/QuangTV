@@ -73,39 +73,8 @@ pip_handler = """        MethodChannel(flutterEngine.dartExecutor.binaryMessenge
 kotlin = kotlin.replace(anchor, pip_handler + anchor, 1)
 activity.write_text(kotlin)
 
-# Back navigation asks whether to stop playback or continue in native PiP.
-player = Path('upstream/flutter_app/lib/screens/player_screen.dart')
-player_source = player.read_text()
-old_back = """    return true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope("""
-new_back = """    if (!mounted) return false;
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Tiếp tục phát?'),
-        content: const Text('Đóng trình phát hoặc tiếp tục trong cửa sổ nổi.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, 'close'), child: const Text('Đóng')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, 'pip'), child: const Text('Phát nền (PiP)')),
-        ],
-      ),
-    );
-    if (choice == 'pip') {
-      await _enablePip();
-      return false;
-    }
-    return choice == 'close';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope("""
-assert old_back in player_source, 'PlayerScreen back handler changed upstream'
-player.write_text(player_source.replace(old_back, new_back, 1))
+# Replace upstream player entirely: no VLC, external intent or browser fallback.
+shutil.copyfile('overrides/quang_player_screen.dart', 'upstream/flutter_app/lib/screens/player_screen.dart')
 
 # Personal-use build: remove feedback/rating prompts and menu entries.
 home = Path('upstream/flutter_app/lib/screens/home_screen.dart')
