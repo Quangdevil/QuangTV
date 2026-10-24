@@ -103,3 +103,13 @@ new_back = """    if (!mounted) return false;
     return WillPopScope("""
 assert old_back in player_source, 'PlayerScreen back handler changed upstream'
 player.write_text(player_source.replace(old_back, new_back, 1))
+
+# Personal-use build: remove feedback/rating prompts and menu entries.
+home = Path('upstream/flutter_app/lib/screens/home_screen.dart')
+home_source = home.read_text()
+home_source = home_source.replace('    final shouldShow = await FeedbackService.shouldShowRatingPrompt();', '    final shouldShow = false;')
+start = home_source.find('              // ── Feedback ')
+end = home_source.find('              // ── Help & info ', start)
+assert start >= 0 and end > start, 'Feedback menu markers changed'
+home_source = home_source[:start] + home_source[end:]
+home.write_text(home_source)
