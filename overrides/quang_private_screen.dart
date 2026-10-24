@@ -135,6 +135,24 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
     });
     await _persist();
   }
+  List<Channel> _parsePrivateM3u(String body) {
+    final result = <Channel>[];
+    String title = '';
+    for (final raw in body.split(RegExp(r'\r?\n'))) {
+      final line = raw.trim();
+      if (line.startsWith('#EXTINF:')) {
+        title = line.contains(',') ? line.substring(line.indexOf(',') + 1).trim() : 'Kênh TV';
+      } else if (line.isNotEmpty && !line.startsWith('#')) {
+        final stream = Uri.tryParse(line);
+        if (stream != null && (stream.scheme == 'https' || stream.scheme == 'http')) {
+          result.add(Channel(name: title.isEmpty ? 'Kênh TV' : title, url: line, country: 'Private'));
+        }
+        title = '';
+      }
+    }
+    return result;
+  }
+
   Future<void> _importPlaylist() async {
     final controller = TextEditingController();
     final entered = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
@@ -155,26 +173,44 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
     }
     setState(() => importing = true);
     try {
-      // Match the public TV playlist loader exactly, including its URL parsing.
-      final response = await http.get(uri).timeout(const Duration(seconds: 20));
-      if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
-      if (response.body.length > 6000000) throw Exception('Danh sách quá lớn');
-      final lines = response.body.split(RegExp(r'\\r?\\n'));
-      final parsed = <Channel>[];
-      String title = '';
-      for (final raw in lines) {
-        final line = raw.trim();
-        if (line.startsWith('#EXTINF:')) {
-          title = line.contains(',') ? line.substring(line.indexOf(',') + 1).trim() : 'Kênh TV';
-        } else if (line.isNotEmpty && !line.startsWith('#')) {
-          final stream = Uri.tryParse(line);
-          if (stream != null && (stream.scheme == 'https' || stream.scheme == 'http')) {
-            parsed.add(Channel(name: title.isEmpty ? 'Kênh TV' : title, url: line, country: 'Private'));
-          }
-          title = '';
+      final prefs = await SharedPreferences.getInstance();
+      List<Channel> parsed = [];
+      String? networkError;
+      try {
+        final response = await http.get(uri).timeout(const Duration(seconds: 20));
+        if (response.statusCode != 200) throw Exception('Máy chủ trả HTTP ${response.statusCode}');
+        if (response.body.length > 6000000) throw Exception('Danh sách quá lớn (trên 6 MB)');
+        parsed = _parsePrivateM3u(response.body);
+        if (parsed.isEmpty) throw Exception('Máy chủ phản hồi nhưng không tìm thấy URL kênh trong M3U');
+      } catch (e) {
+        // Do not expose IPTV credentials embedded in URLs in error messages.
+        final msg = e.toString();
+        if (msg.contains('TimeoutException')) {
+          networkError = 'Kết nối quá 20 giây';
+        } else if (msg.contains('HTTP ')) {
+          networkError = msg;
+        } else if (msg.contains('không tìm thấy URL kênh') || msg.contains('quá lớn')) {
+          networkError = msg;
+        } else {
+          networkError = 'Lỗi kết nối hoặc định dạng phản hồi (${e.runtimeType})';
         }
+        // Public TV can display its cached channels while offline. Allow Private
+        // to import that same cached source, but persist it only in Private storage.
+        if (prefs.getString('quangtv_playlist') == entered) {
+          final cached = prefs.getString('quangtv_cached_channels');
+          if (cached != null) {
+            try {
+              final items = jsonDecode(cached) as List<dynamic>;
+              parsed = items.map((item) => Channel(
+                name: item['name'] as String,
+                url: item['url'] as String,
+                country: 'Private',
+              )).toList();
+            } catch (_) {}
+          }
+        }
+        if (parsed.isEmpty) throw Exception(networkError);
       }
-      if (parsed.isEmpty) throw Exception('Không tìm thấy kênh phát trong danh sách');
       if (!mounted) return;
       setState(() {
         final existing = channels.map((c) => c.url).toSet();
@@ -186,9 +222,9 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
       await _persist();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(playlistKey, playlistUrls);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã tải ${parsed.length} kênh từ M3U Private')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã nhập ${parsed.length} kênh vào Private${networkError == null ? '' : ' (từ bộ nhớ TV)'}')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không tải được M3U: $e')));
+      if (mounted) await showDialog<void>(context: context, builder: (ctx) => AlertDialog(title: const Text('Không tải được M3U Private'), content: SelectableText(e.toString().replaceFirst('Exception: ', '')), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Đóng'))]));
     } finally {
       if (mounted) setState(() => importing = false);
     }
