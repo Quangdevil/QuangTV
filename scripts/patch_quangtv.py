@@ -168,15 +168,21 @@ kotlin = kotlin.replace(anchor, ota + anchor, 1)
 activity.write_text(kotlin)
 manifest = Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
 m = manifest.read_text()
-m = m.replace('<uses-permission android:name="android.permission.INTERNET"/>', '<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>', 1)
-m = m.replace('        <!-- Background audio foreground service', '''        <provider
+if 'android.permission.REQUEST_INSTALL_PACKAGES' not in m:
+    m = m.replace('<manifest ', '<manifest ', 1)
+    insert_at = m.find('>', m.find('<manifest')) + 1
+    m = m[:insert_at] + '\\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>' + m[insert_at:]
+if 'androidx.core.content.FileProvider' not in m:
+    provider = '''<provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.updateprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/quangtv_update_paths"/>
-        </provider>
-        <!-- Background audio foreground service''', 1)
+        </provider>'''
+    assert '<application' in m, 'Android application element not found'
+    application_start = m.index('>', m.index('<application')) + 1
+    m = m[:application_start] + '\\n        ' + provider + m[application_start:]
 manifest.write_text(m)
 paths = Path('upstream/flutter_app/android/app/src/main/res/xml/quangtv_update_paths.xml')
 paths.parent.mkdir(parents=True, exist_ok=True)
