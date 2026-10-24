@@ -7,6 +7,7 @@ import 'quang_audio_screen.dart';
 import 'quang_web_screen.dart';
 import '../models/channel.dart';
 import 'quang_native_player.dart';
+import 'quang_private_screen.dart';
 
 class QuangDiscoverScreen extends StatefulWidget {
   const QuangDiscoverScreen({super.key});
@@ -65,9 +66,9 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         channels = list.map((v) => Channel(name: v['name'] as String, url: v['url'] as String, country: 'Vietnam')).toList();
         if (mounted) setState(() {});
       } catch (_) {}
-    } else {
-      await _load();
     }
+    // Show cached channels instantly, then refresh in the background on each launch.
+    if (mounted) await _load();
   }
 
   Future<void> _load() async {
@@ -351,9 +352,15 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final filter = searchController.text.toLowerCase();
-    final shown = [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => c.name.toLowerCase().contains(filter) && (!hiddenUrls.contains(c.url) || unlocked)).toList();
+    final shown = [...personalChannels, ...channels].where((c) => c.name.toLowerCase().contains(filter) && !hiddenUrls.contains(c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('QuangTV')),
+      appBar: AppBar(title: const Text('QuangTV'), actions: [
+        IconButton(tooltip: 'Private', icon: const Icon(Icons.lock_outline), onPressed: () async {
+          if (!await QuangPrivateSecurity.verify(context) || !mounted) return;
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangPrivateScreen()));
+        }),
+        IconButton(tooltip: 'Cài đặt Private', icon: const Icon(Icons.settings), onPressed: () => QuangPrivateSecurity.configure(context)),
+      ]),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
         SizedBox(width: double.infinity, child: SegmentedButton<int>(
           segments: const [ButtonSegment(value: 0, icon: Icon(Icons.live_tv), tooltip: 'TV'), ButtonSegment(value: 1, icon: Icon(Icons.smart_display), tooltip: 'YouTube'), ButtonSegment(value: 2, icon: Icon(Icons.podcasts), tooltip: 'Podcast'), ButtonSegment(value: 3, icon: Icon(Icons.radio), tooltip: 'Radio'), ButtonSegment(value: 4, icon: Icon(Icons.favorite), tooltip: 'Ưa thích')],
@@ -370,30 +377,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         Wrap(spacing: 8, children: [
           FilledButton(onPressed: loading ? null : _load, child: const Text('Tải danh sách')),
           OutlinedButton.icon(onPressed: _addPersonalChannel, icon: const Icon(Icons.add), label: const Text('Thêm kênh')),
-          OutlinedButton.icon(onPressed: () async { if (unlocked) { setState(() => unlocked = false); } else { await _unlock(); } }, icon: Icon(unlocked ? Icons.lock_open : Icons.lock), label: Text(unlocked ? 'Khóa lại' : 'Mở bằng PIN')),
           OutlinedButton(onPressed: () { urlController.text = defaultUrl; _load(); }, child: const Text('TV Việt Nam · GitHub')),
         ]),
-        const Divider(),
-        Row(children: [
-          const Expanded(child: Text('Kênh ẩn · PIN', style: TextStyle(fontWeight: FontWeight.bold))),
-          TextButton.icon(onPressed: _changePin, icon: const Icon(Icons.password), label: Text(pinDigest == null ? 'Đặt PIN' : 'Đổi PIN')),
-        ]),
-        Row(children: [
-          OutlinedButton.icon(onPressed: () async { if (unlocked) { setState(() => unlocked = false); } else { await _unlock(); } }, icon: Icon(unlocked ? Icons.lock : Icons.lock_open), label: Text(unlocked ? 'Khóa kênh ẩn' : 'Mở kênh ẩn')),
-          const SizedBox(width: 8),
-          FilledButton.icon(onPressed: _addPrivateChannel, icon: const Icon(Icons.add), label: const Text('Thêm URL ẩn')),
-        ]),
-        if (unlocked) ...[
-          for (final c in privateChannels)
-            ListTile(leading: const Icon(Icons.lock), title: Text(c.name),
-              onTap: () => _playChannel(c),
-              trailing: IconButton(tooltip: 'Xóa kênh ẩn', icon: const Icon(Icons.delete_outline), onPressed: () async {
-                setState(() { privateChannels.removeWhere((item) => item.url == c.url); hiddenUrls.remove(c.url); });
-                await _savePersonal();
-              })),
-        ],
-        SwitchListTile(title: const Text('Ẩn toàn bộ danh sách M3U bằng PIN'), value: playlistPrivate, onChanged: _togglePlaylistPrivacy),
-        if (playlistPrivate && !unlocked) const Text('Danh sách riêng tư đang khóa'),
         if (loading) const LinearProgressIndicator(),
         if (error.isNotEmpty) Text(error, style: const TextStyle(color: Colors.red)),
         TextField(controller: searchController, onChanged: (_) => setState(() {}),
@@ -413,7 +398,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
             if (recentChannels.isNotEmpty) TextButton.icon(onPressed: _clearRecents, icon: const Icon(Icons.delete_sweep), label: const Text('Xóa tất cả')),
           ]),
           for (final url in recentChannels)
-            for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => c.url == url && (!hiddenUrls.contains(c.url) || unlocked)))
+            for (final c in [...personalChannels, ...channels].where((c) => c.url == url && !hiddenUrls.contains(c.url)))
               Dismissible(
                 key: ValueKey('recent_$url'),
                 direction: DismissDirection.horizontal,
@@ -433,7 +418,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         ],
         if (section == 4) ...[
           const Text('Kênh yêu thích', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => favorites.contains(c.url) && (!hiddenUrls.contains(c.url) || unlocked)))
+          for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => favorites.contains(c.url) && !hiddenUrls.contains(c.url)))
             Dismissible(
               key: ValueKey('favorite_${c.url}'),
               direction: DismissDirection.endToStart,
