@@ -3,7 +3,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'quang_web_screen.dart';
 import 'quang_audio_screen.dart';
 import '../models/channel.dart';
 import 'player_screen.dart';
@@ -159,7 +158,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     setState(() {
       personalChannels.removeWhere((c) => c.url == url);
       personalChannels.add(Channel(name: name, url: url, country: 'Personal'));
-      if (hide) hiddenUrls.add(url); else hiddenUrls.remove(url);
+      if (hide) { hiddenUrls.add(url); } else { hiddenUrls.remove(url); }
     });
     await _savePersonal();
   }
@@ -192,9 +191,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     youtubeHistory = [query, ...youtubeHistory.where((x) => x != query)].take(30).toList();
     await prefs.setStringList('quangtv_youtube_search_history', youtubeHistory);
     if (mounted) setState(() {});
-    final uri = Uri.https('www.youtube.com', '/results', {'search_query': query});
-    if (!mounted) return;
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'YouTube', initialUrl: uri)));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('YouTube native đang phát triển. Đã lưu từ khóa tìm kiếm.')));
   }
 
   @override
@@ -210,7 +207,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final filter = searchController.text.toLowerCase();
-    final shown = channels.where((c) => c.name.toLowerCase().contains(filter)).toList();
+    final shown = [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => c.name.toLowerCase().contains(filter) && (!hiddenUrls.contains(c.url) || unlocked)).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('QuangTV')),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -228,6 +225,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         const SizedBox(height: 8),
         Wrap(spacing: 8, children: [
           FilledButton(onPressed: loading ? null : _load, child: const Text('Tải danh sách')),
+          OutlinedButton.icon(onPressed: _addPersonalChannel, icon: const Icon(Icons.add), label: const Text('Thêm kênh')),
           OutlinedButton(onPressed: () { urlController.text = defaultUrl; _load(); }, child: const Text('TV Việt Nam · GitHub')),
         ]),
         SwitchListTile(title: const Text('Ẩn toàn bộ danh sách M3U bằng PIN'), value: playlistPrivate, onChanged: _togglePlaylistPrivacy),
@@ -250,18 +248,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           const Text('VTV · Xem lại phim và chương trình',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Text('Mở kho xem lại chính thức của VTVgo ngay trong QuangTV. Nội dung phụ thuộc VTVgo và quyền phát.'),
-          ListTile(
-            leading: const Icon(Icons.movie_filter_outlined),
-            title: const Text('VTVgo · Phim và chương trình xem lại'),
-            subtitle: const Text('Chọn phim, tập hoặc chương trình trên VTVgo'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => QuangWebScreen(
-                title: 'VTVgo · Xem lại',
-                initialUrl: Uri.parse('https://vtvgo.vn/'),
-              ),
-            )),
-          ),
+          const ListTile(leading: Icon(Icons.movie_filter_outlined), title: Text('VTV xem lại'), subtitle: Text('Chờ nguồn phát/API hợp lệ để tích hợp native. Không sử dụng WebView.')),
         ],
         if (section == 4) ...[
           const Text('Kênh yêu thích', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -271,7 +258,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           const Text('Xem gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           for (final url in recentChannels)
             for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => c.url == url && (!hiddenUrls.contains(c.url) || unlocked)))
-              ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playChannel(c)),
+              ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playProtected(c)),
         ],
         if (section == 1) ...[
           const Text('YouTube', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -281,7 +268,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           const SizedBox(height: 8),
           const Text('Lịch sử tìm kiếm'),
           for (final query in youtubeHistory) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(query), onTap: () => _searchYoutube(query)),
-          FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'YouTube', initialUrl: Uri.parse('https://www.youtube.com/')))), icon: const Icon(Icons.play_circle), label: const Text('Mở YouTube')),
+          const ListTile(leading: Icon(Icons.play_circle_outline), title: Text('YouTube native'), subtitle: Text('Đang chờ phương thức tích hợp hợp lệ, không dùng WebView.')),
         ],
         if (section == 2) ...[
           const Text('Podcast · Phát trong QuangTV', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
