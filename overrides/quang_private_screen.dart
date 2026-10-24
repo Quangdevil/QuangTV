@@ -158,8 +158,7 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
       final response = await http.get(uri).timeout(const Duration(seconds: 25));
       if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
       if (response.body.length > 6000000) throw Exception('Danh sách quá lớn');
-      final lines = response.body.split(RegExp(r'\\r?\\n'));
-      if (!response.body.trimLeft().startsWith('#EXTM3U')) throw Exception('Không phải danh sách M3U');
+      final lines = response.body.split(RegExp(r'\r?\n'));
       final parsed = <Channel>[];
       String title = '';
       for (final raw in lines) {
