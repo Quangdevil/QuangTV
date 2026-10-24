@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'quang_web_screen.dart';
 import '../models/channel.dart';
 import 'player_screen.dart';
 
@@ -99,7 +99,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     await prefs.setStringList('quangtv_youtube_search_history', youtubeHistory);
     if (mounted) setState(() {});
     final uri = Uri.https('www.youtube.com', '/results', {'search_query': query});
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'YouTube', initialUrl: uri)));
   }
 
   @override
@@ -163,7 +164,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           const SizedBox(height: 8),
           const Text('Lịch sử tìm kiếm'),
           for (final query in youtubeHistory) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(query), onTap: () => _searchYoutube(query)),
-          FilledButton.icon(onPressed: () => launchUrl(Uri.parse('https://www.youtube.com/'), mode: LaunchMode.externalApplication), icon: const Icon(Icons.play_circle), label: const Text('Mở YouTube')),
+          FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'YouTube', initialUrl: Uri.parse('https://www.youtube.com/')))), icon: const Icon(Icons.play_circle), label: const Text('Mở YouTube')),
         ],
         if (section == 2) ...[
         const Divider(),
@@ -194,7 +195,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
             ['VOV3 · Âm nhạc', 'https://vov.vn/vov-plus/radio'],
             ['VOV5 · Đối ngoại', 'https://vov.vn/vov-plus/radio'],
             ['VOV Sonata · FM 89 MHz', 'https://vov.vn/vov-plus/radio'],
-          ]) ListTile(leading: const Icon(Icons.radio), title: Text(station[0]), trailing: const Icon(Icons.open_in_new), onTap: () => launchUrl(Uri.parse(station[1]), mode: LaunchMode.externalApplication)),
+          ]) ListTile(leading: const Icon(Icons.radio), title: Text(station[0]), trailing: const Icon(Icons.open_in_new), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: station[0], initialUrl: Uri.parse(station[1]))))),
         ],
       ])),
     );
