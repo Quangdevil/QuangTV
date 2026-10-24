@@ -20,7 +20,11 @@ class _QuangWebScreenState extends State<QuangWebScreen> {
         onProgress: (value) { if (mounted) setState(() => progress = value); },
         onNavigationRequest: (request) {
           final uri = Uri.tryParse(request.url);
-          if (uri == null || uri.scheme != 'https') return NavigationDecision.prevent;
+          if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) return NavigationDecision.prevent;
+          if (uri.host == 'youtu.be' || uri.host.endsWith('youtube.com') || uri.host.endsWith('youtube-nocookie.com') || uri.host.endsWith('vtvgo.vn') || uri.host.endsWith('vov.vn')) {
+            return NavigationDecision.navigate;
+          }
+          return NavigationDecision.prevent;
           return NavigationDecision.navigate;
         },
       ))
