@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,10 +28,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   List<String> recentChannels = [];
   List<Channel> personalChannels = [];
   List<Channel> privateChannels = [];
-  Set<String> hiddenUrls = {};
-  String? pinDigest;
-  bool unlocked = false;
-  bool playlistPrivate = false;
   bool loading = false;
   String error = '';
 
@@ -47,17 +42,14 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     urlController.text = prefs.getString('quangtv_playlist') ?? defaultUrl;
     youtubeHistory = prefs.getStringList('quangtv_youtube_search_history') ?? [];
     favorites = (prefs.getStringList('quangtv_favorites') ?? []).toSet();
-    pinDigest = prefs.getString('quangtv_pin_hash');
-    playlistPrivate = prefs.getBool('quangtv_playlist_private') ?? false;
-    hiddenUrls = (prefs.getStringList('quangtv_hidden_urls') ?? []).toSet();
     for (final item in prefs.getStringList('quangtv_personal_channels') ?? <String>[]) {
       try { final data = jsonDecode(item) as Map<String, dynamic>; personalChannels.add(Channel(name: data['name'] as String, url: data['url'] as String, country: 'Personal')); } catch (_) {}
     }
     for (final item in prefs.getStringList('quangtv_private_channels') ?? <String>[]) {
       try { final data = jsonDecode(item) as Map<String, dynamic>; privateChannels.add(Channel(name: data['name'] as String, url: data['url'] as String, country: 'Private')); } catch (_) {}
     }
-    recentChannels = (prefs.getStringList('quangtv_recent_channels') ?? []).where((url) => !hiddenUrls.contains(url) && !privateChannels.any((c) => c.url == url)).toList();
-    favorites.removeWhere((url) => hiddenUrls.contains(url) || privateChannels.any((c) => c.url == url));
+    recentChannels = (prefs.getStringList('quangtv_recent_channels') ?? []).where((url) => !privateChannels.any((c) => c.url == url)).toList();
+    favorites.removeWhere((url) => privateChannels.any((c) => c.url == url));
     if (mounted) setState(() {});
     final cached = prefs.getString('quangtv_cached_channels');
     if (cached != null) {
@@ -110,7 +102,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     }
   }
 
-  String _hashPin(String pin) => sha256.convert(utf8.encode('quangtv-pin-v1:$pin')).toString();
   Future<String?> _askText(String title, String label, {bool secret = false}) async {
     final controller = TextEditingController();
     final result = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
@@ -120,38 +111,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('OK'))]));
     controller.dispose();
     return result;
-  }
-  Future<bool> _unlock() async {
-    if (unlocked) return true;
-    final pin = await _askText(pinDigest == null ? 'Tạo PIN' : 'Nhập PIN', 'Tối thiểu 4 số', secret: true);
-    if (pin == null || !mounted) return false;
-    if (pinDigest == null) {
-      if (pin.length < 4 || !pin.split('').every((c) => '0123456789'.contains(c))) return false;
-      pinDigest = _hashPin(pin);
-      await (await SharedPreferences.getInstance()).setString('quangtv_pin_hash', pinDigest!);
-    } else if (_hashPin(pin) != pinDigest) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sai PIN')));
-      return false;
-    }
-    if (mounted) setState(() => unlocked = true);
-    return true;
-  }
-  Future<void> _savePersonal() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('quangtv_personal_channels', personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
-    await prefs.setStringList('quangtv_hidden_urls', hiddenUrls.toList());
-    await prefs.setStringList('quangtv_private_channels', privateChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
-  }
-  Future<void> _savePlaylist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('quangtv_playlist', urlController.text.trim());
-    await prefs.setBool('quangtv_playlist_private', playlistPrivate);
-  }
-  Future<void> _togglePlaylistPrivacy(bool value) async {
-    if (!await _unlock()) return;
-    if (!mounted) return;
-    setState(() => playlistPrivate = value);
-    await _savePlaylist();
   }
   Future<void> _addPersonalChannel() async {
     final name = await _askText('Thêm kênh cá nhân', 'Tên kênh');
@@ -163,39 +122,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('URL HTTP/HTTPS không hợp lệ')));
       return;
     }
-    final hide = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('Bảo vệ kênh này?'),
-      content: const Text('Kênh ẩn yêu cầu mã PIN khi xem.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Công khai')),
-        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Ẩn bằng PIN')),
-      ],
-    ));
-    if (hide == null || !mounted) return;
-    if (hide && !await _unlock()) return;
     setState(() {
       personalChannels.removeWhere((c) => c.url == url);
-      privateChannels.removeWhere((c) => c.url == url);
-      if (hide) {
-        privateChannels.add(Channel(name: name, url: url, country: 'Private'));
-        hiddenUrls.add(url);
-        recentChannels.removeWhere((item) => item == url);
-        favorites.remove(url);
-      } else { personalChannels.add(Channel(name: name, url: url, country: 'Personal')); hiddenUrls.remove(url); }
+      personalChannels.add(Channel(name: name, url: url, country: 'Personal'));
     });
-    await _savePersonal();
-    if (hide) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('quangtv_recent_channels', recentChannels);
-      await prefs.setStringList('quangtv_favorites', favorites.toList());
-    }
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã lưu kênh trên thiết bị')));
-  }
-
-  Future<void> _playProtected(Channel channel) async {
-    if ((hiddenUrls.contains(channel.url) || (playlistPrivate && channels.any((c) => c.url == channel.url))) && !await _unlock()) return;
-    if (!mounted) return;
-    await _playChannel(channel);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('quangtv_personal_channels',
+      personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
   }
 
   Future<void> _toggleFavorite(Channel c) async {
@@ -205,52 +138,12 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   }
 
   Future<void> _playChannel(Channel c) async {
-    if (privateChannels.any((item) => item.url == c.url) || hiddenUrls.contains(c.url)) {
-      if (!mounted) return;
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c)));
-      return;
-    }
     recentChannels = [c.url, ...recentChannels.where((url) => url != c.url)].take(30).toList();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('quangtv_recent_channels', recentChannels);
     if (!mounted) return;
     setState(() {});
     await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c)));
-  }
-
-  Future<void> _changePin() async {
-    if (!await _unlock()) return;
-    final next = await _askText('Đổi mã PIN', 'PIN mới, tối thiểu 4 chữ số', secret: true);
-    if (next == null || !RegExp(r'^[0-9]{4,}\$').hasMatch(next)) return;
-    final again = await _askText('Xác nhận PIN mới', 'Nhập lại PIN', secret: true);
-    if (again != next) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN xác nhận không khớp')));
-      return;
-    }
-    pinDigest = _hashPin(next);
-    await (await SharedPreferences.getInstance()).setString('quangtv_pin_hash', pinDigest!);
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã đổi PIN')));
-  }
-
-  Future<void> _addPrivateChannel() async {
-    if (!await _unlock()) return;
-    final name = await _askText('Thêm kênh ẩn', 'Tên kênh');
-    if (name == null || name.trim().isEmpty || !mounted) return;
-    final url = await _askText('Nguồn phát kênh ẩn', 'URL HTTP/HTTPS');
-    final uri = Uri.tryParse(url ?? '');
-    if (uri == null || !['http', 'https'].contains(uri.scheme) || !mounted) return;
-    setState(() {
-      privateChannels.removeWhere((c) => c.url == url);
-      personalChannels.removeWhere((c) => c.url == url);
-      privateChannels.add(Channel(name: name.trim(), url: url!, country: 'Private'));
-      hiddenUrls.add(url);
-      favorites.remove(url);
-      recentChannels.removeWhere((item) => item == url);
-    });
-    await _savePersonal();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('quangtv_favorites', favorites.toList());
-    await prefs.setStringList('quangtv_recent_channels', recentChannels);
   }
 
   Future<void> _removeRecent(String url) async {
@@ -352,11 +245,11 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final filter = searchController.text.toLowerCase();
-    final shown = [...personalChannels, ...channels].where((c) => c.name.toLowerCase().contains(filter) && !hiddenUrls.contains(c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
+    final shown = [...personalChannels, ...channels].where((c) => c.name.toLowerCase().contains(filter) && !privateChannels.any((p) => p.url == c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('QuangTV'), actions: [
         IconButton(tooltip: 'Private', icon: const Icon(Icons.lock_outline), onPressed: () async {
-          if (!await QuangPrivateSecurity.verify(context) || !mounted) return;
+          if (!await QuangPrivateSecurity.verify(context) || !context.mounted) return;
           await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangPrivateScreen()));
         }),
         IconButton(tooltip: 'Cài đặt Private', icon: const Icon(Icons.settings), onPressed: () => QuangPrivateSecurity.configure(context)),
@@ -388,7 +281,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           final channel = shown[i];
           return ListTile(dense: true, leading: const Icon(Icons.live_tv), title: Text(channel.name),
             trailing: IconButton(tooltip: 'Ưa thích', icon: Icon(favorites.contains(channel.url) ? Icons.favorite : Icons.favorite_border), onPressed: () => _toggleFavorite(channel)),
-            onTap: () => _playProtected(channel));
+            onTap: () => _playChannel(channel));
         })),
         ],
         if (section == 0) ...[
@@ -398,14 +291,14 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
             if (recentChannels.isNotEmpty) TextButton.icon(onPressed: _clearRecents, icon: const Icon(Icons.delete_sweep), label: const Text('Xóa tất cả')),
           ]),
           for (final url in recentChannels)
-            for (final c in [...personalChannels, ...channels].where((c) => c.url == url && !hiddenUrls.contains(c.url)))
+            for (final c in [...personalChannels, ...channels].where((c) => c.url == url && !privateChannels.any((p) => p.url == c.url)))
               Dismissible(
                 key: ValueKey('recent_$url'),
                 direction: DismissDirection.horizontal,
                 background: Container(color: Colors.red.shade700, alignment: Alignment.centerLeft, padding: const EdgeInsets.all(12), child: const Icon(Icons.delete, color: Colors.white)),
                 secondaryBackground: Container(color: Colors.red.shade700, alignment: Alignment.centerRight, padding: const EdgeInsets.all(12), child: const Icon(Icons.delete, color: Colors.white)),
                 onDismissed: (_) => _removeRecent(url),
-                child: ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playProtected(c), trailing: IconButton(tooltip: 'Xóa lịch sử kênh', icon: const Icon(Icons.close), onPressed: () => _removeRecent(url))),
+                child: ListTile(leading: const Icon(Icons.history), title: Text(c.name), onTap: () => _playChannel(c), trailing: IconButton(tooltip: 'Xóa lịch sử kênh', icon: const Icon(Icons.close), onPressed: () => _removeRecent(url))),
               ),
         ],
         if (section == 0) ...[
@@ -418,13 +311,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         ],
         if (section == 4) ...[
           const Text('Kênh yêu thích', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          for (final c in [...personalChannels, ...(playlistPrivate && !unlocked ? <Channel>[] : channels)].where((c) => favorites.contains(c.url) && !hiddenUrls.contains(c.url)))
+          for (final c in [...personalChannels, ...channels].where((c) => favorites.contains(c.url) && !privateChannels.any((p) => p.url == c.url)))
             Dismissible(
               key: ValueKey('favorite_${c.url}'),
               direction: DismissDirection.endToStart,
               background: Container(color: Colors.red.shade700, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.heart_broken, color: Colors.white)),
               onDismissed: (_) => _toggleFavorite(c),
-              child: ListTile(leading: const Icon(Icons.favorite), title: Text(c.name), onTap: () => _playProtected(c), trailing: IconButton(tooltip: 'Bỏ yêu thích', icon: const Icon(Icons.favorite), onPressed: () => _toggleFavorite(c))),
+              child: ListTile(leading: const Icon(Icons.favorite), title: Text(c.name), onTap: () => _playChannel(c), trailing: IconButton(tooltip: 'Bỏ yêu thích', icon: const Icon(Icons.favorite), onPressed: () => _toggleFavorite(c))),
             ),
 
         ],
