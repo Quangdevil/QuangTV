@@ -40,7 +40,7 @@ jobs:
         run: flutter pub get
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
-        run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_web_screen.dart
+        run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_web_screen.dart lib/screens/quang_audio_screen.dart
       - name: Restore permanent QuangTV release keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.QUANGTV_KEYSTORE_BASE64 }}
@@ -63,9 +63,9 @@ jobs:
           chmod 600 upstream/flutter_app/android/key.properties upstream/flutter_app/android/app/quangtv-release.jks
       - name: Compile signed QuangTV release APK
         working-directory: upstream/flutter_app
-        run: flutter build apk --release --target-platform android-arm64 --build-name=1.2.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --target-platform android-arm64 --build-name=1.3.0 --build-number=${{ github.run_number }}
       - name: Name APK by version and build
-        run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-release.apk "QuangTV-v1.2.0-build${{ github.run_number }}-arm64.apk"
+        run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-release.apk "QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk"
       - name: Verify signed release APK
         run: |
           test -s upstream/flutter_app/build/app/outputs/flutter-apk/app-release.apk
@@ -73,7 +73,7 @@ jobs:
       - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
-          name: QuangTV-v1.2.0-build${{ github.run_number }}-arm64
-          path: QuangTV-v1.2.0-build${{ github.run_number }}-arm64.apk
+          name: QuangTV-v1.3.0-build${{ github.run_number }}-arm64
+          path: QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk
           if-no-files-found: error
           retention-days: 14
