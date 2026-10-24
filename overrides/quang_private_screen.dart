@@ -153,9 +153,9 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
     return result;
   }
 
-  Future<void> _importPlaylist() async {
+  Future<void> _importPlaylist({String? sourceUrl}) async {
     final controller = TextEditingController();
-    final entered = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+    final entered = sourceUrl ?? await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Nhập danh sách M3U Private'),
       content: TextField(controller: controller, keyboardType: TextInputType.url,
         decoration: const InputDecoration(labelText: 'URL danh sách .m3u / .m3u8')),
@@ -229,6 +229,19 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
     }
   }
 
+  Future<void> _refreshPlaylists() async {
+    if (importing) return;
+    if (playlistUrls.isEmpty) {
+      await _importPlaylist();
+      return;
+    }
+    // Refresh each saved source. Imported channels remain available on failure.
+    for (final source in List<String>.from(playlistUrls)) {
+      if (!mounted) return;
+      await _importPlaylist(sourceUrl: source);
+    }
+  }
+
   Future<void> _delete(Channel c) async {
     final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Xóa kênh Private?'), content: Text(c.name),
@@ -248,9 +261,15 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
         IconButton(tooltip: 'Khóa và thoát', icon: const Icon(Icons.lock), onPressed: () => Navigator.pop(context)),
       ]),
       floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Thêm kênh')),
-      bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: FilledButton.icon(
-        onPressed: importing ? null : _importPlaylist, icon: const Icon(Icons.playlist_add),
-        label: const Text('Nhập danh sách M3U Private')))),
+      bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+        Expanded(child: OutlinedButton.icon(
+          onPressed: importing ? null : _refreshPlaylists,
+          icon: const Icon(Icons.refresh), label: const Text('Tải lại M3U'))),
+        const SizedBox(width: 8),
+        Expanded(child: FilledButton.icon(
+          onPressed: importing ? null : () => _importPlaylist(),
+          icon: const Icon(Icons.playlist_add), label: const Text('Nhập URL M3U'))),
+      ]))),
       body: SafeArea(child: !ready ? const Center(child: CircularProgressIndicator()) : Column(children: [
         if (importing) const LinearProgressIndicator(),
         Padding(padding: const EdgeInsets.all(16), child: TextField(controller: search, onChanged: (_) => setState(() {}),
