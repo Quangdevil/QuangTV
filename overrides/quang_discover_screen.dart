@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'quang_audio_screen.dart';
 import '../models/channel.dart';
-import 'player_screen.dart';
+import 'quang_native_player.dart';
 
 class QuangDiscoverScreen extends StatefulWidget {
   const QuangDiscoverScreen({super.key});
@@ -161,10 +161,11 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       if (hide) { hiddenUrls.add(url); } else { hiddenUrls.remove(url); }
     });
     await _savePersonal();
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã lưu kênh trên thiết bị')));
   }
 
   Future<void> _playProtected(Channel channel) async {
-    if (hiddenUrls.contains(channel.url) && !await _unlock()) return;
+    if ((hiddenUrls.contains(channel.url) || (playlistPrivate && channels.any((c) => c.url == channel.url))) && !await _unlock()) return;
     if (!mounted) return;
     await _playChannel(channel);
   }
@@ -181,7 +182,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     await prefs.setStringList('quangtv_recent_channels', recentChannels);
     if (!mounted) return;
     setState(() {});
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(channel: c)));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c)));
   }
 
   Future<void> _searchYoutube(String query) async {
@@ -226,6 +227,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         Wrap(spacing: 8, children: [
           FilledButton(onPressed: loading ? null : _load, child: const Text('Tải danh sách')),
           OutlinedButton.icon(onPressed: _addPersonalChannel, icon: const Icon(Icons.add), label: const Text('Thêm kênh')),
+          OutlinedButton.icon(onPressed: () async { if (unlocked) { setState(() => unlocked = false); } else { await _unlock(); } }, icon: Icon(unlocked ? Icons.lock_open : Icons.lock), label: Text(unlocked ? 'Khóa lại' : 'Mở bằng PIN')),
           OutlinedButton(onPressed: () { urlController.text = defaultUrl; _load(); }, child: const Text('TV Việt Nam · GitHub')),
         ]),
         SwitchListTile(title: const Text('Ẩn toàn bộ danh sách M3U bằng PIN'), value: playlistPrivate, onChanged: _togglePlaylistPrivacy),
@@ -239,7 +241,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           final channel = shown[i];
           return ListTile(dense: true, leading: const Icon(Icons.live_tv), title: Text(channel.name),
             trailing: IconButton(tooltip: 'Ưa thích', icon: Icon(favorites.contains(channel.url) ? Icons.favorite : Icons.favorite_border), onPressed: () => _toggleFavorite(channel)),
-            onTap: () => _playChannel(channel));
+            onTap: () => _playProtected(channel));
         })),
         ],
         if (section == 0) ...[
