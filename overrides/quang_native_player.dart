@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../models/channel.dart';
 
@@ -24,6 +25,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   int? stalledSince;
   Duration lastPosition = Duration.zero;
   final Set<int> failedSources = {};
+  final Set<int> retriedSources = {};
+  String diagnostic = '';
+  static const _castChannel = MethodChannel('quangtv/cast');
 
   static const Map<String, List<String>> fallback = {
     'VTV1': [
@@ -79,11 +83,12 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     final p = controller;
     if (!mounted || loading || switching || userPaused || p == null) return;
     final value = p.value;
-    if (value.hasError) { _failover(); return; }
+    if (value.hasError) { _failover(value.errorDescription ?? 'Player error'); return; }
     final now = DateTime.now().millisecondsSinceEpoch;
     if (value.isBuffering) {
       bufferingSince ??= now;
-      if (now - bufferingSince! >= 4500) { _failover(); return; }
+      // Buffering is normal for live IPTV. Do not treat it as a fatal error.
+      if (now - bufferingSince! >= 30000) { _failover('Buffering over 30s'); return; }
     } else {
       bufferingSince = null;
     }
@@ -93,20 +98,26 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         stalledSince = null;
       } else {
         stalledSince ??= now;
-        if (now - stalledSince! >= 6000) _failover();
+        if (now - stalledSince! >= 30000) _failover('Playback stalled over 30s');
       }
     }
     setState(() {});
   }
 
-  Future<void> _failover() async {
-    if (switching || !mounted) return;
+  Future<void> _failover([String reason = 'Playback error']) async {
+    if (switching || !mounted || error != null) return;
+    diagnostic = reason;
+    // Retry the same stream once before trying a different source.
+    if (retriedSources.add(sourceIndex)) {
+      await _open(sourceIndex);
+      return;
+    }
     failedSources.add(sourceIndex);
     final all = sources;
     final next = List<int>.generate(all.length, (i) => (sourceIndex + i + 1) % all.length)
         .where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
-      setState(() => error = 'Tất cả nguồn đều bị gián đoạn. Bấm Thử lại để kiểm tra lại.');
+      setState(() => error = 'Không phát được nguồn hiện tại. $diagnostic. Bấm Thử lại.');
       await controller?.pause();
       return;
     }
@@ -142,7 +153,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       controller = player;
       await player.play();
       if (mounted) setState(() { loading = false; switching = false; });
-    } catch (_) {
+    } catch (e) {
+      diagnostic = 'Khởi tạo luồng: ${e.runtimeType}';
       await player.dispose();
       if (!mounted || token != generation) return;
       switching = false;
@@ -153,7 +165,17 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
 
   void _retry() {
     failedSources.clear();
+    retriedSources.clear();
     _open(0);
+  }
+
+  Future<void> _openCast() async {
+    try {
+      final opened = await _castChannel.invokeMethod<bool>('openSettings') ?? false;
+      if (!opened && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('TV này cần mở Smart View trong bảng điều khiển nhanh Samsung.')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mở Smart View từ bảng điều khiển nhanh Samsung để phản chiếu màn hình.')));
+    }
   }
 
   @override
@@ -168,7 +190,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   Widget build(BuildContext context) {
     final p = controller;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.channel.name)),
+      appBar: AppBar(title: Text(widget.channel.name), actions: [IconButton(tooltip: 'Phản chiếu lên Samsung TV (Smart View)', icon: const Icon(Icons.cast), onPressed: _openCast)]),
       body: SafeArea(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         if (loading) const CircularProgressIndicator(),
         if (sources.length > 1)
