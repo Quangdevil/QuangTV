@@ -44,6 +44,19 @@ import android.util.Rational
 kotlin = kotlin.replace('import android.content.Intent', pip_imports + 'import android.content.Intent', 1)
 anchor = '        // Video player intent channel'
 assert anchor in kotlin
+cast_handler = """        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/cast").setMethodCallHandler { call, result ->
+            if (call.method == "openSettings") {
+                try {
+                    startActivity(Intent("android.settings.CAST_SETTINGS"))
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.success(false)
+                }
+            } else result.notImplemented()
+        }
+
+"""
+kotlin = kotlin.replace(anchor, cast_handler + anchor, 1)
 pip_handler = """        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/pip").setMethodCallHandler { call, result ->
             when (call.method) {
                 "supported" -> result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
