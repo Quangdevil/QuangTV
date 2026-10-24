@@ -41,15 +41,17 @@ jobs:
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
         run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_web_screen.dart
-      - name: Compile Android debug APK
+      - name: Compile versioned Android debug APK
         working-directory: upstream/flutter_app
-        run: flutter build apk --debug --target-platform android-arm64
+        run: flutter build apk --debug --target-platform android-arm64 --build-name=1.1.0 --build-number=${{ github.run_number }}
+      - name: Name APK by version and build
+        run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk "QuangTV-v1.1.0-build${{ github.run_number }}-arm64.apk"
       - name: Verify APK exists
         run: test -s upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk
       - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
-          name: QuangTV-V1-Android-arm64-APK
-          path: upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+          name: QuangTV-v1.1.0-build${{ github.run_number }}-arm64
+          path: QuangTV-v1.1.0-build${{ github.run_number }}-arm64.apk
           if-no-files-found: error
           retention-days: 14
