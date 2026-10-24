@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'quang_audio_screen.dart';
+import 'quang_web_screen.dart';
 import '../models/channel.dart';
 import 'quang_native_player.dart';
 
@@ -306,7 +307,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           const Text('VTV · Xem lại phim và chương trình',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Text('Mở kho xem lại chính thức của VTVgo ngay trong QuangTV. Nội dung phụ thuộc VTVgo và quyền phát.'),
-          const ListTile(leading: Icon(Icons.movie_filter_outlined), title: Text('VTV xem lại'), subtitle: Text('Chờ nguồn phát/API hợp lệ để tích hợp native. Không sử dụng WebView.')),
+          ListTile(leading: const Icon(Icons.movie_filter_outlined), title: const Text('VTVgo · Xem lại (web tạm)'), subtitle: const Text('Chọn chương trình trên VTVgo trong QuangTV'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'VTVgo · Xem lại', initialUrl: Uri.parse('https://vtvgo.vn/'))))),
         ],
         if (section == 4) ...[
           const Text('Kênh yêu thích', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -328,7 +329,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           const SizedBox(height: 8),
           const Text('Lịch sử tìm kiếm'),
           for (final query in youtubeHistory) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(query), onTap: () => _searchYoutube(query)),
-          const ListTile(leading: Icon(Icons.play_circle_outline), title: Text('YouTube native'), subtitle: Text('Đang chờ phương thức tích hợp hợp lệ, không dùng WebView.')),
+          ListTile(leading: const Icon(Icons.play_circle_outline), title: const Text('Mở YouTube · QuangTube tạm'), subtitle: const Text('Tìm và xem trong QuangTV, không mở app ngoài'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'YouTube · QuangTV', initialUrl: Uri.parse('https://m.youtube.com/'))))),
         ],
         if (section == 2) ...[
           const Text('Podcast · Phát trong QuangTV', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
