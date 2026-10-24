@@ -116,13 +116,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     final filter = searchController.text.toLowerCase();
     final shown = channels.where((c) => c.name.toLowerCase().contains(filter)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('QuangTV · TV & Podcast')),
+      appBar: AppBar(title: const Text('QuangTV')),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
-        SegmentedButton<int>(
-          segments: const [ButtonSegment(value: 0, label: Text('TV')), ButtonSegment(value: 1, label: Text('YouTube')), ButtonSegment(value: 2, label: Text('Podcast')), ButtonSegment(value: 3, label: Text('Radio')), ButtonSegment(value: 4, label: Text('Ưa thích'))],
+        SizedBox(width: double.infinity, child: SegmentedButton<int>(
+          segments: const [ButtonSegment(value: 0, icon: Icon(Icons.live_tv), tooltip: 'TV'), ButtonSegment(value: 1, icon: Icon(Icons.smart_display), tooltip: 'YouTube'), ButtonSegment(value: 2, icon: Icon(Icons.podcasts), tooltip: 'Podcast'), ButtonSegment(value: 3, icon: Icon(Icons.radio), tooltip: 'Radio'), ButtonSegment(value: 4, icon: Icon(Icons.favorite), tooltip: 'Ưa thích')],
           selected: {section},
           onSelectionChanged: (values) => setState(() => section = values.first),
-        ),
+        )),
         const SizedBox(height: 12),
         if (section == 0) ...[
         const Text('Truyền hình Việt Nam', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
