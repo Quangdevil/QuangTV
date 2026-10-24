@@ -59,8 +59,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         if (mounted) setState(() {});
       } catch (_) {}
     }
-    // Show cached channels instantly, then refresh in the background on each launch.
-    if (mounted) await _load();
+    // Cached channels open instantly. Only fetch on first launch or manual refresh.
+    if (mounted && channels.isEmpty) await _load();
   }
 
   Future<void> _load() async {
