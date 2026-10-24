@@ -220,7 +220,6 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
       });
       if (!playlistUrls.contains(entered)) playlistUrls.add(entered);
       await _persist();
-      final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(playlistKey, playlistUrls);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã nhập ${parsed.length} kênh vào Private${networkError == null ? '' : ' (từ bộ nhớ TV)'}')));
     } catch (e) {
