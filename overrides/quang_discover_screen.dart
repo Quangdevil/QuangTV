@@ -16,6 +16,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   final urlController = TextEditingController(text: defaultUrl);
   final searchController = TextEditingController();
   List<Channel> channels = [];
+  int section = 0;
   bool loading = false;
   String error = '';
 
@@ -86,6 +87,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('QuangTV · TV & Podcast')),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
+        SegmentedButton<int>(
+          segments: const [ButtonSegment(value: 0, label: Text('TV')), ButtonSegment(value: 1, label: Text('YouTube')), ButtonSegment(value: 2, label: Text('Podcast')), ButtonSegment(value: 3, label: Text('Radio'))],
+          selected: {section},
+          onSelectionChanged: (values) => setState(() => section = values.first),
+        ),
+        const SizedBox(height: 12),
+        if (section == 0) ...[
         const Text('Truyền hình Việt Nam', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         TextField(controller: urlController, keyboardType: TextInputType.url,
@@ -105,6 +113,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           return ListTile(dense: true, leading: const Icon(Icons.live_tv), title: Text(channel.name),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(channel: channel))));
         })),
+        ],
+        if (section == 1) ...[
+          const Text('YouTube', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text('Dùng YouTube chính thức để đăng nhập, xem đăng ký và danh sách phát.'),
+          FilledButton.icon(onPressed: () => launchUrl(Uri.parse('https://www.youtube.com/'), mode: LaunchMode.externalApplication), icon: const Icon(Icons.play_circle), label: const Text('Mở YouTube')),
+        ],
+        if (section == 2) ...[
         const Divider(),
         const Text('Podcast & câu chuyện tiếng Việt', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const Text('Mở tìm kiếm trong YouTube chính thức để dùng tài khoản và danh sách phát của bạn.'),
@@ -121,6 +136,20 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           trailing: const Icon(Icons.open_in_new),
           onTap: () => _searchYoutube(item[1]),
         ),
+        ],
+        if (section == 3) ...[
+          const Text('Đài Tiếng nói Việt Nam', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text('Các kênh trực tuyến chính thức. Không dùng tần số FM để giả làm link phát.'),
+          for (final station in const [
+            ['VOV Giao thông Hà Nội · FM 91 MHz', 'https://vov.vn/vov-plus/radio'],
+            ['VOV Giao thông TP.HCM · FM 90 MHz', 'https://vov.vn/vov-plus/radio'],
+            ['VOV1 · Thời sự', 'https://vov.vn/vov-plus/radio'],
+            ['VOV2 · Văn hóa xã hội', 'https://vov.vn/vov-plus/radio'],
+            ['VOV3 · Âm nhạc', 'https://vov.vn/vov-plus/radio'],
+            ['VOV5 · Đối ngoại', 'https://vov.vn/vov-plus/radio'],
+            ['VOV Sonata · FM 89 MHz', 'https://vov.vn/vov-plus/radio'],
+          ]) ListTile(leading: const Icon(Icons.radio), title: Text(station[0]), trailing: const Icon(Icons.open_in_new), onTap: () => launchUrl(Uri.parse(station[1]), mode: LaunchMode.externalApplication)),
+        ],
       ])),
     );
   }
