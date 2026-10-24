@@ -204,6 +204,43 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     await (await SharedPreferences.getInstance()).remove('quangtv_recent_channels');
   }
 
+  Future<void> _discoverPodcasts(String topic) async {
+    try {
+      final uri = Uri.https('itunes.apple.com', '/search', {
+        'term': topic, 'media': 'podcast', 'entity': 'podcast',
+        'country': 'vn', 'limit': '35',
+      });
+      final response = await http.get(uri).timeout(const Duration(seconds: 18));
+      if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final results = (data['results'] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .where((item) => Uri.tryParse(item['feedUrl']?.toString() ?? '')?.scheme == 'https')
+          .toList();
+      if (!mounted) return;
+      await showModalBottomSheet<void>(context: context, isScrollControlled: true, builder: (ctx) => SafeArea(
+        child: SizedBox(height: MediaQuery.sizeOf(ctx).height * 0.72, child: Column(children: [
+          Padding(padding: const EdgeInsets.all(16), child: Text('Podcast: $topic', style: Theme.of(ctx).textTheme.titleLarge)),
+          Expanded(child: results.isEmpty
+            ? const Center(child: Text('Chưa tìm được RSS âm thanh hợp lệ'))
+            : ListView.builder(itemCount: results.length, itemBuilder: (context, index) {
+                final item = results[index];
+                final title = item['collectionName']?.toString() ?? 'Podcast';
+                final feed = item['feedUrl'].toString();
+                return ListTile(leading: const Icon(Icons.podcasts), title: Text(title),
+                  subtitle: Text(item['artistName']?.toString() ?? ''),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(this.context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: title, feedUrl: feed)));
+                  });
+              })),
+        ])),
+      ));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không tải được thư viện podcast: $e')));
+    }
+  }
+
   Future<void> _openPodcast(int appleId, String title) async {
     try {
       final uri = Uri.https('itunes.apple.com', '/lookup', {'id': '$appleId', 'entity': 'podcast'});
@@ -337,6 +374,17 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           ListTile(leading: const Icon(Icons.child_care), title: const Text('Chú Mèo Đi Dép · Kho truyện cổ tích'), subtitle: const Text('Truyện gia đình, cổ tích cho trẻ'), onTap: () => _openPodcast(1532630528, 'Chú Mèo Đi Dép')),
           ListTile(leading: const Icon(Icons.account_balance_wallet), title: const Text('VOV · Kinh tế Tài chính'), subtitle: const Text('Kinh tế, tài chính và kinh doanh'), onTap: () => _openPodcast(1447843388, 'VOV Kinh tế Tài chính')),
           ListTile(leading: const Icon(Icons.business_center), title: const Text('Business Insights · Vietsuccess'), subtitle: const Text('Quản trị, lãnh đạo, phát triển con người'), onTap: () => _openPodcast(1569229068, 'Business Insights')),
+          const Divider(),
+          const Text('Khám phá thêm podcast tiếng Việt'),
+          for (final topic in <String>[
+            'truyện cổ tích thiếu nhi', 'truyện kể bé ngủ ngon', 'truyện ngụ ngôn',
+            'chuyện gia đình trẻ em', 'giáo dục kỹ năng sống', 'truyện vui thiếu nhi',
+            'bài học kinh doanh', 'khởi nghiệp kinh doanh', 'quản trị dòng tiền',
+            'quản trị nhân sự', 'kỹ năng giao tiếp', 'tâm lý con người',
+            'lãnh đạo quản trị', 'marketing bán hàng', 'kinh tế tài chính',
+          ])
+            ListTile(dense: true, leading: const Icon(Icons.library_music), title: Text(topic),
+              trailing: const Icon(Icons.chevron_right), onTap: () => _discoverPodcasts(topic)),
           const Divider(),
           const Text('Hoặc nhập RSS podcast của bạn'),
           const SizedBox(height: 12),
