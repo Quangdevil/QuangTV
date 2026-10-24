@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'quang_web_screen.dart';
+import 'quang_audio_screen.dart';
 import '../models/channel.dart';
 import 'player_screen.dart';
 
@@ -19,6 +20,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   int section = 0;
   List<String> youtubeHistory = [];
   final youtubeSearch = TextEditingController();
+  final podcastFeed = TextEditingController();
+  final radioStream = TextEditingController();
   Set<String> favorites = {};
   List<String> recentChannels = [];
   bool loading = false;
@@ -108,6 +111,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     urlController.dispose();
     searchController.dispose();
     youtubeSearch.dispose();
+    podcastFeed.dispose();
+    radioStream.dispose();
     super.dispose();
   }
 
@@ -186,35 +191,32 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'YouTube', initialUrl: Uri.parse('https://www.youtube.com/')))), icon: const Icon(Icons.play_circle), label: const Text('Mở YouTube')),
         ],
         if (section == 2) ...[
-        const Divider(),
-        const Text('Podcast & câu chuyện tiếng Việt', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const Text('Mở tìm kiếm trong YouTube chính thức để dùng tài khoản và danh sách phát của bạn.'),
-        for (final item in const [
-          ['Bài học kinh doanh', 'podcast bài học kinh doanh tiếng Việt khởi nghiệp'],
-          ['Đàm phán và bán hàng', 'podcast nghệ thuật đàm phán bán hàng tiếng Việt'],
-          ['Quản trị dòng tiền', 'podcast quản lý dòng tiền kinh doanh tiếng Việt'],
-          ['Truyện gia đình cho bé', 'truyện kể gia đình cho bé tiếng Việt'],
-          ['Lòng biết ơn và chia sẻ', 'truyện thiếu nhi lòng biết ơn chia sẻ gia đình'],
-          ['Truyện trước giờ ngủ', 'kể chuyện cho bé trước giờ ngủ tiếng Việt'],
-        ]) ListTile(
-          leading: const Icon(Icons.podcasts),
-          title: Text(item[0]),
-          trailing: const Icon(Icons.open_in_new),
-          onTap: () => _searchYoutube(item[1]),
-        ),
+          const Text('Podcast · Phát trong QuangTV', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text('Nhập RSS podcast có tệp âm thanh để xem danh sách tập và nghe trực tiếp.'),
+          const SizedBox(height: 12),
+          TextField(controller: podcastFeed, keyboardType: TextInputType.url,
+            decoration: const InputDecoration(prefixIcon: Icon(Icons.rss_feed), hintText: 'https://.../podcast.xml', border: OutlineInputBorder())),
+          const SizedBox(height: 8),
+          FilledButton.icon(icon: const Icon(Icons.podcasts), label: const Text('Mở danh sách tập'),
+            onPressed: () {
+              final uri = Uri.tryParse(podcastFeed.text.trim());
+              if (uri?.scheme != 'https') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nhập link RSS HTTPS hợp lệ'))); return; }
+              Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: 'Podcast', feedUrl: uri.toString())));
+            }),
         ],
         if (section == 3) ...[
-          const Text('Đài Tiếng nói Việt Nam', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const Text('Các kênh trực tuyến chính thức. Không dùng tần số FM để giả làm link phát.'),
-          for (final station in const [
-            ['VOV Giao thông Hà Nội · FM 91 MHz', 'https://vov.vn/vov-plus/radio'],
-            ['VOV Giao thông TP.HCM · FM 90 MHz', 'https://vov.vn/vov-plus/radio'],
-            ['VOV1 · Thời sự', 'https://vov.vn/vov-plus/radio'],
-            ['VOV2 · Văn hóa xã hội', 'https://vov.vn/vov-plus/radio'],
-            ['VOV3 · Âm nhạc', 'https://vov.vn/vov-plus/radio'],
-            ['VOV5 · Đối ngoại', 'https://vov.vn/vov-plus/radio'],
-            ['VOV Sonata · FM 89 MHz', 'https://vov.vn/vov-plus/radio'],
-          ]) ListTile(leading: const Icon(Icons.radio), title: Text(station[0]), trailing: const Icon(Icons.open_in_new), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: station[0], initialUrl: Uri.parse(station[1]))))),
+          const Text('Radio · Nghe trong QuangTV', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text('Phát luồng âm thanh trực tiếp, không chuyển sang ứng dụng VOV. Nhập URL luồng radio hợp lệ (không phải trang web).'),
+          const SizedBox(height: 12),
+          TextField(controller: radioStream, keyboardType: TextInputType.url,
+            decoration: const InputDecoration(prefixIcon: Icon(Icons.radio), hintText: 'https://.../live.mp3', border: OutlineInputBorder())),
+          const SizedBox(height: 8),
+          FilledButton.icon(icon: const Icon(Icons.play_arrow), label: const Text('Nghe radio'),
+            onPressed: () {
+              final uri = Uri.tryParse(radioStream.text.trim());
+              if (uri?.scheme != 'https') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nhập URL luồng HTTPS hợp lệ'))); return; }
+              Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: 'Radio', streamUrl: uri.toString())));
+            }),
         ],
       ])),
     );
