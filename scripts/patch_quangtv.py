@@ -1,6 +1,7 @@
 from pathlib import Path
 import shutil
 shutil.copyfile('overrides/quang_discover_screen.dart', 'upstream/flutter_app/lib/screens/quang_discover_screen.dart')
+shutil.copyfile('overrides/quang_native_player.dart', 'upstream/flutter_app/lib/screens/quang_native_player.dart')
 shutil.copyfile('overrides/quang_audio_screen.dart', 'upstream/flutter_app/lib/screens/quang_audio_screen.dart')
 shutil.copyfile('overrides/quang_update_screen.dart', 'upstream/flutter_app/lib/screens/quang_update_screen.dart')
 pubspec=Path('upstream/flutter_app/pubspec.yaml')
