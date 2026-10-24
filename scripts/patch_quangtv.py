@@ -113,3 +113,16 @@ end = home_source.find('              // ── Help & info ', start)
 assert start >= 0 and end > start, 'Feedback menu markers changed'
 home_source = home_source[:start] + home_source[end:]
 home.write_text(home_source)
+
+# Stable standalone application identity for all future QuangTV releases.
+gradle = Path('upstream/flutter_app/android/app/build.gradle')
+gradle_source = gradle.read_text()
+assert 'applicationId "app.tvviewer.player"' in gradle_source
+gradle_source = gradle_source.replace('applicationId "app.tvviewer.player"', 'applicationId "com.quangduren.quangtv"', 1)
+# The release APK must always use a persistent private keystore, never a fallback debug key.
+gradle_source = gradle_source.replace(
+    'signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug',
+    'signingConfig signingConfigs.release',
+    1,
+)
+gradle.write_text(gradle_source)
