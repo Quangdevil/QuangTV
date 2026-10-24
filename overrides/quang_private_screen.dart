@@ -149,26 +149,27 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
     controller.dispose();
     if (entered == null || !mounted) return;
     final uri = Uri.tryParse(entered);
-    if (uri == null || !['https', 'http'].contains(uri.scheme) || uri.host.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('URL M3U không hợp lệ')));
+    if (uri == null || uri.scheme != 'https') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Chỉ hỗ trợ liên kết HTTPS hợp lệ như TV bên ngoài')));
       return;
     }
     setState(() => importing = true);
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 25));
+      // Match the public TV playlist loader exactly, including its URL parsing.
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
       if (response.body.length > 6000000) throw Exception('Danh sách quá lớn');
-      final lines = response.body.split(RegExp(r'\r?\n'));
+      final lines = response.body.split(RegExp(r'\\r?\\n'));
       final parsed = <Channel>[];
       String title = '';
       for (final raw in lines) {
         final line = raw.trim();
         if (line.startsWith('#EXTINF:')) {
-          title = line.contains(',') ? line.substring(line.indexOf(',') + 1).trim() : 'Kênh Private';
+          title = line.contains(',') ? line.substring(line.indexOf(',') + 1).trim() : 'Kênh TV';
         } else if (line.isNotEmpty && !line.startsWith('#')) {
-          final stream = uri.resolve(line);
-          if (['https', 'http'].contains(stream.scheme) && stream.host.isNotEmpty) {
-            parsed.add(Channel(name: title.isEmpty ? 'Kênh Private' : title, url: stream.toString(), country: 'Private'));
+          final stream = Uri.tryParse(line);
+          if (stream != null && (stream.scheme == 'https' || stream.scheme == 'http')) {
+            parsed.add(Channel(name: title.isEmpty ? 'Kênh TV' : title, url: line, country: 'Private'));
           }
           title = '';
         }
