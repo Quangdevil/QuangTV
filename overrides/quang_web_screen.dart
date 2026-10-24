@@ -25,7 +25,6 @@ class _QuangWebScreenState extends State<QuangWebScreen> {
             return NavigationDecision.navigate;
           }
           return NavigationDecision.prevent;
-          return NavigationDecision.navigate;
         },
       ))
       ..loadRequest(widget.initialUrl);
