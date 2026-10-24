@@ -60,6 +60,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       setState(() => error = 'Chỉ hỗ trợ liên kết HTTPS hợp lệ');
       return;
     }
+    final savedPrefs = await SharedPreferences.getInstance();
+    await savedPrefs.setString('quangtv_playlist', uri.toString());
     setState(() { loading = true; error = ''; });
     try {
       final response = await http.get(uri).timeout(const Duration(seconds: 20));
