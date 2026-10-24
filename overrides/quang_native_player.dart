@@ -14,6 +14,13 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   VideoPlayerController? controller;
   String? error;
   bool loading = true;
+  bool get canSeek {
+    final p = controller;
+    if (p == null || !p.value.isInitialized) return false;
+    final d = p.value.duration;
+    return d.inSeconds > 0 && d.inSeconds < 86400;
+  }
+  void _refreshProgress() { if (mounted) setState(() {}); }
 
   @override
   void initState() {
@@ -24,7 +31,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   Future<void> _open() async {
     final old = controller;
     controller = null;
-    if (old != null) await old.dispose();
+    if (old != null) { old.removeListener(_refreshProgress); await old.dispose(); }
     if (!mounted) return;
     setState(() { loading = true; error = null; });
     final uri = Uri.tryParse(widget.channel.url);
@@ -37,6 +44,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       await player.initialize().timeout(const Duration(seconds: 25));
       if (!mounted) { await player.dispose(); return; }
       controller = player;
+      player.addListener(_refreshProgress);
       await player.play();
       if (mounted) setState(() => loading = false);
     } catch (e) {
@@ -47,6 +55,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
 
   @override
   void dispose() {
+    controller?.removeListener(_refreshProgress);
     controller?.dispose();
     super.dispose();
   }
@@ -66,6 +75,14 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           AspectRatio(aspectRatio: player.value.aspectRatio > 0 ? player.value.aspectRatio : 16 / 9,
             child: VideoPlayer(player)),
           const SizedBox(height: 12),
+          if (canSeek) ...[
+            Slider(
+              value: player.value.position.inMilliseconds.clamp(0, player.value.duration.inMilliseconds).toDouble(),
+              max: player.value.duration.inMilliseconds.toDouble(),
+              onChanged: (v) => player.seekTo(Duration(milliseconds: v.round())),
+            ),
+            Text('${player.value.position.inMinutes} / ${player.value.duration.inMinutes} phút'),
+          ] else const Text('TRỰC TIẾP · Nguồn này không cung cấp tua DVR'),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             IconButton(icon: const Icon(Icons.replay), onPressed: _open),
             IconButton(icon: Icon(player.value.isPlaying ? Icons.pause : Icons.play_arrow),
