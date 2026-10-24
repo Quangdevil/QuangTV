@@ -41,17 +41,39 @@ jobs:
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
         run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_web_screen.dart
-      - name: Compile versioned Android debug APK
+      - name: Restore permanent QuangTV release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.QUANGTV_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.QUANGTV_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.QUANGTV_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.QUANGTV_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::Missing QUANGTV_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing QUANGTV_STORE_PASSWORD secret"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Missing QUANGTV_KEY_PASSWORD secret"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::Missing QUANGTV_KEY_ALIAS secret"; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > upstream/flutter_app/android/app/quangtv-release.jks
+          {
+            echo 'storeFile=quangtv-release.jks'
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+          } > upstream/flutter_app/android/key.properties
+          chmod 600 upstream/flutter_app/android/key.properties upstream/flutter_app/android/app/quangtv-release.jks
+      - name: Compile signed QuangTV release APK
         working-directory: upstream/flutter_app
-        run: flutter build apk --debug --target-platform android-arm64 --build-name=1.1.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --target-platform android-arm64 --build-name=1.2.0 --build-number=${{ github.run_number }}
       - name: Name APK by version and build
-        run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk "QuangTV-v1.1.0-build${{ github.run_number }}-arm64.apk"
-      - name: Verify APK exists
-        run: test -s upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+        run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-release.apk "QuangTV-v1.2.0-build${{ github.run_number }}-arm64.apk"
+      - name: Verify signed release APK
+        run: |
+          test -s upstream/flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          jarsigner -verify upstream/flutter_app/build/app/outputs/flutter-apk/app-release.apk
       - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
-          name: QuangTV-v1.1.0-build${{ github.run_number }}-arm64
-          path: QuangTV-v1.1.0-build${{ github.run_number }}-arm64.apk
+          name: QuangTV-v1.2.0-build${{ github.run_number }}-arm64
+          path: QuangTV-v1.2.0-build${{ github.run_number }}-arm64.apk
           if-no-files-found: error
           retention-days: 14
