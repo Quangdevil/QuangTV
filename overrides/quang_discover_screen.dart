@@ -1,0 +1,127 @@
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../models/channel.dart';
+import 'player_screen.dart';
+
+class QuangDiscoverScreen extends StatefulWidget {
+  const QuangDiscoverScreen({super.key});
+  @override
+  State<QuangDiscoverScreen> createState() => _QuangDiscoverScreenState();
+}
+
+class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
+  static const defaultUrl = 'https://iptv-org.github.io/iptv/countries/vn.m3u';
+  final urlController = TextEditingController(text: defaultUrl);
+  final searchController = TextEditingController();
+  List<Channel> channels = [];
+  bool loading = false;
+  String error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _restore();
+  }
+
+  Future<void> _restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    urlController.text = prefs.getString('quangtv_playlist') ?? defaultUrl;
+    await _load();
+  }
+
+  Future<void> _load() async {
+    final uri = Uri.tryParse(urlController.text.trim());
+    if (uri == null || uri.scheme != 'https') {
+      setState(() => error = 'Chỉ hỗ trợ liên kết HTTPS hợp lệ');
+      return;
+    }
+    setState(() { loading = true; error = ''; });
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+      if (response.body.length > 6000000) throw Exception('Danh sách quá lớn');
+      final lines = response.body.split(RegExp(r'\r?\n'));
+      final result = <Channel>[];
+      String name = '';
+      for (final line in lines) {
+        final s = line.trim();
+        if (s.startsWith('#EXTINF:')) {
+          name = s.contains(',') ? s.substring(s.indexOf(',') + 1).trim() : 'Kênh TV';
+        } else if (s.isNotEmpty && !s.startsWith('#')) {
+          final stream = Uri.tryParse(s);
+          if (stream != null && (stream.scheme == 'https' || stream.scheme == 'http')) {
+            result.add(Channel(name: name.isEmpty ? 'Kênh TV' : name, url: s, country: 'Vietnam'));
+          }
+          name = '';
+        }
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('quangtv_playlist', uri.toString());
+      if (mounted) setState(() => channels = result);
+    } catch (e) {
+      if (mounted) setState(() => error = 'Không tải được danh sách: $e');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _searchYoutube(String query) async {
+    final uri = Uri.https('www.youtube.com', '/results', {'search_query': query});
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  void dispose() {
+    urlController.dispose();
+    searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filter = searchController.text.toLowerCase();
+    final shown = channels.where((c) => c.name.toLowerCase().contains(filter)).toList();
+    return Scaffold(
+      appBar: AppBar(title: const Text('QuangTV · TV & Podcast')),
+      body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
+        const Text('Truyền hình Việt Nam', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        TextField(controller: urlController, keyboardType: TextInputType.url,
+          decoration: const InputDecoration(labelText: 'Link M3U (có thể nhập tay)', border: OutlineInputBorder())),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, children: [
+          FilledButton(onPressed: loading ? null : _load, child: const Text('Tải danh sách')),
+          OutlinedButton(onPressed: () { urlController.text = defaultUrl; _load(); }, child: const Text('TV Việt Nam · GitHub')),
+        ]),
+        if (loading) const LinearProgressIndicator(),
+        if (error.isNotEmpty) Text(error, style: const TextStyle(color: Colors.red)),
+        TextField(controller: searchController, onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Tìm kênh TV')),
+        Text('${shown.length} kênh', style: Theme.of(context).textTheme.bodySmall),
+        SizedBox(height: 280, child: ListView.builder(itemCount: shown.length, itemBuilder: (context, i) {
+          final channel = shown[i];
+          return ListTile(dense: true, leading: const Icon(Icons.live_tv), title: Text(channel.name),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(channel: channel))));
+        })),
+        const Divider(),
+        const Text('Podcast & câu chuyện tiếng Việt', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Text('Mở tìm kiếm trong YouTube chính thức để dùng tài khoản và danh sách phát của bạn.'),
+        for (final item in const [
+          ['Bài học kinh doanh', 'podcast bài học kinh doanh tiếng Việt khởi nghiệp'],
+          ['Đàm phán và bán hàng', 'podcast nghệ thuật đàm phán bán hàng tiếng Việt'],
+          ['Quản trị dòng tiền', 'podcast quản lý dòng tiền kinh doanh tiếng Việt'],
+          ['Truyện gia đình cho bé', 'truyện kể gia đình cho bé tiếng Việt'],
+          ['Lòng biết ơn và chia sẻ', 'truyện thiếu nhi lòng biết ơn chia sẻ gia đình'],
+          ['Truyện trước giờ ngủ', 'kể chuyện cho bé trước giờ ngủ tiếng Việt'],
+        ]) ListTile(
+          leading: const Icon(Icons.podcasts),
+          title: Text(item[0]),
+          trailing: const Icon(Icons.open_in_new),
+          onTap: () => _searchYoutube(item[1]),
+        ),
+      ])),
+    );
+  }
+}
