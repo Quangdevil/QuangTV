@@ -32,7 +32,7 @@ class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
       if (apk == null) throw Exception('Bản phát hành chưa có APK arm64');
       final info = await PackageInfo.fromPlatform();
       final tag = data['tag_name'] as String? ?? '';
-      final match = RegExp(r'build(\\d+)').firstMatch(tag);
+      final match = RegExp('build([0-9]+)').firstMatch(tag);
       final remoteBuild = int.tryParse(match?.group(1) ?? '') ?? 0;
       final localBuild = int.tryParse(info.buildNumber) ?? 0;
       if (!mounted) return;
