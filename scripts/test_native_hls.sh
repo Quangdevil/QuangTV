@@ -2,6 +2,7 @@
 set -euo pipefail
 repo_root="$(pwd)"
 mkdir -p "$repo_root/playback-evidence"
+adb shell settings put secure immersive_mode_confirmations confirmed
 adb logcat -c
 adb shell dumpsys webviewupdate > "$repo_root/playback-evidence/webview-runtime.txt"
 adb logcat -v threadtime > "$repo_root/playback-evidence/native-logcat.txt" &
@@ -17,8 +18,8 @@ trap 'kill "$log_pid" "$frame_pid" 2>/dev/null || true' EXIT
 cd upstream/flutter_app
 flutter test integration_test/native_hls_test.dart -d emulator-5554 --dart-define=HLS_TEST_URL=http://10.0.2.2:8765/index.m3u8 2>&1 | tee "$repo_root/playback-evidence/test-result.txt"
 
-cd "$repo_root"
-/usr/bin/python3 scripts/verify_native_frames.py
-
 cd "$repo_root/upstream/flutter_app"
 flutter test integration_test/ota_update_test.dart -d emulator-5554 2>&1 | tee "$repo_root/playback-evidence/ota-test-result.txt"
+
+cd "$repo_root"
+/usr/bin/python3 scripts/verify_native_frames.py
