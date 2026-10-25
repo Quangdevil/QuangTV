@@ -112,6 +112,8 @@ void main() {
     expect(played, isTrue);
     debugPrint('QUANGTV_BROWSER_PLAYER_PASS nativePlaybackAdvanced=true');
     debugPrint('QUANGTV_PROXY_ANDROID_PASS authenticatedWebView=true authenticatedDownload=true authenticatedMedia3=true encryptedConfig=true');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
     await tester.pumpWidget(MaterialApp(home: QuangNativePlayer(channel: Channel(name: 'Proxy VLC HLS', url: 'http://10.0.2.2:8765/proxy-only/index.m3u8'), startWithVlc: true)));
     final vlcDeadline = DateTime.now().add(const Duration(seconds: 50));
     var vlcPlayed = false;
