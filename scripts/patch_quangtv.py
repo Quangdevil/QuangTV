@@ -223,6 +223,11 @@ if 'androidx.core.content.FileProvider' not in m:
     assert '<application' in m, 'Android application element not found'
     application_start = m.index('>', m.index('<application')) + 1
     m = m[:application_start] + '\\n        ' + provider + m[application_start:]
+# IPTV playlists can be HTTPS while their HLS media segments use plain HTTP.
+# Permit cleartext for this IPTV client so Android Media3 and VLC can fetch them.
+if 'android:usesCleartextTraffic=' not in m:
+    assert '<application' in m
+    m = m.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
 manifest.write_text(m)
 paths = Path('upstream/flutter_app/android/app/src/main/res/xml/quangtv_update_paths.xml')
 paths.parent.mkdir(parents=True, exist_ok=True)
