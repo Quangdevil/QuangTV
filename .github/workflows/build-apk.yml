@@ -3,6 +3,11 @@ on:
   push:
     branches: [main, fix/native-playback-validation]
   workflow_dispatch:
+    inputs:
+      ui_only_release:
+        description: 'UI-only release: analyze/build/sign without emulator playback tests'
+        type: boolean
+        default: false
 concurrency:
   group: quangtv-android-build
   cancel-in-progress: true
@@ -47,6 +52,7 @@ jobs:
         working-directory: upstream/flutter_app
         run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart
       - name: Generate deterministic HLS fixture
+        if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg python3-pil
@@ -54,11 +60,13 @@ jobs:
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 60 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 48 -c:a aac -f hls -hls_time 2 -hls_list_size 0 /tmp/quangtv-hls/index.m3u8
           python3 scripts/serve_test_media.py >/tmp/quangtv-hls-server.log 2>&1 &
       - name: Enable KVM for Android playback tests
+        if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Test native Media3 and VLC playback on Android
+        if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -68,7 +76,7 @@ jobs:
           disable-animations: true
           script: bash scripts/test_native_hls.sh
       - name: Retain playback logs even on failure
-        if: always()
+        if: always() && inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         uses: actions/upload-artifact@v4
         with:
           name: native-playback-evidence-${{ github.run_number }}

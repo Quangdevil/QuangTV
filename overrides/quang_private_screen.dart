@@ -114,6 +114,7 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
     name.clear(); url.clear();
     final accepted = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Thêm kênh Private'),
+      scrollable: true,
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         TextField(controller: name, decoration: const InputDecoration(labelText: 'Tên kênh')),
         TextField(controller: url, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'URL phát HTTP/HTTPS')),
@@ -275,16 +276,16 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
       appBar: AppBar(title: const Text('Private'), actions: [
         IconButton(tooltip: 'Khóa và thoát', icon: const Icon(Icons.lock), onPressed: () => Navigator.pop(context)),
       ]),
-      floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Thêm kênh')),
-      bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
-        Expanded(child: OutlinedButton.icon(
-          onPressed: importing ? null : _refreshPlaylists,
-          icon: const Icon(Icons.refresh), label: const Text('Tải lại M3U'))),
-        const SizedBox(width: 8),
-        Expanded(child: FilledButton.icon(
-          onPressed: importing ? null : () => _importPlaylist(),
-          icon: const Icon(Icons.playlist_add), label: const Text('Nhập URL M3U'))),
-      ]))),
+      bottomNavigationBar: SafeArea(top: false, child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+          FilledButton.icon(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Thêm kênh')),
+          OutlinedButton.icon(onPressed: importing ? null : () => _importPlaylist(),
+            icon: const Icon(Icons.playlist_add), label: const Text('Nhập M3U')),
+          OutlinedButton.icon(onPressed: importing ? null : _refreshPlaylists,
+            icon: const Icon(Icons.refresh), label: const Text('Tải lại M3U')),
+        ]),
+      )),
       body: SafeArea(child: !ready ? const Center(child: CircularProgressIndicator()) : Column(children: [
         if (importing) const LinearProgressIndicator(),
         Padding(padding: const EdgeInsets.all(16), child: TextField(controller: search, onChanged: (_) => setState(() {}),
@@ -293,7 +294,7 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
           child: Text('Private · ${visible.length} kênh', style: Theme.of(context).textTheme.titleMedium))),
         Expanded(child: visible.isEmpty
           ? const Center(child: Text('Chưa có kênh Private. Nhấn Thêm kênh để lưu URL.'))
-          : ListView.builder(itemCount: visible.length, itemBuilder: (ctx, i) {
+          : ListView.builder(padding: const EdgeInsets.only(bottom: 24), itemCount: visible.length, itemBuilder: (ctx, i) {
             final c = visible[i];
             return ListTile(leading: const Icon(Icons.live_tv), title: Text(c.name),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c, startMuted: true))),

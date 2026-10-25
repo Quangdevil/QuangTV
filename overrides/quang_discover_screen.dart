@@ -28,6 +28,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   Set<String> favorites = {};
   List<String> recentChannels = [];
   List<Channel> personalChannels = [];
+  Set<String> deletedChannels = {};
   List<Channel> privateChannels = [];
   bool loading = false;
   String error = '';
@@ -40,6 +41,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
 
   Future<void> _restore() async {
     final prefs = await SharedPreferences.getInstance();
+    deletedChannels = (prefs.getStringList('quangtv_deleted_channels') ?? []).toSet();
     urlController.text = prefs.getString('quangtv_playlist') ?? defaultUrl;
     youtubeHistory = prefs.getStringList('quangtv_youtube_search_history') ?? [];
     favorites = (prefs.getStringList('quangtv_favorites') ?? []).toSet();
@@ -61,7 +63,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       } catch (_) {}
     }
     // Cached channels open instantly. Only fetch on first launch or manual refresh.
-    if (mounted && channels.isEmpty) await _load();
+    if (mounted && cached == null) await _load();
   }
 
   Future<void> _load() async {
@@ -108,6 +110,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('quangtv_playlist', uri.toString());
+      result.removeWhere((c) => deletedChannels.contains(c.url));
       await prefs.setString('quangtv_cached_channels', jsonEncode(result.map((c) => {'name': c.name, 'url': c.url}).toList()));
       if (mounted) setState(() => channels = result);
     } catch (e) {
@@ -138,12 +141,38 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       return;
     }
     setState(() {
+      deletedChannels.remove(url);
       personalChannels.removeWhere((c) => c.url == url);
       personalChannels.add(Channel(name: name, url: url, country: 'Personal'));
     });
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('quangtv_deleted_channels', deletedChannels.toList());
     await prefs.setStringList('quangtv_personal_channels',
       personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
+  }
+
+  Future<void> _deleteChannel(Channel channel) async {
+    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Xóa kênh đã lưu?'), content: Text(channel.name),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Xóa')),
+      ],
+    ));
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      deletedChannels.add(channel.url);
+      personalChannels.removeWhere((c) => c.url == channel.url);
+      channels.removeWhere((c) => c.url == channel.url);
+      favorites.remove(channel.url);
+      recentChannels.removeWhere((url) => url == channel.url);
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('quangtv_deleted_channels', deletedChannels.toList());
+    await prefs.setStringList('quangtv_personal_channels', personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
+    await prefs.setString('quangtv_cached_channels', jsonEncode(channels.map((c) => {'name': c.name, 'url': c.url}).toList()));
+    await prefs.setStringList('quangtv_favorites', favorites.toList());
+    await prefs.setStringList('quangtv_recent_channels', recentChannels);
   }
 
   Future<void> _toggleFavorite(Channel c) async {
@@ -275,7 +304,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final filter = searchController.text.toLowerCase();
-    final shown = [...personalChannels, ...channels].where((c) => c.name.toLowerCase().contains(filter) && !privateChannels.any((p) => p.url == c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
+    final shown = [...personalChannels, ...channels].where((c) => c.name.toLowerCase().contains(filter) && !deletedChannels.contains(c.url) && !privateChannels.any((p) => p.url == c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('QuangTV'), actions: [
         IconButton(tooltip: 'Private', icon: const Icon(Icons.lock_outline), onPressed: () async {
@@ -310,7 +339,10 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         SizedBox(height: 280, child: ListView.builder(itemCount: shown.length, itemBuilder: (context, i) {
           final channel = shown[i];
           return ListTile(dense: true, leading: const Icon(Icons.live_tv), title: Text(channel.name),
-            trailing: IconButton(tooltip: 'Ưa thích', icon: Icon(favorites.contains(channel.url) ? Icons.favorite : Icons.favorite_border), onPressed: () => _toggleFavorite(channel)),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(tooltip: 'Ưa thích', icon: Icon(favorites.contains(channel.url) ? Icons.favorite : Icons.favorite_border), onPressed: () => _toggleFavorite(channel)),
+              IconButton(tooltip: 'Xóa kênh', icon: const Icon(Icons.delete_outline), onPressed: () => _deleteChannel(channel)),
+            ]),
             onTap: () => _playChannel(channel));
         })),
         ],
