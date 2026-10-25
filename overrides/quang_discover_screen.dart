@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +18,7 @@ class QuangDiscoverScreen extends StatefulWidget {
 }
 
 class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
+  static bool licensesAdded = false;
   static const defaultUrl = 'https://iptv-org.github.io/iptv/countries/vn.m3u';
   final urlController = TextEditingController(text: defaultUrl);
   final searchController = TextEditingController();
@@ -39,6 +41,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   @override
   void initState() {
     super.initState();
+    if (!licensesAdded) { licensesAdded = true; LicenseRegistry.addLicense(() async* { yield LicenseEntryWithLineBreaks(['NewPipeExtractor'], await rootBundle.loadString('assets/licenses/newpipe.txt')); }); }
     _restore();
     _readProxy();
   }
@@ -74,6 +77,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           Navigator.pop(sheetContext);
           Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangProxyScreen())).then((_) => _readProxy());
         }),
+        ListTile(leading: const Icon(Icons.info_outline), title: const Text('Giấy phép phần mềm'), onTap: () { Navigator.pop(sheetContext); showLicensePage(context: context, applicationName: 'QuangTV'); }),
         ListTile(leading: const Icon(Icons.dns_outlined), title: const Text('DNS hệ thống'), subtitle: const Text('Tự động · Google DNS · Nhập thủ công'), onTap: () {
           Navigator.pop(sheetContext);
           _showDnsSettings();

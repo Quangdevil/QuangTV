@@ -186,7 +186,7 @@ class QuangBrowserActivity : Activity() {
                 tabMedia[view]?.clear()
                 if (view === web) { found.text = "Tải video"; activeUrls = emptySet(); address.setText(url?.takeIf { httpUrl(it) } ?: "") }
             }
-            override fun onPageFinished(view: WebView, url: String?) { if (view === web) scanMedia() }
+            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); if (view === web) scanMedia() }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
                 if (uri.scheme == "intent") {
@@ -435,6 +435,10 @@ class QuangBrowserActivity : Activity() {
         dialog.setOnDismissListener { handler.removeCallbacks(refresh); downloadsDialog = null }
         dialog.show(); refresh.run()
     }
+    private fun applyAdStyle(view: WebView) {
+        if (!blockAds) { view.evaluateJavascript("document.getElementById('quang-ad-style')?.remove()", null); return }
+        view.evaluateJavascript("""(()=>{if(document.getElementById('quang-ad-style'))return;const s=document.createElement('style');s.id='quang-ad-style';s.textContent='.adsbygoogle,.advertisement,.ad-container,[data-ad-slot],iframe[src*="doubleclick.net"],iframe[src*="exoclick.com"],iframe[src*="juicyads.com"],iframe[src*="popads.net"]{display:none!important}';(document.head||document.documentElement).appendChild(s)})()""", null)
+    }
     private fun updateProxyButton() {
         try { proxyButton.setTextColor(if (QuangProxy.state(this)["enabled"] == true) Color.rgb(0, 140, 70) else Color.DKGRAY) } catch (_: Exception) { proxyButton.setTextColor(Color.RED) }
     }
@@ -479,7 +483,7 @@ class QuangBrowserActivity : Activity() {
     private fun showOptions() {
         AlertDialog.Builder(this).setTitle("Trình duyệt")
             .setMultiChoiceItems(arrayOf("Chặn quảng cáo phổ biến"), booleanArrayOf(blockAds)) { _, _, checked ->
-                blockAds = checked; settings.edit().putBoolean("blockAds", checked).apply()
+                blockAds = checked; settings.edit().putBoolean("blockAds", checked).apply(); tabs.forEach { applyAdStyle(it) }
             }
             .setNeutralButton("Kiểm tra IP") { _, _ -> QuangProxy.test(this) { value -> Toast.makeText(this, if (value == null) "Proxy chưa kết nối được hoặc đang tắt" else "IP: ${value["ip"]} · ${value["ms"]} ms", Toast.LENGTH_LONG).show() } }
             .setPositiveButton("Đóng", null).show()

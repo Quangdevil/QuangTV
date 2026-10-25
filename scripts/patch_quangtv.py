@@ -388,3 +388,11 @@ g += '\ndependencies { coreLibraryDesugaring "com.android.tools:desugar_jdk_libs
 gradle.write_text(g)
 proguard = Path('upstream/flutter_app/android/app/proguard-rules.pro')
 proguard.write_text(proguard.read_text() + '\n-keep class org.mozilla.javascript.** { *; }\n-keep class org.mozilla.classfile.ClassFileWriter\n-dontwarn org.mozilla.javascript.tools.**\n')
+
+# D8 directory transforms require the complete boot/library classpath with core desugaring.
+props = Path('upstream/flutter_app/android/gradle.properties')
+props.write_text(props.read_text() + '\nandroid.useFullClasspathForDexingTransform=true\n')
+license_assets = Path('upstream/flutter_app/assets/licenses')
+license_assets.mkdir(parents=True, exist_ok=True)
+shutil.copyfile('COPYING.NewPipe', license_assets / 'newpipe.txt')
+pubspec.write_text(pubspec.read_text().replace('  uses-material-design: true', '  uses-material-design: true\n  assets:\n    - assets/licenses/newpipe.txt', 1))

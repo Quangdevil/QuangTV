@@ -34,7 +34,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Test authenticated proxy relay
-        run: python3 tests/test_proxy_relay.py
+        run: python3 cloudflare/test_native_websocket.py
+      - name: Test Cloudflare reader security and rewriting
+        run: node --test cloudflare/worker.test.mjs
       - name: Flutter 3.44.4
         uses: subosito/flutter-action@v2
         with:
