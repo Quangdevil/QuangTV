@@ -135,19 +135,34 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
     });
     await _persist();
   }
-  List<Channel> _parsePrivateM3u(String body) {
+  Future<List<Channel>> _parsePrivateM3u(String body) async {
     final result = <Channel>[];
     String title = '';
+    final headers = <String, String>{};
+    final prefs = await SharedPreferences.getInstance();
     for (final raw in body.split(RegExp(r'\r?\n'))) {
       final line = raw.trim();
       if (line.startsWith('#EXTINF:')) {
         title = line.contains(',') ? line.substring(line.indexOf(',') + 1).trim() : 'Kênh TV';
+      } else if (line.startsWith('#EXTVLCOPT:http-user-agent=')) {
+        headers['User-Agent'] = line.substring('#EXTVLCOPT:http-user-agent='.length).trim();
+      } else if (line.startsWith('#EXTVLCOPT:http-referrer=')) {
+        headers['Referer'] = line.substring('#EXTVLCOPT:http-referrer='.length).trim();
+      } else if (line.startsWith('#EXTHTTP:')) {
+        try {
+          final data = jsonDecode(line.substring('#EXTHTTP:'.length)) as Map<String, dynamic>;
+          for (final key in ['User-Agent', 'Referer', 'Cookie', 'Authorization']) {
+            if (data[key] is String) headers[key] = data[key] as String;
+          }
+        } catch (_) {}
       } else if (line.isNotEmpty && !line.startsWith('#')) {
         final stream = Uri.tryParse(line);
         if (stream != null && (stream.scheme == 'https' || stream.scheme == 'http')) {
           result.add(Channel(name: title.isEmpty ? 'Kênh TV' : title, url: line, country: 'Private'));
+          if (headers.isNotEmpty) await prefs.setString('quangtv_headers_${base64Url.encode(utf8.encode(line))}', jsonEncode(headers));
         }
         title = '';
+        headers.clear();
       }
     }
     return result;
@@ -180,7 +195,7 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
         final response = await http.get(uri).timeout(const Duration(seconds: 20));
         if (response.statusCode != 200) throw Exception('Máy chủ trả HTTP ${response.statusCode}');
         if (response.body.length > 6000000) throw Exception('Danh sách quá lớn (trên 6 MB)');
-        parsed = _parsePrivateM3u(response.body);
+        parsed = await _parsePrivateM3u(response.body);
         if (parsed.isEmpty) throw Exception('Máy chủ phản hồi nhưng không tìm thấy URL kênh trong M3U');
       } catch (e) {
         // Do not expose IPTV credentials embedded in URLs in error messages.
