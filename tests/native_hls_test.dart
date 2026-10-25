@@ -16,6 +16,10 @@ void main() {
     testWidgets(
       '$engine decodes HLS video and advances playback',
       (tester) async {
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(seconds: 1));
+        });
         expect(
           url,
           isNotEmpty,

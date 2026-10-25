@@ -245,3 +245,9 @@ m = manifest.read_text()
 assert '</application>' in m
 m = m.replace('</application>', '<activity android:name=".QuangTubeActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:hardwareAccelerated="true" android:supportsPictureInPicture="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode" android:windowSoftInputMode="adjustResize"/></application>', 1)
 manifest.write_text(m)
+
+# audio_service must share the Activity engine; plain FlutterActivity creates a
+# second headless engine during plugin attachment, racing the visible isolate.
+kotlin = activity.read_text()
+activity.write_text(kotlin.replace('class MainActivity: FlutterActivity()',
+                                  'class MainActivity: com.ryanheise.audioservice.AudioServiceActivity()'))
