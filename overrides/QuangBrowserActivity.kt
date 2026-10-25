@@ -86,7 +86,6 @@ class QuangBrowserActivity : Activity() {
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE); isFocusableInTouchMode = true }
-        WindowCompat.getInsetsController(window, root).apply { isAppearanceLightStatusBars = true; isAppearanceLightNavigationBars = true }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
@@ -118,6 +117,7 @@ class QuangBrowserActivity : Activity() {
         tools.addView(button("⋮", "Tùy chọn") { showOptions() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(tools)
         setContentView(root)
+        WindowCompat.getInsetsController(window, root).apply { isAppearanceLightStatusBars = true; isAppearanceLightNavigationBars = true }
         root.requestFocus()
         ViewCompat.requestApplyInsets(root)
         web.settings.apply {
