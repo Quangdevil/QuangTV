@@ -41,7 +41,12 @@ for engine, start, end in rotations:
         if int(start) <= timestamp <= int(end):
             with Image.open(path) as image:
                 if image.width > image.height:
-                    candidates.append(path)
+                    w, h = image.size
+                    crop = image.convert('RGB').crop((int(w * .2), int(h * .4), int(w * .8), int(h * .6))).resize((160, 100))
+                    pixels = list(crop.getdata())
+                    colored = sum(max(p) > 150 and max(p) - min(p) > 80 for p in pixels) / len(pixels)
+                    if colored > .4:
+                        candidates.append(path)
     assert candidates, f'{engine}: no real Android landscape screenshot captured'
     candidates[-1].replace(root / f'{engine}-landscape-verified.png')
     print(f'QUANGTV_ROTATION_PASS engine={engine} screenshot=true')

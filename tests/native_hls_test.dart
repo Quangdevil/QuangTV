@@ -136,6 +136,18 @@ void main() {
         await tester.tap(mute);
         await tester.pump(const Duration(seconds: 1));
         final originalController = currentController();
+        Duration currentPosition() => engine == 'Media3'
+            ? tester
+                  .widget<VideoPlayer>(find.byType(VideoPlayer))
+                  .controller
+                  .value
+                  .position
+            : tester
+                  .widget<VlcPlayer>(find.byType(VlcPlayer))
+                  .controller
+                  .value
+                  .position;
+        final beforeRotationPosition = currentPosition();
         Future<void> waitOrientation(Orientation desired) async {
           final until = DateTime.now().add(const Duration(seconds: 20));
           while (DateTime.now().isBefore(until)) {
@@ -182,6 +194,11 @@ void main() {
           await tester.pump(const Duration(seconds: 8));
           debugPrint(
             'QUANGTV_LANDSCAPE engine=$engine startMs=$landscapeStart endMs=${DateTime.now().millisecondsSinceEpoch}',
+          );
+          expect(
+            currentPosition() - beforeRotationPosition,
+            greaterThan(const Duration(seconds: 3)),
+            reason: 'Playback must continue while rotated',
           );
           expect(tester.takeException(), isNull);
           await SystemChrome.setPreferredOrientations([
