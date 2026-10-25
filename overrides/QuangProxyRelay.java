@@ -35,10 +35,11 @@ public final class QuangProxyRelay implements AutoCloseable {
     }
     public int port() { return server.getLocalPort(); }
     public Proxy javaProxy() { return new Proxy(Proxy.Type.HTTP, new InetSocketAddress("127.0.0.1", port())); }
-    public String downloadUrl(String url) throws IOException {
+    public String downloadUrl(String url) throws IOException { return downloadUrl(url, URI.create(url).getHost()); }
+    private String downloadUrl(String url, String cookieHost) throws IOException {
         URI uri=URI.create(url);
         if (!Arrays.asList("http", "https").contains(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null) throw new IOException("Invalid media URL");
-        return "http://127.0.0.1:"+port()+"/"+token+"?url="+URLEncoder.encode(url,"UTF-8");
+        return "http://127.0.0.1:"+port()+"/"+token+"?url="+URLEncoder.encode(url,"UTF-8")+"&scope="+URLEncoder.encode(cookieHost,"UTF-8");
     }
     private static String readHeaders(InputStream in) throws IOException {
         ByteArrayOutputStream out=new ByteArrayOutputStream(); int state=0;
@@ -104,17 +105,19 @@ public final class QuangProxyRelay implements AutoCloseable {
         } finally {sockets.remove(remote);remote.close();}
     }
     private void fetch(Socket client,String[] first,String[] lines) throws Exception {
-        String url=URLDecoder.decode(first[1].substring(first[1].indexOf("?url=")+5),"UTF-8");
+        String[] query=first[1].substring(first[1].indexOf("?url=")+5).split("&scope=",2);
+        String url=URLDecoder.decode(query[0],"UTF-8");
+        String cookieHost=query.length==2?URLDecoder.decode(query[1],"UTF-8"):"";
         URI uri=URI.create(url);if(!Arrays.asList("http","https").contains(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw new IOException("Invalid download");
         HttpURLConnection conn=(HttpURLConnection)new URL(url).openConnection(javaProxy());
         conn.setConnectTimeout(15000);conn.setReadTimeout(60000);conn.setInstanceFollowRedirects(false);conn.setRequestMethod(first[0]);
-        for(String line:lines){int colon=line.indexOf(':');if(colon<=0)continue;String key=line.substring(0,colon).trim();if(Arrays.asList("range","if-range","user-agent","referer","cookie","accept").contains(key.toLowerCase(Locale.ROOT)))conn.setRequestProperty(key,line.substring(colon+1).trim());}
+        for(String line:lines){int colon=line.indexOf(':');if(colon<=0)continue;String key=line.substring(0,colon).trim();if(key.equalsIgnoreCase("cookie")&&!uri.getHost().equalsIgnoreCase(cookieHost))continue;if(Arrays.asList("range","if-range","user-agent","referer","cookie","accept").contains(key.toLowerCase(Locale.ROOT)))conn.setRequestProperty(key,line.substring(colon+1).trim());}
         conn.setRequestProperty("Accept-Encoding","identity");
         try {
             int code=conn.getResponseCode();String location=conn.getHeaderField("Location");
             StringBuilder response=new StringBuilder("HTTP/1.1 "+code+" Response\r\nConnection: close\r\n");
             for(Map.Entry<String,List<String>> h:conn.getHeaderFields().entrySet()) {if(h.getKey()!=null&&!Arrays.asList("connection","transfer-encoding","location").contains(h.getKey().toLowerCase(Locale.ROOT)))for(String value:h.getValue())response.append(h.getKey()).append(": ").append(value).append("\r\n");}
-            if(location!=null)response.append("Location: ").append(downloadUrl(new URL(new URL(url),location).toString())).append("\r\n");
+            if(location!=null)response.append("Location: ").append(downloadUrl(new URL(new URL(url),location).toString(),cookieHost)).append("\r\n");
             client.getOutputStream().write(response.append("\r\n").toString().getBytes(StandardCharsets.ISO_8859_1));
             if(!first[0].equals("HEAD")){InputStream body=code>=400?conn.getErrorStream():conn.getInputStream();if(body!=null)try(InputStream input=body){copy(input,client.getOutputStream());}}
             client.getOutputStream().flush();
