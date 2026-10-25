@@ -57,6 +57,31 @@ cast_handler = """        MethodChannel(flutterEngine.dartExecutor.binaryMesseng
 
 """
 kotlin = kotlin.replace(anchor, cast_handler + anchor, 1)
+external_handler = """        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/external_player").setMethodCallHandler { call, result ->
+            if (call.method != "open") {
+                result.notImplemented()
+            } else {
+                val url = call.argument<String>("url") ?: ""
+                val uri = android.net.Uri.parse(url)
+                if (uri.scheme != "https" && uri.scheme != "http") {
+                    result.success(false)
+                } else {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "application/vnd.apple.mpegurl")
+                            addCategory(Intent.CATEGORY_DEFAULT)
+                        }
+                        startActivity(Intent.createChooser(intent, "Chọn trình phát IPTV"))
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+            }
+        }
+
+"""
+kotlin = kotlin.replace(anchor, external_handler + anchor, 1)
 pip_handler = """        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/pip").setMethodCallHandler { call, result ->
             when (call.method) {
                 "supported" -> result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
