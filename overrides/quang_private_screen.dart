@@ -278,12 +278,18 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
       ]),
       bottomNavigationBar: SafeArea(top: false, child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
-          FilledButton.icon(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Thêm kênh')),
-          OutlinedButton.icon(onPressed: importing ? null : () => _importPlaylist(),
-            icon: const Icon(Icons.playlist_add), label: const Text('Nhập M3U')),
-          OutlinedButton.icon(onPressed: importing ? null : _refreshPlaylists,
-            icon: const Icon(Icons.refresh), label: const Text('Tải lại M3U')),
+        child: Row(children: [
+          Expanded(child: FilledButton.icon(
+            style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4), minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 11), iconSize: 16),
+            onPressed: _add, icon: const Icon(Icons.add), label: const Text('Thêm kênh', maxLines: 1))),
+          const SizedBox(width: 6),
+          Expanded(child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4), minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 11), iconSize: 16),
+            onPressed: importing ? null : () => _importPlaylist(), icon: const Icon(Icons.playlist_add), label: const Text('Nhập M3U', maxLines: 1))),
+          const SizedBox(width: 6),
+          Expanded(child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4), minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 11), iconSize: 16),
+            onPressed: importing ? null : _refreshPlaylists, icon: const Icon(Icons.refresh), label: const Text('Tải lại M3U', maxLines: 1))),
         ]),
       )),
       body: SafeArea(child: !ready ? const Center(child: CircularProgressIndicator()) : Column(children: [

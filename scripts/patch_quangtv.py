@@ -255,3 +255,55 @@ manifest.write_text(m)
 kotlin = activity.read_text()
 activity.write_text(kotlin.replace('class MainActivity: FlutterActivity()',
                                   'class MainActivity: com.ryanheise.audioservice.AudioServiceActivity()'))
+
+# Replace both full-width and compact Map actions with the same browser route.
+shutil.copyfile('overrides/quang_browser_screen.dart', 'upstream/flutter_app/lib/screens/quang_browser_screen.dart')
+shutil.copyfile('overrides/QuangBrowserActivity.kt', activity.parent / 'QuangBrowserActivity.kt')
+s = home.read_text().replace("import 'map_screen.dart';", "import 'quang_browser_screen.dart';")
+s = s.replace('const MapScreen()', 'const QuangBrowserScreen()').replace('Icons.map', 'Icons.public')
+s = s.replace("'World Map'", "'Trình duyệt'").replace("value == 'map'", "value == 'browser'").replace("value: 'map'", "value: 'browser'")
+home.write_text(s)
+kotlin = activity.read_text()
+marker = 'class MainActivity: com.ryanheise.audioservice.AudioServiceActivity() {'
+assert marker in kotlin
+bridge = '''
+    private var browserReply: MethodChannel.Result? = null
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != 3101) return
+        val reply = browserReply
+        browserReply = null
+        if (resultCode != android.app.Activity.RESULT_OK || data == null) { reply?.success(null); return }
+        val json = org.json.JSONObject(data.getStringExtra("headers") ?: "{}")
+        val headers = mutableMapOf<String, String>()
+        json.keys().forEach { key -> headers[key] = json.optString(key) }
+        reply?.success(mapOf("url" to data.getStringExtra("url"), "page" to data.getStringExtra("page"),
+            "title" to data.getStringExtra("title"), "headers" to headers))
+    }
+'''
+kotlin = kotlin.replace(marker, marker + bridge, 1)
+browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/browser").setMethodCallHandler { call, result ->
+            if (call.method == "open") {
+                if (browserReply != null) { result.error("BUSY", "Trình duyệt đang mở", null) }
+                else {
+                    browserReply = result
+                    try { startActivityForResult(Intent(this, QuangBrowserActivity::class.java).putExtra("url", call.argument<String>("url") ?: ""), 3101) }
+                    catch (e: Exception) { browserReply = null; result.error("BROWSER", "Không mở được trình duyệt", null) }
+                }
+            } else if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                when (call.method) {
+                    "inspect" -> result.success(QuangBrowserActivity.inspect())
+                    "focus", "select", "download", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
+                    else -> result.notImplemented()
+                }
+            } else result.notImplemented()
+        }
+
+'''
+assert anchor in kotlin
+activity.write_text(kotlin.replace(anchor, browser + anchor, 1))
+m = manifest.read_text().replace('</application>', '<activity android:name=".QuangBrowserActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:hardwareAccelerated="true" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode" android:windowSoftInputMode="adjustResize"/></application>', 1)
+m = m.replace('<application', '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/><application', 1)
+manifest.write_text(m)
+
+shutil.copyfile('tests/browser_test.dart', 'upstream/flutter_app/integration_test/browser_test.dart')
