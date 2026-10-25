@@ -212,3 +212,35 @@ styles35.parent.mkdir(parents=True, exist_ok=True)
 ET.ElementTree(style_root).write(styles35, encoding='utf-8', xml_declaration=True)
 
 shutil.copyfile('tests/ota_update_test.dart', tests / 'ota_update_test.dart')
+
+# Reuse the QuangTube Android WebView player in QuangTV's YouTube actions.
+shutil.copyfile('overrides/QuangTubeActivity.kt', activity.parent / 'QuangTubeActivity.kt')
+shutil.copyfile('overrides/QuangTubeAdSkipController.kt', activity.parent / 'QuangTubeAdSkipController.kt')
+kotlin = activity.read_text()
+anchor = '        // Video player intent channel'
+youtube = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/youtube").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "open" -> {
+                    val url = call.argument<String>("url") ?: "https://m.youtube.com/"
+                    val uri = Uri.parse(url)
+                    val host = uri.host?.lowercase() ?: ""
+                    if (uri.scheme != "https" || !(host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtu.be")) {
+                        result.error("URL", "Liên kết YouTube không hợp lệ", null)
+                    } else {
+                        startActivity(Intent(this, QuangTubeActivity::class.java).putExtra("url", url))
+                        result.success(true)
+                    }
+                }
+                "status" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) result.success(QuangTubeActivity.status()) else result.notImplemented()
+                "close" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) { QuangTubeActivity.close(); result.success(null) } else result.notImplemented()
+                else -> result.notImplemented()
+            }
+        }
+
+'''
+assert anchor in kotlin
+activity.write_text(kotlin.replace(anchor, youtube + anchor, 1))
+m = manifest.read_text()
+assert '</application>' in m
+m = m.replace('</application>', '<activity android:name=".QuangTubeActivity" android:exported="false" android:theme="@style/NormalTheme" android:hardwareAccelerated="true" android:supportsPictureInPicture="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize" android:windowSoftInputMode="adjustResize"/></application>', 1)
+manifest.write_text(m)

@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 import 'package:tv_viewer/screens/quang_update_screen.dart';
+import 'package:tv_viewer/screens/quang_discover_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -89,5 +91,61 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     },
     timeout: const Timeout(Duration(minutes: 2)),
+  );
+  testWidgets(
+    'YouTube action opens integrated QuangTube and plays public video',
+    (tester) async {
+      const youtube = MethodChannel('quangtv/youtube');
+      SharedPreferences.setMockInitialValues({
+        'quangtv_cached_channels':
+            '[{"name":"Test","url":"https://example.org/test.m3u8"}]',
+      });
+      await tester.pumpWidget(const MaterialApp(home: QuangDiscoverScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.byTooltip('YouTube'));
+      await tester.pump(const Duration(milliseconds: 500));
+      final search = find.byType(TextField).first;
+      await tester.enterText(
+        search,
+        'https://m.youtube.com/watch?v=aqz-KE-bpKQ&autoplay=1',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      bool passed = false;
+      await tester.runAsync(() async {
+        double? first;
+        final until = DateTime.now().add(const Duration(seconds: 120));
+        try {
+          while (DateTime.now().isBefore(until)) {
+            await Future<void>.delayed(const Duration(seconds: 1));
+            final status =
+                await youtube.invokeMapMethod<dynamic, dynamic>('status') ?? {};
+            debugPrint('QUANGTV_YOUTUBE_STATE $status');
+            if (status['playing'] == true) {
+              final position = (status['position'] as num?)?.toDouble() ?? 0;
+              first ??= position;
+              if (position - first >= 3) {
+                passed = true;
+                debugPrint(
+                  'QUANGTV_YOUTUBE_PASS integratedAction=true advancedSeconds=${position - first}',
+                );
+                break;
+              }
+            }
+          }
+        } finally {
+          await youtube.invokeMethod<void>('close');
+        }
+      });
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        passed,
+        isTrue,
+        reason:
+            'A public YouTube video must really play in integrated QuangTube',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 1));
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
   );
 }

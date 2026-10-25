@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'quang_audio_screen.dart';
@@ -243,7 +244,22 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     youtubeHistory = [query, ...youtubeHistory.where((x) => x != query)].take(30).toList();
     await prefs.setStringList('quangtv_youtube_search_history', youtubeHistory);
     if (mounted) setState(() {});
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('YouTube native đang phát triển. Đã lưu từ khóa tìm kiếm.')));
+    await _openYoutube(query);
+  }
+
+  Future<void> _openYoutube([String query = '']) async {
+    final parsed = Uri.tryParse(query);
+    final isYoutubeLink = parsed != null && parsed.scheme == 'https' &&
+      (parsed.host == 'youtu.be' || parsed.host == 'youtube.com' || parsed.host.endsWith('.youtube.com'));
+    final target = isYoutubeLink ? parsed : query.isEmpty
+      ? Uri.parse('https://m.youtube.com/')
+      : Uri.https('m.youtube.com', '/results', {'search_query': query});
+    FocusScope.of(context).unfocus();
+    try {
+      await const MethodChannel('quangtv/youtube').invokeMethod<bool>('open', {'url': target.toString()});
+    } on PlatformException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không mở được QuangTube: ${e.message}')));
+    }
   }
 
   @override
@@ -343,7 +359,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           const SizedBox(height: 8),
           const Text('Lịch sử tìm kiếm'),
           for (final query in youtubeHistory) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(query), onTap: () => _searchYoutube(query)),
-          ListTile(leading: const Icon(Icons.play_circle_outline), title: const Text('Mở YouTube · QuangTube tạm'), subtitle: const Text('Tìm và xem trong QuangTV, không mở app ngoài'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'YouTube · QuangTV', initialUrl: Uri.parse('https://m.youtube.com/'))))),
+          ListTile(leading: const Icon(Icons.play_circle_outline), title: const Text('QuangTube · YouTube'), subtitle: const Text('Tìm và xem video ngay trong QuangTV'), onTap: () => _openYoutube()),
         ],
         if (section == 2) ...[
           const Text('Podcast · Phát trong QuangTV', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),

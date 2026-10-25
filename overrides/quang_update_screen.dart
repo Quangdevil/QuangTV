@@ -66,6 +66,7 @@ class QuangUpdateScreen extends StatefulWidget {
 }
 
 class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
+  String installedVersion = '';
   bool busy = false;
   bool polling = false;
   String message = 'Kiểm tra bản QuangTV mới nhất trên GitHub Releases.';
@@ -78,6 +79,13 @@ class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
   @override
   void initState() {
     super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted)
+        setState(
+          () =>
+              installedVersion = '${info.version} · build ${info.buildNumber}',
+        );
+    });
     refresh();
     timer = Timer.periodic(const Duration(milliseconds: 500), (_) => refresh());
   }
@@ -208,6 +216,11 @@ class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (installedVersion.isNotEmpty)
+              Text(
+                'Đang cài: $installedVersion',
+                key: const ValueKey('ota-installed-build'),
+              ),
             Text(message),
             const SizedBox(height: 16),
             FilledButton.icon(

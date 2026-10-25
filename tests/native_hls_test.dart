@@ -94,6 +94,25 @@ void main() {
         debugPrint(
           'QUANGTV_VISUAL engine=$engine startMs=$firstVideoMs endMs=${DateTime.now().millisecondsSinceEpoch}',
         );
+        final panel = find.byKey(const ValueKey('player-controls'));
+        final surface = find.byKey(const ValueKey('player-tap-surface'));
+        expect(tester.widget<IgnorePointer>(panel).ignoring, isTrue);
+        await tester.tapAt(tester.getCenter(surface));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.widget<IgnorePointer>(panel).ignoring, isFalse);
+        await tester.tapAt(tester.getCenter(surface));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.widget<IgnorePointer>(panel).ignoring, isTrue);
+        await tester.tapAt(tester.getCenter(surface));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.widget<IgnorePointer>(panel).ignoring, isFalse);
+        await tester.pump(const Duration(milliseconds: 3300));
+        expect(tester.widget<IgnorePointer>(panel).ignoring, isTrue);
+        await tester.tapAt(tester.getCenter(surface));
+        await tester.pump(const Duration(milliseconds: 300));
+        debugPrint(
+          'QUANGTV_CONTROLS_PASS engine=$engine tapToggle=true autoHideSeconds=3 portrait=true',
+        );
         Future<double> nativeVolume() async {
           if (engine == 'Media3') {
             return tester

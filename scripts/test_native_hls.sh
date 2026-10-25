@@ -3,6 +3,7 @@ set -euo pipefail
 repo_root="$(pwd)"
 mkdir -p "$repo_root/playback-evidence"
 adb logcat -c
+adb shell dumpsys webviewupdate > "$repo_root/playback-evidence/webview-runtime.txt"
 adb logcat -v threadtime > "$repo_root/playback-evidence/native-logcat.txt" &
 log_pid=$!
 (

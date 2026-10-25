@@ -126,6 +126,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   void initState() {
     super.initState();
     volume = widget.startMuted ? 0 : 1;
+    _scheduleControlsHide();
     _initializePlayback();
     watchdog = Timer.periodic(const Duration(seconds: 1), (_) => _watch());
   }
@@ -150,16 +151,23 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
 
   void _scheduleControlsHide() {
     controlsTimer?.cancel();
-    if (fullscreen) {
-      controlsTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted && fullscreen) setState(() => controlsVisible = false);
-      });
-    }
+    controlsTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => controlsVisible = false);
+    });
   }
 
   void _revealControls() {
     setState(() => controlsVisible = true);
     _scheduleControlsHide();
+  }
+
+  void _toggleControls() {
+    if (controlsVisible) {
+      controlsTimer?.cancel();
+      setState(() => controlsVisible = false);
+    } else {
+      _revealControls();
+    }
   }
 
   Future<void> _changeVolume(double next) async {
@@ -547,7 +555,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     final aspect = p != null && videoReady && p.value.aspectRatio > 0
         ? p.value.aspectRatio
         : 16 / 9;
-    final visible = !fullscreen || controlsVisible;
+    final visible = controlsVisible;
     return Theme(
       data: ThemeData.dark(useMaterial3: true),
       child: Scaffold(
@@ -571,13 +579,14 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
               ),
         body: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: _revealControls,
+          key: const ValueKey('player-tap-surface'),
+          onTap: _toggleControls,
           child: Stack(
             fit: StackFit.expand,
             children: [
               // Keep this subtree in the same position across rotation: no player restart.
               Positioned.fill(
-                bottom: fullscreen ? 0 : 180,
+                bottom: 0,
                 child: Center(
                   child: AspectRatio(
                     aspectRatio: aspect,
@@ -586,9 +595,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                             controller: vlc!,
                             virtualDisplay: false,
                             aspectRatio: 16 / 9,
-                            placeholder: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
+                            placeholder: const SizedBox.shrink(),
                           )
                         : videoReady
                         ? VideoPlayer(p)
@@ -596,7 +603,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                   ),
                 ),
               ),
-              if (loading) const Center(child: CircularProgressIndicator()),
+              if (loading && visible)
+                const Center(child: CircularProgressIndicator()),
               if (error != null)
                 Center(
                   child: SingleChildScrollView(
@@ -664,6 +672,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                 left: 0,
                 right: 0,
                 child: IgnorePointer(
+                  key: const ValueKey('player-controls'),
                   ignoring: !visible,
                   child: AnimatedOpacity(
                     opacity: visible ? 1 : 0,
