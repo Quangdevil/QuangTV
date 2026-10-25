@@ -112,7 +112,7 @@ class QuangTubeActivity : Activity() {
                     host == "youtu.be" || host == "accounts.google.com" || host == "consent.google.com" || host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com"))
             }
         }
-        adSkip = AdSkipController(web)
+        adSkip = QuangTubeAdSkipController(web)
         web.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 pageProgress = newProgress
