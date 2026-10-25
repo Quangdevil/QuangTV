@@ -71,7 +71,7 @@ class QuangBrowserActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val downloads by lazy { getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager }
     private val settings by lazy { getSharedPreferences("quangtv_browser", MODE_PRIVATE) }
-    private var blockAds = true
+    @Volatile private var blockAds = true
     private var pendingDownload: Media? = null
     private var fullscreen: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
@@ -81,7 +81,6 @@ class QuangBrowserActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        current = WeakReference(this)
         blockAds = settings.getBoolean("blockAds", true)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -154,6 +153,7 @@ class QuangBrowserActivity : Activity() {
                 detect(url, true); showMedia()
             } else Toast.makeText(this, "Chỉ hỗ trợ tải tệp video trực tiếp", Toast.LENGTH_SHORT).show()
         }
+        current = WeakReference(this)
         val initial = intent.getStringExtra("url") ?: ""
         if (state != null) web.restoreState(state)
         else if (httpUrl(initial)) web.loadUrl(initial)

@@ -303,7 +303,7 @@ browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
 assert anchor in kotlin
 activity.write_text(kotlin.replace(anchor, browser + anchor, 1))
 m = manifest.read_text().replace('</application>', '<activity android:name=".QuangBrowserActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:hardwareAccelerated="true" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode" android:windowSoftInputMode="adjustResize"/></application>', 1)
-m = m.replace('<application', '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/><application', 1)
+m = m.replace('<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove"/>', '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>', 1)
 manifest.write_text(m)
 
 shutil.copyfile('tests/browser_test.dart', 'upstream/flutter_app/integration_test/browser_test.dart')
