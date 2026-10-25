@@ -8,7 +8,8 @@ import 'package:tv_viewer/models/channel.dart';
 import 'package:tv_viewer/screens/quang_native_player.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   const url = String.fromEnvironment('HLS_TEST_URL');
   for (final engine in ['Media3', 'VLC']) {
     testWidgets('$engine decodes HLS video and advances playback', (tester) async {
