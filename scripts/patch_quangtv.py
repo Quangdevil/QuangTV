@@ -238,3 +238,8 @@ tests = Path('upstream/flutter_app/integration_test')
 tests.mkdir(exist_ok=True)
 shutil.copyfile('tests/native_hls_test.dart', tests / 'native_hls_test.dart')
 pubspec.write_text(pubspec.read_text().replace('dev_dependencies:', 'dev_dependencies:\n  integration_test:\n    sdk: flutter', 1))
+
+# Android API 24+ prioritizes this XML over usesCleartextTraffic in the manifest.
+# User-imported IPTV sources may use arbitrary HTTP segment/CDN hosts.
+network = Path('upstream/flutter_app/android/app/src/main/res/xml/network_security_config.xml')
+network.write_text(network.read_text().replace('cleartextTrafficPermitted="false"', 'cleartextTrafficPermitted="true"').replace('Default: require HTTPS for all traffic', 'IPTV: allow user-selected HTTP media hosts').replace('Restrict cleartext traffic to known streaming CDN domains only', 'Permit user-imported IPTV media over HTTP or HTTPS'))
