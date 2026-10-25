@@ -80,11 +80,12 @@ class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
   void initState() {
     super.initState();
     PackageInfo.fromPlatform().then((info) {
-      if (mounted)
+      if (mounted) {
         setState(
           () =>
               installedVersion = '${info.version} · build ${info.buildNumber}',
         );
+      }
     });
     refresh();
     timer = Timer.periodic(const Duration(milliseconds: 500), (_) => refresh());
