@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import '../models/channel.dart';
 
 /// Public, anonymous HLS fallbacks. No credentials or signed URLs.
@@ -14,6 +15,10 @@ class QuangNativePlayer extends StatefulWidget {
 
 class _QuangNativePlayerState extends State<QuangNativePlayer> {
   VideoPlayerController? controller;
+  VlcPlayerController? vlc;
+  bool usingVlc = false;
+  Timer? vlcStartup;
+  int vlcToken = 0;
   Timer? watchdog;
   String? error;
   bool loading = true;
@@ -81,7 +86,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
 
   void _watch() {
     final p = controller;
-    if (!mounted || loading || switching || userPaused || p == null) return;
+    if (!mounted || loading || switching || userPaused || p == null || usingVlc) return;
     final value = p.value;
     if (value.hasError) { _failover(value.errorDescription ?? 'Player error'); return; }
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -117,14 +122,56 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     final next = List<int>.generate(all.length, (i) => (sourceIndex + i + 1) % all.length)
         .where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
-      setState(() => error = 'Không phát được nguồn hiện tại. $diagnostic. Bấm Thử lại.');
-      await controller?.pause();
+      await _openVlc();
       return;
     }
     await _open(next.first);
   }
 
+  Future<void> _openVlc() async {
+    if (!mounted || usingVlc) return;
+    final token = ++vlcToken;
+    final old = controller;
+    controller = null;
+    usingVlc = true;
+    switching = false;
+    if (old != null) await old.dispose();
+    if (!mounted || token != vlcToken) return;
+    setState(() { loading = true; error = null; });
+    final url = sources.isEmpty ? null : sources[sourceIndex];
+    if (url == null) {
+      setState(() { loading = false; error = 'Không có URL phát hợp lệ'; });
+      return;
+    }
+    try {
+      final player = VlcPlayerController.network(url, hwAcc: HwAcc.full, autoPlay: true);
+      vlc = player;
+      player.addListener(() {
+        if (!mounted || token != vlcToken) return;
+        final value = player.value;
+        if (value.isInitialized || value.isPlaying) {
+          vlcStartup?.cancel();
+          if (loading) setState(() => loading = false);
+        } else if (value.hasError) {
+          vlcStartup?.cancel();
+          setState(() { loading = false; error = 'VLC: Không phát được luồng này'; });
+        }
+      });
+      vlcStartup = Timer(const Duration(seconds: 25), () {
+        if (mounted && token == vlcToken && loading) setState(() { loading = false; error = 'VLC không khởi tạo được nguồn sau 25 giây'; });
+      });
+    } catch (e) {
+      if (mounted && token == vlcToken) setState(() { loading = false; error = 'Lỗi VLC: ${e.runtimeType}'; });
+    }
+  }
+
   Future<void> _open(int index) async {
+    vlcToken++;
+    vlcStartup?.cancel();
+    final oldVlc = vlc;
+    vlc = null;
+    usingVlc = false;
+    if (oldVlc != null) await oldVlc.dispose();
     if (!mounted) return;
     final token = ++generation;
     switching = true;
@@ -182,6 +229,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   void dispose() {
     generation++;
     watchdog?.cancel();
+    vlcStartup?.cancel();
+    vlcToken++;
+    vlc?.dispose();
     controller?.dispose();
     super.dispose();
   }
@@ -193,13 +243,20 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       appBar: AppBar(title: Text(widget.channel.name), actions: [IconButton(tooltip: 'Phản chiếu lên Samsung TV (Smart View)', icon: const Icon(Icons.cast), onPressed: _openCast)]),
       body: SafeArea(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         if (loading) const CircularProgressIndicator(),
-        if (sources.length > 1)
-          Text('Nguồn ${sourceIndex + 1}/${sources.length} · Tự chuyển khi lag'),
+        Text(usingVlc ? 'Đang phát bằng VLC nội bộ' : 'Đang phát bằng Android Media3${sources.length > 1 ? ' · Nguồn ${sourceIndex + 1}/${sources.length}' : ''}'),
         if (error != null) ...[
           Padding(padding: const EdgeInsets.all(16), child: Text(error!, textAlign: TextAlign.center)),
           FilledButton(onPressed: _retry, child: const Text('Thử lại')),
         ],
-        if (p != null && p.value.isInitialized) ...[
+        if (usingVlc && vlc != null) ...[
+          AspectRatio(aspectRatio: 16 / 9, child: VlcPlayer(controller: vlc!, aspectRatio: 16 / 9, placeholder: const Center(child: CircularProgressIndicator()))),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            IconButton(tooltip: 'Thử lại', icon: const Icon(Icons.refresh), onPressed: _retry),
+            IconButton(tooltip: 'Tạm dừng', icon: const Icon(Icons.pause), onPressed: () => vlc?.pause()),
+            IconButton(tooltip: 'Tiếp tục', icon: const Icon(Icons.play_arrow), onPressed: () => vlc?.play()),
+          ]),
+        ],
+        if (!usingVlc && p != null && p.value.isInitialized) ...[
           AspectRatio(aspectRatio: p.value.aspectRatio > 0 ? p.value.aspectRatio : 16 / 9, child: VideoPlayer(p)),
           if (canSeek) Slider(
             value: p.value.position.inMilliseconds.clamp(0, p.value.duration.inMilliseconds).toDouble(),
