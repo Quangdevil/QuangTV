@@ -10,7 +10,8 @@ import '../models/channel.dart';
 /// Public, anonymous HLS fallbacks. No credentials or signed URLs.
 class QuangNativePlayer extends StatefulWidget {
   final Channel channel;
-  const QuangNativePlayer({super.key, required this.channel});
+  final bool startWithVlc;
+  const QuangNativePlayer({super.key, required this.channel, this.startWithVlc = false});
   @override
   State<QuangNativePlayer> createState() => _QuangNativePlayerState();
 }
@@ -101,7 +102,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         streamHeaders = decoded.map((k, v) => MapEntry(k, v.toString()));
       } catch (_) {}
     }
-    if (mounted) await _open(0);
+    if (mounted) {
+      if (widget.startWithVlc) { await _openVlc(); } else { await _open(0); }
+    }
   }
 
   void _watch() {

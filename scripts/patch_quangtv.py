@@ -42,7 +42,8 @@ import android.os.Build
 import android.util.Rational
 """
 kotlin = kotlin.replace('import android.content.Intent', pip_imports + 'import android.content.Intent', 1)
-anchor = '        // Video player intent channel'\nassert anchor in kotlin
+anchor = '        // Video player intent channel'
+assert anchor in kotlin
 cast_handler = """        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/cast").setMethodCallHandler { call, result ->
             if (call.method == "openSettings") {
                 try {
@@ -121,7 +122,8 @@ home_source = home.read_text()
 home_source = home_source.replace('    final shouldShow = await FeedbackService.shouldShowRatingPrompt();', '    final shouldShow = false;')
 start = home_source.find('              // ── Feedback ')
 end = home_source.find('              // ── Help & info ', start)
-assert start >= 0 and end > start, 'Feedback menu markers changed'\nhome_source = home_source[:start] + home_source[end:]
+assert start >= 0 and end > start, 'Feedback menu markers changed'
+home_source = home_source[:start] + home_source[end:]
 home.write_text(home_source)
 
 # Stable standalone application identity for all future QuangTV releases.
@@ -199,7 +201,9 @@ ota = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quan
             }
         }
 
-'''\nanchor = '        // Video player intent channel'\nassert anchor in kotlin
+'''
+anchor = '        // Video player intent channel'
+assert anchor in kotlin
 kotlin = kotlin.replace(anchor, ota + anchor, 1)
 activity.write_text(kotlin)
 manifest = Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
@@ -215,7 +219,9 @@ if 'androidx.core.content.FileProvider' not in m:
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/quangtv_update_paths"/>
-        </provider>'''\n    assert '<application' in m, 'Android application element not found'\n    application_start = m.index('>', m.index('<application')) + 1
+        </provider>'''
+    assert '<application' in m, 'Android application element not found'
+    application_start = m.index('>', m.index('<application')) + 1
     m = m[:application_start] + '\n        ' + provider + m[application_start:]
 # IPTV playlists can be HTTPS while their HLS media segments use plain HTTP.
 # Permit cleartext for this IPTV client so Android Media3 and VLC can fetch them.
@@ -226,3 +232,9 @@ manifest.write_text(m)
 paths = Path('upstream/flutter_app/android/app/src/main/res/xml/quangtv_update_paths.xml')
 paths.parent.mkdir(parents=True, exist_ok=True)
 paths.write_text('<?xml version="1.0" encoding="utf-8"?><paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="apk" path="."/></paths>')
+
+# Exercise the actual in-app player on an Android device, with both native engines.
+tests = Path('upstream/flutter_app/integration_test')
+tests.mkdir(exist_ok=True)
+shutil.copyfile('tests/native_hls_test.dart', tests / 'native_hls_test.dart')
+pubspec.write_text(pubspec.read_text().replace('dev_dependencies:', 'dev_dependencies:\n  integration_test:\n    sdk: flutter', 1))
