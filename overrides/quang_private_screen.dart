@@ -296,7 +296,7 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
           : ListView.builder(itemCount: visible.length, itemBuilder: (ctx, i) {
             final c = visible[i];
             return ListTile(leading: const Icon(Icons.live_tv), title: Text(c.name),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c))),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c, startMuted: true))),
               trailing: IconButton(tooltip: 'Xóa kênh', icon: const Icon(Icons.delete_outline), onPressed: () => _delete(c)));
           })),
       ])),

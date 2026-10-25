@@ -11,12 +11,23 @@ import '../models/channel.dart';
 class QuangNativePlayer extends StatefulWidget {
   final Channel channel;
   final bool startWithVlc;
-  const QuangNativePlayer({super.key, required this.channel, this.startWithVlc = false});
+  final bool startMuted;
+  const QuangNativePlayer({
+    super.key,
+    required this.channel,
+    this.startWithVlc = false,
+    this.startMuted = false,
+  });
   @override
   State<QuangNativePlayer> createState() => _QuangNativePlayerState();
 }
 
 class _QuangNativePlayerState extends State<QuangNativePlayer> {
+  late double volume;
+  double lastAudibleVolume = 1;
+  bool fullscreen = false;
+  bool controlsVisible = true;
+  Timer? controlsTimer;
   VideoPlayerController? controller;
   VlcPlayerController? vlc;
   bool usingVlc = false;
@@ -56,17 +67,35 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       'https://live.fptplay53.net/live/media/vtv3/live247-hls-avc/index.m3u8',
       'https://vtvgolive-failover.vtvdigital.vn/vtvgo/vtv3-manifest.m3u8',
     ],
-    'VTV4': ['https://live.fptplay53.net/live/media/vtv4/live247-hls-avc/index.m3u8'],
-    'VTV5': ['https://live.fptplay53.net/live/media/vtv5/live247-hls-avc/index.m3u8'],
-    'VTV7': ['https://live.fptplay53.net/live/media/vtv7/live247-hls-avc/index.m3u8'],
-    'VTV8': ['https://live.fptplay53.net/live/media/vtv8/live-hls-avc/index.m3u8'],
-    'VTV9': ['https://live.fptplay53.net/live/media/vtv9/live247-hls-avc/index.m3u8'],
+    'VTV4': [
+      'https://live.fptplay53.net/live/media/vtv4/live247-hls-avc/index.m3u8',
+    ],
+    'VTV5': [
+      'https://live.fptplay53.net/live/media/vtv5/live247-hls-avc/index.m3u8',
+    ],
+    'VTV7': [
+      'https://live.fptplay53.net/live/media/vtv7/live247-hls-avc/index.m3u8',
+    ],
+    'VTV8': [
+      'https://live.fptplay53.net/live/media/vtv8/live-hls-avc/index.m3u8',
+    ],
+    'VTV9': [
+      'https://live.fptplay53.net/live/media/vtv9/live247-hls-avc/index.m3u8',
+    ],
   };
 
   String? get vtvKey {
-    final name = widget.channel.name.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final name = widget.channel.name.toUpperCase().replaceAll(
+      RegExp(r'[^A-Z0-9]'),
+      '',
+    );
     for (final key in fallback.keys) {
-      if (name.startsWith(key) && (name.length == key.length || !RegExp(r'[0-9]').hasMatch(name.substring(key.length, key.length + 1)))) return key;
+      if (name.startsWith(key) &&
+          (name.length == key.length ||
+              !RegExp(
+                r'[0-9]',
+              ).hasMatch(name.substring(key.length, key.length + 1))))
+        return key;
     }
     return null;
   }
@@ -75,7 +104,14 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     final urls = <String>[widget.channel.url];
     final key = vtvKey;
     if (key != null) urls.addAll(fallback[key]!);
-    return urls.where((u) => Uri.tryParse(u)?.scheme == 'https' || Uri.tryParse(u)?.scheme == 'http').toSet().toList();
+    return urls
+        .where(
+          (u) =>
+              Uri.tryParse(u)?.scheme == 'https' ||
+              Uri.tryParse(u)?.scheme == 'http',
+        )
+        .toSet()
+        .toList();
   }
 
   bool get canSeek {
@@ -88,13 +124,71 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   @override
   void initState() {
     super.initState();
+    volume = widget.startMuted ? 0 : 1;
     _initializePlayback();
     watchdog = Timer.periodic(const Duration(seconds: 1), (_) => _watch());
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = MediaQuery.orientationOf(context) == Orientation.landscape;
+    if (next != fullscreen) {
+      fullscreen = next;
+      controlsVisible = true;
+      _scheduleControlsHide();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          SystemChrome.setEnabledSystemUIMode(
+            fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+          );
+        }
+      });
+    }
+  }
+
+  void _scheduleControlsHide() {
+    controlsTimer?.cancel();
+    if (fullscreen) {
+      controlsTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted && fullscreen) setState(() => controlsVisible = false);
+      });
+    }
+  }
+
+  void _revealControls() {
+    setState(() => controlsVisible = true);
+    _scheduleControlsHide();
+  }
+
+  Future<void> _changeVolume(double next) async {
+    _revealControls();
+    setState(() {
+      volume = next.clamp(0.0, 1.0);
+      if (volume > 0) lastAudibleVolume = volume;
+    });
+    try {
+      final video = controller;
+      final nativeVlc = vlc;
+      if (video != null && video.value.isInitialized)
+        await video.setVolume(volume);
+      if (nativeVlc != null && nativeVlc.value.isInitialized) {
+        await nativeVlc.setVolume((volume * 100).round());
+      }
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không điều chỉnh được âm lượng. Hãy thử lại.'),
+          ),
+        );
+    }
+  }
+
   Future<void> _initializePlayback() async {
     final prefs = await SharedPreferences.getInstance();
-    final key = 'quangtv_headers_${base64Url.encode(utf8.encode(widget.channel.url))}';
+    final key =
+        'quangtv_headers_${base64Url.encode(utf8.encode(widget.channel.url))}';
     final saved = prefs.getString(key);
     if (saved != null) {
       try {
@@ -103,20 +197,31 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       } catch (_) {}
     }
     if (mounted) {
-      if (widget.startWithVlc) { await _openVlc(); } else { await _open(0); }
+      if (widget.startWithVlc) {
+        await _openVlc();
+      } else {
+        await _open(0);
+      }
     }
   }
 
   void _watch() {
     final p = controller;
-    if (!mounted || loading || switching || userPaused || p == null || usingVlc) return;
+    if (!mounted || loading || switching || userPaused || p == null || usingVlc)
+      return;
     final value = p.value;
-    if (value.hasError) { _failover(value.errorDescription ?? 'Player error'); return; }
+    if (value.hasError) {
+      _failover(value.errorDescription ?? 'Player error');
+      return;
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     if (value.isBuffering) {
       bufferingSince ??= now;
       // Buffering is normal for live IPTV. Do not treat it as a fatal error.
-      if (now - bufferingSince! >= 30000) { _failover('Buffering over 30s'); return; }
+      if (now - bufferingSince! >= 30000) {
+        _failover('Buffering over 30s');
+        return;
+      }
     } else {
       bufferingSince = null;
     }
@@ -126,7 +231,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         stalledSince = null;
       } else {
         stalledSince ??= now;
-        if (now - stalledSince! >= 30000) _failover('Playback stalled over 30s');
+        if (now - stalledSince! >= 30000)
+          _failover('Playback stalled over 30s');
       }
     }
     setState(() {});
@@ -144,8 +250,10 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     }
     failedSources.add(sourceIndex);
     final all = sources;
-    final next = List<int>.generate(all.length, (i) => (sourceIndex + i + 1) % all.length)
-        .where((i) => !failedSources.contains(i)).toList();
+    final next = List<int>.generate(
+      all.length,
+      (i) => (sourceIndex + i + 1) % all.length,
+    ).where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
       // Always retry the ORIGINAL channel URL with VLC, not a VTV fallback CDN.
       sourceIndex = 0;
@@ -168,11 +276,17 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     switching = false;
     if (old != null) await old.dispose();
     if (!mounted || token != vlcToken) return;
-    setState(() { loading = true; error = null; });
+    setState(() {
+      loading = true;
+      error = null;
+    });
     engineStage = 'VLC nội bộ';
     final url = sources.isEmpty ? null : sources[sourceIndex];
     if (url == null) {
-      setState(() { loading = false; error = 'Không có URL phát hợp lệ'; });
+      setState(() {
+        loading = false;
+        error = 'Không có URL phát hợp lệ';
+      });
       return;
     }
     try {
@@ -180,7 +294,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       final vlcHttp = <String>[
         VlcHttpOptions.httpReconnect(true),
         VlcHttpOptions.httpForwardCookies(true),
-        VlcHttpOptions.httpUserAgent(streamHeaders['User-Agent'] ?? 'QuangTV/1.3'),
+        VlcHttpOptions.httpUserAgent(
+          streamHeaders['User-Agent'] ?? 'QuangTV/1.3',
+        ),
       ];
       final referrer = streamHeaders['Referer'] ?? streamHeaders['Referrer'];
       if (referrer != null && referrer.isNotEmpty) {
@@ -189,7 +305,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       final player = VlcPlayerController.network(
         url,
         hwAcc: HwAcc.auto,
-        autoPlay: true,
+        autoPlay: false,
         options: VlcPlayerOptions(
           http: VlcHttpOptions(vlcHttp),
           advanced: VlcAdvancedOptions([
@@ -197,6 +313,23 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           ]),
         ),
       );
+      player.addOnInitListener(() async {
+        try {
+          // Set volume before the first play, including Private's initial mute.
+          await player.setVolume((volume * 100).round());
+          if (mounted && token == vlcToken) {
+            await player.play();
+            if (mounted && token == vlcToken) setState(() {});
+          }
+        } catch (e) {
+          if (mounted && token == vlcToken) {
+            setState(() {
+              loading = false;
+              error = 'Không khởi động được VLC: ${e.runtimeType}';
+            });
+          }
+        }
+      });
       // VlcPlayer's widget attaches the native texture and initializes the controller.
       // Without rebuilding after assigning vlc, no VlcPlayer is mounted and
       // the 25-second timer always expires, regardless of stream validity.
@@ -209,14 +342,26 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           if (loading) setState(() => loading = false);
         } else if (value.hasError) {
           vlcStartup?.cancel();
-          setState(() { loading = false; error = 'VLC không phát được nguồn. Media3: $lastFailure'; });
+          setState(() {
+            loading = false;
+            error = 'VLC không phát được nguồn. Media3: $lastFailure';
+          });
         }
       });
       vlcStartup = Timer(const Duration(seconds: 25), () {
-        if (mounted && token == vlcToken && loading) setState(() { loading = false; error = 'VLC không khởi tạo được nguồn sau 25 giây. Kiểm tra URL/HTTP hoặc lỗi native VLC.'; });
+        if (mounted && token == vlcToken && loading)
+          setState(() {
+            loading = false;
+            error =
+                'VLC không khởi tạo được nguồn sau 25 giây. Kiểm tra URL/HTTP hoặc lỗi native VLC.';
+          });
       });
     } catch (e) {
-      if (mounted && token == vlcToken) setState(() { loading = false; error = 'Lỗi VLC: ${e.runtimeType}'; });
+      if (mounted && token == vlcToken)
+        setState(() {
+          loading = false;
+          error = 'Lỗi VLC: ${e.runtimeType}';
+        });
     }
   }
 
@@ -246,13 +391,20 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     });
     final urls = sources;
     if (index >= urls.length) {
-      setState(() { loading = false; switching = false; error = 'Không có nguồn phát hợp lệ'; });
+      setState(() {
+        loading = false;
+        switching = false;
+        error = 'Không có nguồn phát hợp lệ';
+      });
       return;
     }
     final url = urls[index];
     final uri = Uri.parse(url);
-    final isHls = uri.path.toLowerCase().endsWith('.m3u8') || url.toLowerCase().contains('.m3u8?');
-    final player = VideoPlayerController.networkUrl(uri,
+    final isHls =
+        uri.path.toLowerCase().endsWith('.m3u8') ||
+        url.toLowerCase().contains('.m3u8?');
+    final player = VideoPlayerController.networkUrl(
+      uri,
       formatHint: isHls ? VideoFormat.hls : null,
       httpHeaders: {
         'User-Agent': 'QuangTV/1.3 Android Media3',
@@ -262,10 +414,18 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     );
     try {
       await player.initialize().timeout(const Duration(seconds: 12));
-      if (!mounted || token != generation) { await player.dispose(); return; }
+      if (!mounted || token != generation) {
+        await player.dispose();
+        return;
+      }
       controller = player;
+      await player.setVolume(volume);
       await player.play();
-      if (mounted) setState(() { loading = false; switching = false; });
+      if (mounted)
+        setState(() {
+          loading = false;
+          switching = false;
+        });
     } catch (e) {
       diagnostic = 'Khởi tạo luồng: ${e.runtimeType}: $e';
       lastFailure = diagnostic;
@@ -286,25 +446,54 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   Future<void> _openExternal() async {
     final url = sources.isNotEmpty ? sources[sourceIndex] : widget.channel.url;
     try {
-      final ok = await _externalChannel.invokeMethod<bool>('open', {'url': url}) ?? false;
-      if (!ok && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không tìm thấy ứng dụng phát video tương thích.')));
+      final ok =
+          await _externalChannel.invokeMethod<bool>('open', {'url': url}) ??
+          false;
+      if (!ok && mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không tìm thấy ứng dụng phát video tương thích.'),
+          ),
+        );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không mở được trình phát ngoài: ${e.runtimeType}')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Không mở được trình phát ngoài: ${e.runtimeType}'),
+          ),
+        );
     }
   }
 
   Future<void> _openCast() async {
     try {
-      final opened = await _castChannel.invokeMethod<bool>('openSettings') ?? false;
-      if (!opened && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('TV này cần mở Smart View trong bảng điều khiển nhanh Samsung.')));
+      final opened =
+          await _castChannel.invokeMethod<bool>('openSettings') ?? false;
+      if (!opened && mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'TV này cần mở Smart View trong bảng điều khiển nhanh Samsung.',
+            ),
+          ),
+        );
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mở Smart View từ bảng điều khiển nhanh Samsung để phản chiếu màn hình.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Mở Smart View từ bảng điều khiển nhanh Samsung để phản chiếu màn hình.',
+            ),
+          ),
+        );
     }
   }
 
   @override
   void dispose() {
     generation++;
+    controlsTimer?.cancel();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     watchdog?.cancel();
     vlcStartup?.cancel();
     vlcToken++;
@@ -313,53 +502,245 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     super.dispose();
   }
 
+  Widget _volumeControl() => Row(
+    children: [
+      IconButton(
+        key: const ValueKey('player-mute'),
+        tooltip: volume == 0 ? 'Bật tiếng' : 'Tắt tiếng',
+        icon: Icon(volume == 0 ? Icons.volume_off : Icons.volume_up),
+        onPressed: () => _changeVolume(volume == 0 ? lastAudibleVolume : 0),
+      ),
+      Expanded(
+        child: Slider(
+          key: const ValueKey('player-volume'),
+          value: volume,
+          label: '${(volume * 100).round()}%',
+          onChanged: _changeVolume,
+        ),
+      ),
+      SizedBox(width: 42, child: Text('${(volume * 100).round()}%')),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final p = controller;
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.channel.name), actions: [
-        IconButton(tooltip: 'Mở trình phát ngoài (dự phòng)', icon: const Icon(Icons.open_in_new), onPressed: _openExternal),
-        IconButton(tooltip: 'Phản chiếu lên Samsung TV (Smart View)', icon: const Icon(Icons.cast), onPressed: _openCast),
-      ]),
-      body: SafeArea(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        if (loading) const CircularProgressIndicator(),
-        Text(usingVlc ? 'Đang phát bằng VLC nội bộ' : 'Đang phát bằng Android Media3${sources.length > 1 ? ' · Nguồn ${sourceIndex + 1}/${sources.length}' : ''}'),
-        if (error != null) ...[
-          Padding(padding: const EdgeInsets.all(16), child: Text(error!, textAlign: TextAlign.center)),
-          FilledButton(onPressed: _retry, child: const Text('Thử lại')),
-          TextButton.icon(onPressed: () { failedSources.clear(); retriedSources.clear(); sourceIndex = 0; _openVlc(); }, icon: const Icon(Icons.play_circle_outline), label: const Text('Thử VLC nội bộ')),
-          TextButton.icon(onPressed: _openExternal, icon: const Icon(Icons.open_in_new), label: const Text('Mở bằng trình phát ngoài')),
-          Padding(padding: const EdgeInsets.all(12), child: SelectableText('Chẩn đoán: $lastFailure', textAlign: TextAlign.center)),
-        ],
-        if (usingVlc && vlc != null && error == null) ...[
-          AspectRatio(aspectRatio: 16 / 9, child: VlcPlayer(controller: vlc!, virtualDisplay: false, aspectRatio: 16 / 9, placeholder: const Center(child: CircularProgressIndicator()))),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            IconButton(tooltip: 'Thử lại', icon: const Icon(Icons.refresh), onPressed: _retry),
-            IconButton(tooltip: 'Tạm dừng', icon: const Icon(Icons.pause), onPressed: () => vlc?.pause()),
-            IconButton(tooltip: 'Tiếp tục', icon: const Icon(Icons.play_arrow), onPressed: () => vlc?.play()),
-          ]),
-        ],
-        if (!usingVlc && p != null && p.value.isInitialized) ...[
-          AspectRatio(aspectRatio: p.value.aspectRatio > 0 ? p.value.aspectRatio : 16 / 9, child: VideoPlayer(p)),
-          if (canSeek) Slider(
-            value: p.value.position.inMilliseconds.clamp(0, p.value.duration.inMilliseconds).toDouble(),
-            max: p.value.duration.inMilliseconds.toDouble(),
-            onChanged: (v) => p.seekTo(Duration(milliseconds: v.round())),
-          ) else const Text('TRỰC TIẾP · Không hỗ trợ tua'),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            IconButton(icon: const Icon(Icons.refresh), onPressed: _retry),
-            IconButton(icon: Icon(p.value.isPlaying ? Icons.pause : Icons.play_arrow), onPressed: () async {
-              if (p.value.isPlaying) { userPaused = true; await p.pause(); }
-              else { userPaused = false; await p.play(); }
-              if (mounted) setState(() {});
-            }),
-            if (sources.length > 1) IconButton(tooltip: 'Đổi nguồn', icon: const Icon(Icons.skip_next), onPressed: () {
-              failedSources.clear();
-              _open((sourceIndex + 1) % sources.length);
-            }),
-          ]),
-        ],
-      ]))),
+    final videoReady = !usingVlc && p != null && p.value.isInitialized;
+    final vlcReady = usingVlc && vlc != null && error == null;
+    final aspect = p != null && videoReady && p.value.aspectRatio > 0
+        ? p.value.aspectRatio
+        : 16 / 9;
+    final visible = !fullscreen || controlsVisible;
+    return Theme(
+      data: ThemeData.dark(useMaterial3: true),
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: fullscreen
+            ? null
+            : AppBar(
+                title: Text(widget.channel.name),
+                actions: [
+                  IconButton(
+                    tooltip: 'Mở trình phát ngoài',
+                    icon: const Icon(Icons.open_in_new),
+                    onPressed: _openExternal,
+                  ),
+                  IconButton(
+                    tooltip: 'Phản chiếu lên Samsung TV',
+                    icon: const Icon(Icons.cast),
+                    onPressed: _openCast,
+                  ),
+                ],
+              ),
+        body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _revealControls,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Keep this subtree in the same position across rotation: no player restart.
+              Positioned.fill(
+                bottom: fullscreen ? 0 : 180,
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: aspect,
+                    child: vlcReady
+                        ? VlcPlayer(
+                            controller: vlc!,
+                            virtualDisplay: false,
+                            aspectRatio: 16 / 9,
+                            placeholder: const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          )
+                        : videoReady
+                        ? VideoPlayer(p)
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+              if (loading) const Center(child: CircularProgressIndicator()),
+              if (error != null)
+                Center(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(error!, textAlign: TextAlign.center),
+                          FilledButton(
+                            onPressed: _retry,
+                            child: const Text('Thử lại'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              failedSources.clear();
+                              retriedSources.clear();
+                              sourceIndex = 0;
+                              _openVlc();
+                            },
+                            child: const Text('Thử VLC nội bộ'),
+                          ),
+                          TextButton(
+                            onPressed: _openExternal,
+                            child: const Text('Mở trình phát ngoài'),
+                          ),
+                          SelectableText('Chẩn đoán: $lastFailure'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (fullscreen)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    ignoring: !visible,
+                    child: AnimatedOpacity(
+                      opacity: visible ? 1 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: SafeArea(
+                        bottom: false,
+                        child: Row(
+                          children: [
+                            BackButton(
+                              onPressed: () => Navigator.maybePop(context),
+                            ),
+                            Expanded(
+                              child: Text(
+                                widget.channel.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  ignoring: !visible,
+                  child: AnimatedOpacity(
+                    opacity: visible ? 1 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: .75),
+                      child: SafeArea(
+                        top: false,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!fullscreen)
+                                Text(
+                                  usingVlc ? 'VLC nội bộ' : 'Android Media3',
+                                ),
+                              if (p != null && videoReady && canSeek)
+                                Slider(
+                                  value: p.value.position.inMilliseconds
+                                      .clamp(0, p.value.duration.inMilliseconds)
+                                      .toDouble(),
+                                  max: p.value.duration.inMilliseconds
+                                      .toDouble(),
+                                  onChanged: (v) {
+                                    _revealControls();
+                                    p.seekTo(Duration(milliseconds: v.round()));
+                                  },
+                                ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Thử lại',
+                                    icon: const Icon(Icons.refresh),
+                                    onPressed: _retry,
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Phát / Tạm dừng',
+                                    icon: Icon(
+                                      (usingVlc
+                                              ? (vlc?.value.isPlaying ?? false)
+                                              : (p?.value.isPlaying ?? false))
+                                          ? Icons.pause
+                                          : Icons.play_arrow,
+                                    ),
+                                    onPressed: () async {
+                                      _revealControls();
+                                      if (usingVlc) {
+                                        if (vlc?.value.isPlaying ?? false) {
+                                          userPaused = true;
+                                          await vlc?.pause();
+                                        } else {
+                                          userPaused = false;
+                                          await vlc?.play();
+                                        }
+                                      } else if (p != null) {
+                                        if (p.value.isPlaying) {
+                                          userPaused = true;
+                                          await p.pause();
+                                        } else {
+                                          userPaused = false;
+                                          await p.play();
+                                        }
+                                      }
+                                      if (mounted) setState(() {});
+                                    },
+                                  ),
+                                  if (sources.length > 1)
+                                    IconButton(
+                                      tooltip: 'Đổi nguồn',
+                                      icon: const Icon(Icons.skip_next),
+                                      onPressed: () {
+                                        failedSources.clear();
+                                        _open(
+                                          (sourceIndex + 1) % sources.length,
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
+                              _volumeControl(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

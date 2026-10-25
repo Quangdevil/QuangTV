@@ -243,3 +243,13 @@ pubspec.write_text(pubspec.read_text().replace('dev_dependencies:', 'dev_depende
 # User-imported IPTV sources may use arbitrary HTTP segment/CDN hosts.
 network = Path('upstream/flutter_app/android/app/src/main/res/xml/network_security_config.xml')
 network.write_text(network.read_text().replace('cleartextTrafficPermitted="false"', 'cleartextTrafficPermitted="true"').replace('Default: require HTTPS for all traffic', 'IPTV: allow user-selected HTTP media hosts').replace('Restrict cleartext traffic to known streaming CDN domains only', 'Permit user-imported IPTV media over HTTP or HTTPS'))
+
+# Android 15 / target 35: allow immersive video mode to hide system bars.
+# Keep the existing theme items when adding the opt-out resource qualifier.
+import xml.etree.ElementTree as ET
+style_root = ET.parse('upstream/flutter_app/android/app/src/main/res/values/styles.xml').getroot()
+for style in style_root.findall('style'):
+    ET.SubElement(style, 'item', {'name': 'android:windowOptOutEdgeToEdgeEnforcement'}).text = 'true'
+styles35 = Path('upstream/flutter_app/android/app/src/main/res/values-v35/styles.xml')
+styles35.parent.mkdir(parents=True, exist_ok=True)
+ET.ElementTree(style_root).write(styles35, encoding='utf-8', xml_declaration=True)

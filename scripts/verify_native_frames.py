@@ -30,3 +30,18 @@ for engine, start, end in windows:
     assert motion > 1.0, f'{engine}: displayed video frames did not change'
     print(f'QUANGTV_RENDER_PASS engine={engine} frames={len(frames)} meanPixelChange={motion:.2f}')
     frames[-1][0].replace(root / f'{engine}-verified.png')
+
+# Also require an actual landscape screenshot for each engine's rotation test.
+rotations = re.findall(r'QUANGTV_LANDSCAPE engine=(Media3|VLC) startMs=(\d+) endMs=(\d+)', output)
+assert len(rotations) == 2, 'Missing landscape checks'
+for engine, start, end in rotations:
+    candidates = []
+    for path in root.glob('frame-*.png'):
+        timestamp = int(path.stem.split('-')[1]) * 1000
+        if int(start) <= timestamp <= int(end):
+            with Image.open(path) as image:
+                if image.width > image.height:
+                    candidates.append(path)
+    assert candidates, f'{engine}: no real Android landscape screenshot captured'
+    candidates[-1].replace(root / f'{engine}-landscape-verified.png')
+    print(f'QUANGTV_ROTATION_PASS engine={engine} screenshot=true')
