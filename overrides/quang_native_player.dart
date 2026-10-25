@@ -32,6 +32,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   final Set<int> failedSources = {};
   final Set<int> retriedSources = {};
   String diagnostic = '';
+  String engineStage = 'Đang chuẩn bị nguồn';
+  String lastFailure = '';
+  bool forceVlc = false;
   static const _castChannel = MethodChannel('quangtv/cast');
   static const _externalChannel = MethodChannel('quangtv/external_player');
 
@@ -113,6 +116,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   Future<void> _failover([String reason = 'Playback error']) async {
     if (switching || !mounted || error != null) return;
     diagnostic = reason;
+    lastFailure = reason;
+    engineStage = 'Media3 lỗi, đang chuyển nguồn';
     // Retry the same stream once before trying a different source.
     if (retriedSources.add(sourceIndex)) {
       await _open(sourceIndex);
@@ -123,6 +128,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     final next = List<int>.generate(all.length, (i) => (sourceIndex + i + 1) % all.length)
         .where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
+      // Always retry the ORIGINAL channel URL with VLC, not a VTV fallback CDN.
+      sourceIndex = 0;
       await _openVlc();
       return;
     }
@@ -139,6 +146,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     if (old != null) await old.dispose();
     if (!mounted || token != vlcToken) return;
     setState(() { loading = true; error = null; });
+    engineStage = 'VLC nội bộ';
     final url = sources.isEmpty ? null : sources[sourceIndex];
     if (url == null) {
       setState(() { loading = false; error = 'Không có URL phát hợp lệ'; });
@@ -155,7 +163,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           if (loading) setState(() => loading = false);
         } else if (value.hasError) {
           vlcStartup?.cancel();
-          setState(() { loading = false; error = 'VLC: Không phát được luồng này'; });
+          setState(() { loading = false; error = 'VLC không phát được nguồn. Media3: $lastFailure'; });
         }
       });
       vlcStartup = Timer(const Duration(seconds: 25), () {
@@ -173,6 +181,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     vlc = null;
     usingVlc = false;
     if (oldVlc != null) await oldVlc.dispose();
+    engineStage = 'Media3 · HLS';
     if (!mounted) return;
     final token = ++generation;
     switching = true;
@@ -195,8 +204,12 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       return;
     }
     final url = urls[index];
-    final isHls = Uri.parse(url).path.toLowerCase().endsWith('.m3u8') || url.toLowerCase().contains('.m3u8?');
-    final player = VideoPlayerController.networkUrl(Uri.parse(url), formatHint: isHls ? VideoFormat.hls : null);
+    final uri = Uri.parse(url);
+    final isHls = uri.path.toLowerCase().endsWith('.m3u8') || url.toLowerCase().contains('.m3u8?');
+    final player = VideoPlayerController.networkUrl(uri,
+      formatHint: isHls ? VideoFormat.hls : null,
+      httpHeaders: const {'User-Agent': 'Mozilla/5.0 (Linux; Android 17) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36', 'Accept': '*/*'},
+    );
     try {
       await player.initialize().timeout(const Duration(seconds: 12));
       if (!mounted || token != generation) { await player.dispose(); return; }
@@ -204,7 +217,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       await player.play();
       if (mounted) setState(() { loading = false; switching = false; });
     } catch (e) {
-      diagnostic = 'Khởi tạo luồng: ${e.runtimeType}';
+      diagnostic = 'Khởi tạo luồng: ${e.runtimeType}: $e';
+      lastFailure = diagnostic;
       await player.dispose();
       if (!mounted || token != generation) return;
       switching = false;
@@ -263,7 +277,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         if (error != null) ...[
           Padding(padding: const EdgeInsets.all(16), child: Text(error!, textAlign: TextAlign.center)),
           FilledButton(onPressed: _retry, child: const Text('Thử lại')),
+          TextButton.icon(onPressed: () { failedSources.clear(); retriedSources.clear(); sourceIndex = 0; _openVlc(); }, icon: const Icon(Icons.play_circle_outline), label: const Text('Thử VLC nội bộ')),
           TextButton.icon(onPressed: _openExternal, icon: const Icon(Icons.open_in_new), label: const Text('Mở bằng trình phát ngoài')),
+          Padding(padding: const EdgeInsets.all(12), child: SelectableText('Chẩn đoán: $lastFailure', textAlign: TextAlign.center)),
         ],
         if (usingVlc && vlc != null) ...[
           AspectRatio(aspectRatio: 16 / 9, child: VlcPlayer(controller: vlc!, aspectRatio: 16 / 9, placeholder: const Center(child: CircularProgressIndicator()))),
