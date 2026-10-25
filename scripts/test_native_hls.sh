@@ -14,7 +14,10 @@ log_pid=$!
   done
 ) &
 frame_pid=$!
-trap 'kill "$log_pid" "$frame_pid" 2>/dev/null || true' EXIT
+# A real Android touch starts the original QuangTube player; do not inject play().
+python3 scripts/tap_youtube_test.py &
+tap_pid=$!
+trap 'kill "$log_pid" "$frame_pid" "$tap_pid" 2>/dev/null || true' EXIT
 cd upstream/flutter_app
 flutter test integration_test/native_hls_test.dart -d emulator-5554 --dart-define=HLS_TEST_URL=http://10.0.2.2:8765/index.m3u8 2>&1 | tee "$repo_root/playback-evidence/test-result.txt"
 

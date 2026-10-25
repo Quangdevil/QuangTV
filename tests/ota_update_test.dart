@@ -113,6 +113,8 @@ void main() {
       bool passed = false;
       await tester.runAsync(() async {
         double? first;
+        final openedAt = DateTime.now();
+        bool tapped = false;
         final until = DateTime.now().add(const Duration(seconds: 120));
         try {
           while (DateTime.now().isBefore(until)) {
@@ -120,6 +122,15 @@ void main() {
             final status =
                 await youtube.invokeMapMethod<dynamic, dynamic>('status') ?? {};
             debugPrint('QUANGTV_YOUTUBE_STATE $status');
+            if (!tapped && DateTime.now().difference(openedAt).inSeconds >= 8) {
+              debugPrint('QUANGTV_YOUTUBE_TAP');
+              tapped = true;
+            }
+            final error = status['error']?.toString() ?? '';
+            if (error.isNotEmpty) {
+              debugPrint('QUANGTV_YOUTUBE_BLOCKED $error');
+              break;
+            }
             if (status['playing'] == true) {
               final position = (status['position'] as num?)?.toDouble() ?? 0;
               first ??= position;

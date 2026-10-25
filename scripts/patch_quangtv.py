@@ -242,5 +242,5 @@ assert anchor in kotlin
 activity.write_text(kotlin.replace(anchor, youtube + anchor, 1))
 m = manifest.read_text()
 assert '</application>' in m
-m = m.replace('</application>', '<activity android:name=".QuangTubeActivity" android:exported="false" android:theme="@style/NormalTheme" android:hardwareAccelerated="true" android:supportsPictureInPicture="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize" android:windowSoftInputMode="adjustResize"/></application>', 1)
+m = m.replace('</application>', '<activity android:name=".QuangTubeActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:hardwareAccelerated="true" android:supportsPictureInPicture="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode" android:windowSoftInputMode="adjustResize"/></application>', 1)
 manifest.write_text(m)
