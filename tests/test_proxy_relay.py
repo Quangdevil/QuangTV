@@ -4,9 +4,13 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 CLASSES=tempfile.mkdtemp(prefix='quang-proxy-classes-')
 subprocess.run(['java','com.sun.tools.javac.Main','-d',CLASSES,str(ROOT/'overrides/QuangProxyRelay.java'),str(ROOT/'tests/proxy/RelayMain.java')],check=True)
 DATA=b'QUANGTV_VIDEO_FIXTURE'*8192
-seen={'http':0,'socks5':0,'dns':0,'originAuth':False,'connect':0}
+seen={'http':0,'socks5':0,'dns':0,'originAuth':False,'connect':0,'redirect':0,'cookieLeak':False}
 class Origin(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/redirect':
+            self.send_response(302);self.send_header('Location','http://other.test/video.mp4');self.send_header('Content-Length','0');self.end_headers();return
+        if self.headers.get('Host') == 'other.test':
+            seen['redirect']+=1;seen['cookieLeak'] |= self.headers.get('Cookie') is not None
         seen['originAuth'] |= self.headers.get('Proxy-Authorization') is not None
         start=int(self.headers.get('Range','bytes=0-').split('=')[1].split('-')[0])
         data=DATA[start:]
@@ -78,6 +82,9 @@ for kind,handler in [('http',HTTPProxy),('socks5',SOCKSProxy)]:
             if valid:
                 assert result.stdout==DATA
                 result=curl(['--proxy','','-H','Range: bytes=123-',download]);assert result.returncode==0 and result.stdout==DATA[123:],result.stderr
+                if kind=='http':
+                    redirected=download.replace('video.mp4','redirect')
+                    result=curl(['--proxy','','-L','-H','Cookie: fixture=session',redirected]);assert result.returncode==0 and result.stdout==DATA,result.stderr
         finally:process.stdin.write('\n');process.stdin.flush();process.wait(timeout=5)
     server.shutdown()
 # HTTPS CONNECT carries encrypted bytes end-to-end. Only this self-signed fixture uses curl -k.
@@ -91,6 +98,6 @@ with tempfile.TemporaryDirectory() as temp:
         local=int(process.stdout.readline());process.stdout.readline()
         result=curl(['-k','--proxy',f'http://127.0.0.1:{local}',f'https://education.test:{tls.server_port}/video.mp4']);assert result.returncode==0 and result.stdout==DATA,result.stderr
     finally:process.stdin.write('\n');process.stdin.flush();process.wait(timeout=5);server.shutdown();tls.shutdown()
-assert seen['http']>=3 and seen['socks5']>=2 and seen['dns']>=2 and seen['connect']>=1 and not seen['originAuth'],seen
+assert seen['http']>=3 and seen['socks5']>=2 and seen['dns']>=2 and seen['connect']>=1 and not seen['originAuth'] and seen['redirect']>0 and not seen['cookieLeak'],seen
 origin.shutdown()
-print('QUANGTV_PROXY_RELAY_PASS httpAuth=true socksAuth=true remoteDns=true httpsTunnel=true downloadRange=true badCredentialsBlocked=true originCredentialLeak=false')
+print('QUANGTV_PROXY_RELAY_PASS httpAuth=true socksAuth=true remoteDns=true httpsTunnel=true downloadRange=true badCredentialsBlocked=true originCredentialLeak=false redirectCookieScope=true')
