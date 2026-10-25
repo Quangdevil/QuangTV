@@ -76,7 +76,8 @@ class QuangTubeActivity : Activity() {
             WindowInsetsCompat.CONSUMED
         }
         web = WebView(this)
-        root.addView(web, FrameLayout.LayoutParams(-1, -1))
+        root.addView(web, FrameLayout.LayoutParams(-1, -1).apply { bottomMargin = (48 * resources.displayMetrics.density).toInt() })
+        root.addView(android.widget.Button(this).apply { text = "Tải video YouTube"; setAllCaps(false); setOnClickListener { QuangYouTube.showChoices(this@QuangTubeActivity, web.url ?: "") } }, FrameLayout.LayoutParams(-1, (48 * resources.displayMetrics.density).toInt(), android.view.Gravity.BOTTOM))
         setContentView(root)
         ViewCompat.requestApplyInsets(root)
         web.settings.apply {

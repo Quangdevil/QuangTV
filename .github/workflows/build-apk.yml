@@ -2,6 +2,7 @@ name: Build QuangTV APK
 on:
   push:
     branches: [main, fix/native-playback-validation]
+    paths-ignore: ['cloudflare/**']
   workflow_dispatch:
     inputs:
       ui_only_release:
@@ -61,7 +62,9 @@ jobs:
           mkdir -p /tmp/quangtv-hls
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 60 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 48 -c:a aac -f hls -hls_time 2 -hls_list_size 0 /tmp/quangtv-hls/index.m3u8
           ffmpeg -hide_banner -loglevel error -i /tmp/quangtv-hls/index.m3u8 -c copy /tmp/quangtv-hls/fixture.mp4
-          echo '<meta name="viewport" content="width=device-width"><h1>Browser fixture</h1><video controls preload="none" src="fixture.mp4"></video><script>fetch("fixture.mp4?resource=1").then(r=>r.arrayBuffer())</script>' > /tmp/quangtv-hls/browser.html
+          ffmpeg -hide_banner -loglevel error -i /tmp/quangtv-hls/fixture.mp4 -c:v copy -an -movflags +faststart /tmp/quangtv-hls/video-only.mp4
+          ffmpeg -hide_banner -loglevel error -i /tmp/quangtv-hls/fixture.mp4 -c:a copy -vn -movflags +faststart /tmp/quangtv-hls/audio-only.m4a
+          echo '<meta name="viewport" content="width=device-width"><h1>Browser fixture</h1><img hidden src="https://doubleclick.net/quangtv-fixture.png"><video controls preload="none" src="fixture.mp4"></video><script>fetch("fixture.mp4?resource=1").then(r=>r.arrayBuffer())</script>' > /tmp/quangtv-hls/browser.html
           python3 scripts/serve_test_media.py >/tmp/quangtv-hls-server.log 2>&1 &
           python3 scripts/serve_test_proxy.py >/tmp/quangtv-proxy-server.log 2>&1 &
       - name: Enable KVM for Android playback tests

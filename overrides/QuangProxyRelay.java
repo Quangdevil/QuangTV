@@ -95,9 +95,10 @@ public final class QuangProxyRelay implements AutoCloseable {
                 client.getOutputStream().write("HTTP/1.1 200 Connection Established\r\n\r\n".getBytes(StandardCharsets.US_ASCII));client.getOutputStream().flush();
             } else {
                 String path=first[1];if(type.equals("socks5")) { path=destination.getRawPath();if(path==null||path.isEmpty())path="/";if(destination.getRawQuery()!=null)path+="?"+destination.getRawQuery(); }
+                boolean upgrade=Arrays.stream(lines).anyMatch(line->line.equalsIgnoreCase("Upgrade: websocket"));
                 StringBuilder request=new StringBuilder(first[0]+" "+path+" HTTP/1.1\r\n");
                 for(int i=1;i<lines.length;i++){String key=lines[i].split(":",2)[0].toLowerCase(Locale.ROOT);if(!Arrays.asList("proxy-authorization","proxy-connection","connection").contains(key))request.append(lines[i]).append("\r\n");}
-                if(!type.equals("socks5"))request.append(auth());request.append("Connection: close\r\n\r\n");out.write(request.toString().getBytes(StandardCharsets.ISO_8859_1));out.flush();
+                if(!type.equals("socks5"))request.append(auth());request.append(upgrade?"Connection: Upgrade\r\n\r\n":"Connection: close\r\n\r\n");out.write(request.toString().getBytes(StandardCharsets.ISO_8859_1));out.flush();
             }
             final Socket peer=remote;
             workers.execute(() -> {try{copy(client.getInputStream(),peer.getOutputStream());peer.shutdownOutput();}catch(IOException ignored){}});

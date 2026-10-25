@@ -91,6 +91,10 @@ object QuangProxy {
         check(prefs(c).edit().putString("encrypted", Base64.encodeToString(cipher.iv, Base64.NO_WRAP)+":"+Base64.encodeToString(body, Base64.NO_WRAP)).putBoolean("enabled", enabled).commit())
         ensure(c)
     }
+    fun toggle(c: Context, enabled: Boolean) {
+        val v = config(c)
+        save(c, mapOf("enabled" to enabled, "type" to v.optString("type", "http"), "host" to v.optString("host"), "port" to v.optInt("port"), "user" to v.optString("user"), "password" to v.optString("password")))
+    }
     fun applyWeb(c: Context, done: () -> Unit, failed: () -> Unit) {
         try {
             ensure(c)

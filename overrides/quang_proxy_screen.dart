@@ -31,7 +31,7 @@ class _QuangProxyScreenState extends State<QuangProxyScreen> {
     finally { if (mounted) setState(() => busy = false); }
   }
   Future<bool> _save() async {
-    if (enabled && (host.text.trim().isEmpty || (int.tryParse(port.text) ?? 0) < 1 || (int.tryParse(port.text) ?? 0) > 65535)) {
+    if (host.text.trim().isEmpty || (int.tryParse(port.text) ?? 0) < 1 || (int.tryParse(port.text) ?? 0) > 65535) {
       setState(() => message = 'Nhập máy chủ và cổng từ 1 đến 65535.'); return false;
     }
     setState(() { busy = true; message = ''; });
@@ -41,16 +41,6 @@ class _QuangProxyScreenState extends State<QuangProxyScreen> {
       setState(() { hasPassword = value?['hasPassword'] == true; message = enabled ? 'Đã bật proxy cho trình duyệt và player native. Mở lại trang/video để áp dụng.' : 'Đã tắt proxy của QuangTV.'; });
       password.clear(); return true;
     } on PlatformException catch (e) { if (mounted) setState(() => message = e.message ?? 'Không lưu được proxy.'); return false; }
-    finally { if (mounted) setState(() => busy = false); }
-  }
-  Future<void> _test() async {
-    if (!enabled) { setState(() => message = 'Bật proxy trước khi kiểm tra.'); return; }
-    if (!await _save() || !mounted) return;
-    setState(() { busy = true; message = 'Đang kiểm tra kết nối HTTPS qua proxy…'; });
-    try {
-      final result = await bridge.invokeMapMethod<String, dynamic>('proxyTest');
-      if (mounted) setState(() => message = 'IP đầu ra: ${result?['ip']}\nKết nối HTTPS: ${result?['ms']} ms. Vị trí IP do nhà cung cấp proxy quyết định.');
-    } on PlatformException catch (e) { if (mounted) setState(() => message = e.message ?? 'Proxy chưa kết nối được.'); }
     finally { if (mounted) setState(() => busy = false); }
   }
   Future<void> _paste() async {
@@ -68,7 +58,7 @@ class _QuangProxyScreenState extends State<QuangProxyScreen> {
     appBar: AppBar(title: const Text('Proxy QuangTV')),
     body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
       const Text('Áp dụng cho HTTP/HTTPS trong trình duyệt, QuangTube, player Media3/VLC và tải video. Không phải VPN toàn điện thoại; không chuyển các ứng dụng khác hoặc UDP/WebRTC qua proxy.'),
-      SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Bật proxy'), value: enabled, onChanged: busy ? null : (value) => setState(() => enabled = value)),
+      const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Bật/tắt bằng biểu tượng proxy trên trang chính hoặc thanh trình duyệt. Màn hình này lưu cấu hình.')),
       OutlinedButton.icon(onPressed: busy ? null : _paste, icon: const Icon(Icons.content_paste), label: const Text('Dán IP:cổng:tài khoản:mật khẩu')),
       DropdownButtonFormField<String>(initialValue: type, key: ValueKey(type), decoration: const InputDecoration(labelText: 'Loại proxy'), items: const [DropdownMenuItem(value: 'http', child: Text('HTTP (hỗ trợ web HTTPS)')), DropdownMenuItem(value: 'https', child: Text('HTTPS (TLS tới proxy)')), DropdownMenuItem(value: 'socks5', child: Text('SOCKS5 (DNS qua proxy)'))], onChanged: busy ? null : (value) => setState(() => type = value ?? 'http')),
       TextField(controller: host, enabled: !busy, autocorrect: false, enableSuggestions: false, decoration: const InputDecoration(labelText: 'Máy chủ / IP')),
@@ -77,7 +67,6 @@ class _QuangProxyScreenState extends State<QuangProxyScreen> {
       TextField(controller: password, enabled: !busy, obscureText: true, autocorrect: false, enableSuggestions: false, decoration: InputDecoration(labelText: 'Mật khẩu', hintText: hasPassword ? 'Để trống để giữ mật khẩu đã lưu' : null)),
       const SizedBox(height: 16),
       FilledButton(onPressed: busy ? null : _save, child: const Text('Lưu cấu hình')),
-      OutlinedButton(onPressed: busy ? null : _test, child: const Text('Lưu và kiểm tra IP qua proxy')),
       if (busy) const Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator()),
       if (message.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(message)),
       const Text('Tài khoản/mật khẩu lưu mã hóa bằng khóa Android Keystore trên máy này. Kiểm tra IP gửi yêu cầu HTTPS tới api.ipify.org qua proxy; không gửi mật khẩu tới dịch vụ kiểm tra. Khi proxy lỗi, hãy sửa cấu hình hoặc tắt proxy để dùng mạng trực tiếp. Tải qua proxy cần giữ QuangTV đang chạy.'),

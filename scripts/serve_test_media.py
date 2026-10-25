@@ -3,6 +3,7 @@ import http.server
 import json
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 
 root = Path('/tmp/quangtv-hls')
@@ -21,6 +22,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if self.headers.get('X-QuangTV-Test-Proxy') != 'authenticated-fixture':
                 self.send_error(403, 'Authenticated proxy required'); return
             self.path = self.path[len('/proxy-only'):]
+        path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+        if path.endswith(('.mp4', '.m4a', '.ts')):
+            media = (root / path.lstrip('/')).resolve()
+            if root.resolve() not in media.parents or not media.is_file():
+                self.send_error(404); return
+            total = media.stat().st_size; start = 0; end = total - 1
+            requested = self.headers.get('Range')
+            if requested:
+                try:
+                    left, right = requested.removeprefix('bytes=').split('-', 1)
+                    start = int(left) if left else max(0, total-int(right))
+                    end = min(total-1, int(right)) if left and right else total-1
+                    if not 0 <= start <= end < total: raise ValueError()
+                except ValueError:
+                    self.send_response(416); self.send_header('Content-Range',f'bytes */{total}'); self.end_headers(); return
+            self.send_response(206 if requested else 200)
+            self.send_header('Accept-Ranges', 'bytes'); self.send_header('Content-Type', self.guess_type(str(media)))
+            self.send_header('Content-Length', str(end-start+1))
+            if requested: self.send_header('Content-Range', f'bytes {start}-{end}/{total}')
+            self.end_headers()
+            try:
+                with media.open('rb') as source:
+                    source.seek(start); remaining = end-start+1
+                    while remaining:
+                        chunk = source.read(min(65536, remaining))
+                        if not chunk: break
+                        self.wfile.write(chunk); remaining -= len(chunk)
+            except (BrokenPipeError, ConnectionResetError): pass
+            return
         if self.path == '/ota-metrics.json':
             data = json.dumps({'requests': requests}).encode()
             self.send_response(200)

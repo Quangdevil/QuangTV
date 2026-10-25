@@ -74,6 +74,21 @@ void main() {
         if ((current['count'] as num? ?? 0) > 0) break;
       }
       expect(current['count'], greaterThan(0));
+      expect(current['blockedAds'], greaterThan(0));
+      await browser.invokeMethod<void>('showTabs');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await browser.invokeMethod<void>('newTab');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect((await state())['tabs'], 2);
+      await browser.invokeMethod<void>('firstTab');
+      await browser.invokeMethod<void>('toggleProxy');
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect((await state())['proxyOn'], isFalse);
+      await browser.invokeMethod<void>('toggleProxy');
+      await Future<void>.delayed(const Duration(seconds: 2));
+      expect((await state())['proxyOn'], isTrue);
+
+
       expect(current['top'], greaterThanOrEqualTo(current['statusBar']));
       final top = current['top'];
       final height = current['height'] as num;
@@ -99,6 +114,29 @@ void main() {
       }
       expect(current['downloaded'], greaterThan(0));
       debugPrint('QUANGTV_BROWSER_PASS directDiscovery=true safeTop=true keyboardResizesBottom=true downloadedBytes=${current['downloaded']}');
+      await browser.invokeMethod<void>('openDownloads');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await browser.invokeMethod<void>('openCompleted');
+      final previewDeadline = DateTime.now().add(const Duration(seconds: 20));
+      while (DateTime.now().isBefore(previewDeadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        if ((await state())['previewPlaying'] == true) break;
+      }
+      expect((await state())['previewPlaying'], isTrue);
+      await browser.invokeMethod<void>('closePreview');
+      await browser.invokeMethod<void>('playPage');
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await browser.invokeMethod<void>('landscape');
+      final landscapeDeadline = DateTime.now().add(const Duration(seconds: 15));
+      while (DateTime.now().isBefore(landscapeDeadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        if ((await state())['fullscreen'] == true) break;
+      }
+      expect((await state())['fullscreen'], isTrue);
+      await browser.invokeMethod<void>('portrait');
+      await Future<void>.delayed(const Duration(seconds: 1));
+      expect((await state())['fullscreen'], isFalse);
+      debugPrint('QUANGTV_BROWSER_UI_PASS tabs=true downloadedFilePlayback=true quickProxy=true landscapeFullscreen=true adsBlocked=true');
       await browser.invokeMethod<void>('clearDownloads');
       await browser.invokeMethod<void>('select');
     });
@@ -126,6 +164,22 @@ void main() {
     debugPrint('QUANGTV_PROXY_VLC_PASS authenticatedHlsPlayback=true');
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
-    await tester.runAsync(() async { await browser.invokeMethod<void>('proxySave', {'enabled': false}); });
-  }, timeout: const Timeout(Duration(minutes: 4)));
+    await tester.runAsync(() async {
+      await browser.invokeMethod<void>('youtubeFixture');
+      final deadline = DateTime.now().add(const Duration(seconds: 60));
+      Map<String, dynamic> status = {};
+      while (DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        status = await browser.invokeMapMethod<String, dynamic>('youtubeStatus') ?? {};
+        if (status['running'] == false) break;
+      }
+      expect(status['completed'], greaterThan(0), reason: '${status['status']}');
+      debugPrint('QUANGTV_YOUTUBE_MUX_PASS nativeAvcAacMerge=true');
+      await browser.invokeMethod<void>('proxySave', {'enabled': false});
+      try {
+        final live = await browser.invokeMapMethod<String, dynamic>('youtubeProbe').timeout(const Duration(seconds: 60));
+        debugPrint((live?['count'] as int? ?? 0) > 0 ? 'QUANGTV_YOUTUBE_LIVE_PASS extractedChoices=${live?['count']}' : 'QUANGTV_YOUTUBE_LIVE_UNVERIFIED serverRestrictionOrExtractorError=true');
+      } catch (_) { debugPrint('QUANGTV_YOUTUBE_LIVE_UNVERIFIED networkTimeout=true'); }
+    });
+  }, timeout: const Timeout(Duration(minutes: 6)));
 }

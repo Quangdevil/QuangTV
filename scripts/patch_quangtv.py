@@ -307,7 +307,7 @@ browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
             } else if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 when (call.method) {
                     "inspect" -> result.success(QuangBrowserActivity.inspect())
-                    "focus", "select", "download", "confirmDownload", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
+                    "focus", "select", "download", "confirmDownload", "toggleProxy", "showTabs", "newTab", "firstTab", "openDownloads", "openCompleted", "closePreview", "playPage", "landscape", "portrait", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
                     else -> result.notImplemented()
                 }
             } else result.notImplemented()
@@ -334,12 +334,29 @@ proxy_handler = '''            if (call.method == "proxyGet") {
                 try { result.success(QuangProxy.state(this)) } catch (_: Exception) { result.error("PROXY", "Không đọc được cấu hình proxy mã hóa. Hãy lưu lại cấu hình.", null) }
                 return@setMethodCallHandler
             }
+            if (call.method == "proxyToggle") {
+                try {
+                    QuangProxy.toggle(this, call.argument<Boolean>("enabled") == true)
+                    QuangProxy.applyWeb(this, { result.success(QuangProxy.state(this)) }, { result.error("PROXY", "Không áp dụng được proxy", null) })
+                } catch (_: Exception) { result.error("PROXY", "Hãy lưu cấu hình proxy trước khi bật", null) }
+                return@setMethodCallHandler
+            }
             if (call.method == "proxySave") {
                 try {
                     QuangProxy.save(this, call.arguments as? Map<*, *> ?: emptyMap<String, Any>())
                     QuangProxy.applyWeb(this, { result.success(QuangProxy.state(this)) }, { result.error("PROXY", "Không áp dụng được proxy vào WebView", null) })
                 } catch (_: Exception) { result.error("PROXY", "Cấu hình không hợp lệ hoặc WebView cần cập nhật", null) }
                 return@setMethodCallHandler
+            }
+            if (call.method == "youtubeFixture" && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                QuangYouTube.start(this, QuangYouTube.Choice("Mux fixture", "http://10.0.2.2:8765/proxy-only/video-only.mp4", "http://10.0.2.2:8765/proxy-only/audio-only.m4a", "360p"))
+                result.success(null); return@setMethodCallHandler
+            }
+            if (call.method == "youtubeStatus" && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                result.success(mapOf("running" to QuangYouTube.running, "status" to QuangYouTube.status, "completed" to QuangYouTube.completed(this).size)); return@setMethodCallHandler
+            }
+            if (call.method == "youtubeProbe" && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                QuangYouTube.extract(this, "https://www.youtube.com/watch?v=aqz-KE-bpKQ") { choices, error -> result.success(mapOf("count" to (choices?.size ?: 0), "error" to (error ?: ""))) }; return@setMethodCallHandler
             }
             if (call.method == "proxyMediaUrl") {
                 try { result.success(QuangProxy.downloadUrl(this, call.argument<String>("url") ?: "")) }
@@ -361,3 +378,13 @@ m = re.sub(r'android:allowBackup="[^"]*"', 'android:allowBackup="false"', m)
 if 'android:allowBackup=' not in m: m = m.replace('<application', '<application android:allowBackup="false"', 1)
 manifest.write_text(m)
 shutil.copyfile('overrides/quang_proxy_screen.dart', 'upstream/flutter_app/lib/screens/quang_proxy_screen.dart')
+
+# Lightweight Java extractor; Android MediaMuxer combines audio/video, without FFmpeg binaries.
+shutil.copyfile('overrides/QuangYouTube.kt', activity.parent / 'QuangYouTube.kt')
+root_gradle = Path('upstream/flutter_app/android/build.gradle')
+root_gradle.write_text(root_gradle.read_text().replace('mavenCentral()', 'mavenCentral()\n        maven { url "https://jitpack.io" }', 1))
+g = gradle.read_text().replace('compileOptions {', 'compileOptions {\n        coreLibraryDesugaringEnabled true', 1)
+g += '\ndependencies { coreLibraryDesugaring "com.android.tools:desugar_jdk_libs_nio:2.1.5"; implementation "com.github.TeamNewPipe:NewPipeExtractor:v0.26.5" }\n'
+gradle.write_text(g)
+proguard = Path('upstream/flutter_app/android/app/proguard-rules.pro')
+proguard.write_text(proguard.read_text() + '\n-keep class org.mozilla.javascript.** { *; }\n-keep class org.mozilla.classfile.ClassFileWriter\n-dontwarn org.mozilla.javascript.tools.**\n')
