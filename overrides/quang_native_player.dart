@@ -94,8 +94,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           (name.length == key.length ||
               !RegExp(
                 r'[0-9]',
-              ).hasMatch(name.substring(key.length, key.length + 1))))
+              ).hasMatch(name.substring(key.length, key.length + 1)))) {
         return key;
+      }
     }
     return null;
   }
@@ -170,18 +171,20 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     try {
       final video = controller;
       final nativeVlc = vlc;
-      if (video != null && video.value.isInitialized)
+      if (video != null && video.value.isInitialized) {
         await video.setVolume(volume);
+      }
       if (nativeVlc != null && nativeVlc.value.isInitialized) {
         await nativeVlc.setVolume((volume * 100).round());
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Không điều chỉnh được âm lượng. Hãy thử lại.'),
           ),
         );
+      }
     }
   }
 
@@ -207,8 +210,14 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
 
   void _watch() {
     final p = controller;
-    if (!mounted || loading || switching || userPaused || p == null || usingVlc)
+    if (!mounted ||
+        loading ||
+        switching ||
+        userPaused ||
+        p == null ||
+        usingVlc) {
       return;
+    }
     final value = p.value;
     if (value.hasError) {
       _failover(value.errorDescription ?? 'Player error');
@@ -231,8 +240,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         stalledSince = null;
       } else {
         stalledSince ??= now;
-        if (now - stalledSince! >= 30000)
+        if (now - stalledSince! >= 30000) {
           _failover('Playback stalled over 30s');
+        }
       }
     }
     setState(() {});
@@ -349,19 +359,21 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         }
       });
       vlcStartup = Timer(const Duration(seconds: 25), () {
-        if (mounted && token == vlcToken && loading)
+        if (mounted && token == vlcToken && loading) {
           setState(() {
             loading = false;
             error =
                 'VLC không khởi tạo được nguồn sau 25 giây. Kiểm tra URL/HTTP hoặc lỗi native VLC.';
           });
+        }
       });
     } catch (e) {
-      if (mounted && token == vlcToken)
+      if (mounted && token == vlcToken) {
         setState(() {
           loading = false;
           error = 'Lỗi VLC: ${e.runtimeType}';
         });
+      }
     }
   }
 
@@ -421,11 +433,12 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       controller = player;
       await player.setVolume(volume);
       await player.play();
-      if (mounted)
+      if (mounted) {
         setState(() {
           loading = false;
           switching = false;
         });
+      }
     } catch (e) {
       diagnostic = 'Khởi tạo luồng: ${e.runtimeType}: $e';
       lastFailure = diagnostic;
@@ -449,19 +462,21 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       final ok =
           await _externalChannel.invokeMethod<bool>('open', {'url': url}) ??
           false;
-      if (!ok && mounted)
+      if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Không tìm thấy ứng dụng phát video tương thích.'),
           ),
         );
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Không mở được trình phát ngoài: ${e.runtimeType}'),
           ),
         );
+      }
     }
   }
 
@@ -469,7 +484,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     try {
       final opened =
           await _castChannel.invokeMethod<bool>('openSettings') ?? false;
-      if (!opened && mounted)
+      if (!opened && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -477,8 +492,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
             ),
           ),
         );
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -486,6 +502,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
             ),
           ),
         );
+      }
     }
   }
 
