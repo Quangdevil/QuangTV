@@ -324,7 +324,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           streamHeaders['User-Agent'] ?? 'QuangTV/1.3',
         ),
       ];
-      if (httpProxy != null) vlcHttp.add(':http-proxy=$httpProxy');
+      if (httpProxy != null) vlcHttp.add('--http-proxy=$httpProxy');
       final referrer = streamHeaders['Referer'] ?? streamHeaders['Referrer'];
       if (referrer != null && referrer.isNotEmpty) {
         vlcHttp.add(VlcHttpOptions.httpReferrer(referrer));
