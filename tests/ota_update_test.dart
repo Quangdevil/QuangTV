@@ -123,7 +123,7 @@ void main() {
                 await youtube.invokeMapMethod<dynamic, dynamic>('status') ?? {};
             debugPrint('QUANGTV_YOUTUBE_STATE $status');
             if (!tapped && DateTime.now().difference(openedAt).inSeconds >= 8) {
-              debugPrint('QUANGTV_YOUTUBE_TAP');
+              await youtube.invokeMethod<void>('requestTestTap');
               tapped = true;
             }
             final error = status['error']?.toString() ?? '';

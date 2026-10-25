@@ -231,6 +231,7 @@ youtube = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
                         result.success(true)
                     }
                 }
+                "requestTestTap" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) { android.util.Log.i("QuangTube", "QUANGTV_YOUTUBE_TAP"); result.success(null) } else result.notImplemented()
                 "status" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) result.success(QuangTubeActivity.status()) else result.notImplemented()
                 "close" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) { QuangTubeActivity.close(); result.success(null) } else result.notImplemented()
                 else -> result.notImplemented()
