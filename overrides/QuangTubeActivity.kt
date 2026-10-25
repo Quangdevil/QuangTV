@@ -13,11 +13,14 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 
 /** Minimal YouTube Web shell. No credential interception, media extraction or background service. */
 class QuangTubeActivity : Activity() {
     // Adapted from Quangdevil/QuangTubeAuto at ccfa95915545b3fe9a82a8a8a7d8b2c4e3c27ff3.
-    // Only the entry URL, class names and debug-only test observation differ.
+    // Playback follows the original shell; this host owns system/keyboard insets.
     companion object {
         private var current: java.lang.ref.WeakReference<QuangTubeActivity>? = null
         fun status(): Map<String, Any> = current?.get()?.let {
@@ -62,14 +65,20 @@ class QuangTubeActivity : Activity() {
         window.navigationBarColor = Color.BLACK
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(true)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         root = FrameLayout(this)
-        // One owner for insets: Android decor fits content below system bars.
-        // Never add IME/status-bar padding to the WebView container.
-        root.fitsSystemWindows = false
+        // Android 15 enforces edge-to-edge. Keep all WebView content inside
+        // system bars/cutouts; the keyboard only reduces the bottom viewport.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, keyboard.bottom))
+            WindowInsetsCompat.CONSUMED
+        }
         web = WebView(this)
         root.addView(web, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
+        ViewCompat.requestApplyInsets(root)
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
