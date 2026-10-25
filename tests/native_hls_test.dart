@@ -20,6 +20,7 @@ void main() {
       )));
       Duration? firstPosition;
       var passed = false;
+      var lastDiagnostic = DateTime.fromMillisecondsSinceEpoch(0);
       final deadline = DateTime.now().add(const Duration(seconds: 90));
       while (DateTime.now().isBefore(deadline)) {
         await tester.pump(const Duration(milliseconds: 500));
@@ -28,6 +29,10 @@ void main() {
           final players = tester.widgetList<VideoPlayer>(find.byType(VideoPlayer));
           if (players.isNotEmpty) {
             final v = players.first.controller.value;
+            if (DateTime.now().difference(lastDiagnostic).inSeconds >= 10) {
+              debugPrint('QUANGTV_STATE engine=$engine playing=${v.isPlaying} positionMs=${v.position.inMilliseconds} size=${v.size}');
+              lastDiagnostic = DateTime.now();
+            }
             expect(v.hasError, isFalse, reason: v.errorDescription);
             if (v.isPlaying && v.size.width > 0 && v.size.height > 0) position = v.position;
           }
@@ -35,6 +40,10 @@ void main() {
           final players = tester.widgetList<VlcPlayer>(find.byType(VlcPlayer));
           if (players.isNotEmpty) {
             final v = players.first.controller.value;
+            if (DateTime.now().difference(lastDiagnostic).inSeconds >= 10) {
+              debugPrint('QUANGTV_STATE engine=$engine playing=${v.isPlaying} positionMs=${v.position.inMilliseconds} size=${v.size}');
+              lastDiagnostic = DateTime.now();
+            }
             expect(v.hasError, isFalse, reason: v.errorDescription);
             if (v.isPlaying && v.size.width > 0 && v.size.height > 0) position = v.position;
           }

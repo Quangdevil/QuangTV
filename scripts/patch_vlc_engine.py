@@ -48,3 +48,30 @@ else:
     assert 'path: third_party/flutter_vlc_player' in s, 'Unexpected existing dependency overrides'
 pubspec.write_text(s)
 print('VLC factory and channels now belong to each engine; shared pub cache unchanged')
+
+# LibVLC may decode HLS before getCurrentVideoTrack() exposes dimensions.
+# Report dimensions from the actual decoded-video layout callback in that case.
+texture = target / 'android/src/main/java/software/solid/fluttervlcplayer/VLCTextureView.java'
+s = texture.read_text()
+s = s.replace('private boolean wasPlaying = false;', '''private boolean wasPlaying = false;
+    private volatile int decodedVideoWidth = 0;
+    private volatile int decodedVideoHeight = 0;
+    public int getDecodedVideoWidth() { return decodedVideoWidth; }
+    public int getDecodedVideoHeight() { return decodedVideoHeight; }''')
+anchor = 'if (width * height == 0) return;'
+assert anchor in s
+s = s.replace(anchor, '''if (width * height == 0) return;
+        decodedVideoWidth = visibleWidth > 0 ? visibleWidth : width;
+        decodedVideoHeight = visibleHeight > 0 ? visibleHeight : height;''', 1)
+texture.write_text(s)
+player = target / 'android/src/main/java/software/solid/fluttervlcplayer/FlutterVlcPlayer.java'
+s = player.read_text()
+anchor = '''                            width = currentVideoTrack.width;
+                        }'''
+assert anchor in s
+s = s.replace(anchor, anchor + '''
+                        if (width <= 0 || height <= 0) {
+                            width = textureView.getDecodedVideoWidth();
+                            height = textureView.getDecodedVideoHeight();
+                        }''', 1)
+player.write_text(s)
