@@ -88,7 +88,7 @@ export default {
     const out=new Headers(upstream.headers); for(const key of ['Set-Cookie','Content-Security-Policy','Content-Security-Policy-Report-Only','X-Frame-Options','Access-Control-Allow-Origin','Access-Control-Allow-Credentials'])out.delete(key);
     out.set('Cache-Control','private, no-store');out.set('Referrer-Policy','no-referrer');out.set('X-Content-Type-Options','nosniff');
     if(out.has('Location'))out.set('Location',rewriteUrl(out.get('Location'),target.href,current.origin));
-    const type=out.get('Content-Type')||'';
+    const type=(out.get('Content-Type')||'').toLowerCase();
     if(request.method==='HEAD' || upstream.status===204 || upstream.status===304)return new Response(null,{status:upstream.status,headers:out});
     if(type.includes('text/html')) {
       out.delete('Content-Length');out.delete('Content-Encoding');out.delete('ETag');

@@ -389,9 +389,11 @@ gradle.write_text(g)
 proguard = Path('upstream/flutter_app/android/app/proguard-rules.pro')
 proguard.write_text(proguard.read_text() + '\n-keep class org.mozilla.javascript.** { *; }\n-keep class org.mozilla.classfile.ClassFileWriter\n-dontwarn org.mozilla.javascript.tools.**\n')
 
-# D8 directory transforms require the complete boot/library classpath with core desugaring.
-props = Path('upstream/flutter_app/android/gradle.properties')
-props.write_text(props.read_text() + '\nandroid.useFullClasspathForDexingTransform=true\n')
+# AGP 8.8+ fixes D8 issue 362339872 with core-library desugaring directory inputs.
+settings_gradle = Path('upstream/flutter_app/android/settings.gradle')
+settings_gradle.write_text(settings_gradle.read_text().replace('version "8.7.0"', 'version "8.9.2"', 1))
+wrapper = Path('upstream/flutter_app/android/gradle/wrapper/gradle-wrapper.properties')
+wrapper.write_text(wrapper.read_text().replace('gradle-8.9-all.zip', 'gradle-8.11.1-all.zip'))
 license_assets = Path('upstream/flutter_app/assets/licenses')
 license_assets.mkdir(parents=True, exist_ok=True)
 shutil.copyfile('COPYING.NewPipe', license_assets / 'newpipe.txt')
