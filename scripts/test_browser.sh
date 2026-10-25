@@ -16,12 +16,12 @@ frame_pid=$!
 cleanup() {
   kill "$log_pid" "$frame_pid" 2>/dev/null || true
   free -h > "$repo_root/playback-evidence/runner-memory.txt"
-  sudo dmesg | rg -i 'out of memory|killed process' > "$repo_root/playback-evidence/runner-oom.txt" || true
+  sudo dmesg | grep -Ei 'out of memory|killed process' > "$repo_root/playback-evidence/runner-oom.txt" || true
 }
 trap cleanup EXIT
 cd upstream/flutter_app
 flutter test integration_test/browser_test.dart -d emulator-5554 2>&1 | tee "$repo_root/playback-evidence/browser-test-result.txt"
 
 for marker in QUANGTV_PRIVATE_LAYOUT_PASS QUANGTV_BROWSER_PASS QUANGTV_BROWSER_PLAYER_PASS; do
-  rg -q "$marker" "$repo_root/playback-evidence/browser-test-result.txt"
+  grep -q -- "$marker" "$repo_root/playback-evidence/browser-test-result.txt"
 done
