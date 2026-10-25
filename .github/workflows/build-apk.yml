@@ -32,6 +32,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Test authenticated proxy relay
+        run: python3 tests/test_proxy_relay.py
       - name: Flutter 3.44.4
         uses: subosito/flutter-action@v2
         with:
@@ -50,7 +52,7 @@ jobs:
           flutter pub get
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
-        run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart
+        run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart
       - name: Generate deterministic HLS fixture
         if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         run: |
@@ -61,6 +63,7 @@ jobs:
           ffmpeg -hide_banner -loglevel error -i /tmp/quangtv-hls/index.m3u8 -c copy /tmp/quangtv-hls/fixture.mp4
           echo '<meta name="viewport" content="width=device-width"><h1>Browser fixture</h1><video controls preload="none" src="fixture.mp4"></video><script>fetch("fixture.mp4?resource=1").then(r=>r.arrayBuffer())</script>' > /tmp/quangtv-hls/browser.html
           python3 scripts/serve_test_media.py >/tmp/quangtv-hls-server.log 2>&1 &
+          python3 scripts/serve_test_proxy.py >/tmp/quangtv-proxy-server.log 2>&1 &
       - name: Enable KVM for Android playback tests
         if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         run: |

@@ -321,3 +321,38 @@ m = m.replace('<uses-permission android:name="android.permission.WRITE_EXTERNAL_
 manifest.write_text(m)
 
 shutil.copyfile('tests/browser_test.dart', 'upstream/flutter_app/integration_test/browser_test.dart')
+
+# Keep authenticated proxy credentials exclusively on the device.
+shutil.copyfile('overrides/QuangProxy.kt', activity.parent / 'QuangProxy.kt')
+java_source = Path('upstream/flutter_app/android/app/src/main/java/app/tvviewer/player')
+java_source.mkdir(parents=True, exist_ok=True)
+shutil.copyfile('overrides/QuangProxyRelay.java', java_source / 'QuangProxyRelay.java')
+gradle = Path('upstream/flutter_app/android/app/build.gradle')
+gradle.write_text(gradle.read_text() + '\ndependencies { implementation "androidx.webkit:webkit:1.12.1" }\n')
+kotlin = activity.read_text()
+proxy_handler = '''            if (call.method == "proxyGet") {
+                try { result.success(QuangProxy.state(this)) } catch (_: Exception) { result.error("PROXY", "Không đọc được cấu hình proxy mã hóa. Hãy lưu lại cấu hình.", null) }
+                return@setMethodCallHandler
+            }
+            if (call.method == "proxySave") {
+                try {
+                    QuangProxy.save(this, call.arguments as? Map<*, *> ?: emptyMap<String, Any>())
+                    QuangProxy.applyWeb(this, { result.success(QuangProxy.state(this)) }, { result.error("PROXY", "Không áp dụng được proxy vào WebView", null) })
+                } catch (_: Exception) { result.error("PROXY", "Cấu hình không hợp lệ hoặc WebView cần cập nhật", null) }
+                return@setMethodCallHandler
+            }
+            if (call.method == "proxyTest") {
+                QuangProxy.test(this) { value -> if (value == null) result.error("PROXY", "Không kết nối được. Kiểm tra loại proxy, địa chỉ, tài khoản và mật khẩu.", null) else result.success(value) }
+                return@setMethodCallHandler
+            }
+'''
+anchor = '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/browser").setMethodCallHandler { call, result ->\n'
+assert anchor in kotlin
+kotlin = kotlin.replace(anchor, '        try { QuangProxy.ensure(this) } catch (_: Exception) {}\n' + anchor + proxy_handler, 1)
+activity.write_text(kotlin)
+m = manifest.read_text()
+import re
+m = re.sub(r'android:allowBackup="[^"]*"', 'android:allowBackup="false"', m)
+if 'android:allowBackup=' not in m: m = m.replace('<application', '<application android:allowBackup="false"', 1)
+manifest.write_text(m)
+shutil.copyfile('overrides/quang_proxy_screen.dart', 'upstream/flutter_app/lib/screens/quang_proxy_screen.dart')

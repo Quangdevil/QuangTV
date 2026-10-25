@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'quang_audio_screen.dart';
+import 'quang_proxy_screen.dart';
 import 'quang_web_screen.dart';
 import '../models/channel.dart';
 import 'quang_native_player.dart';
@@ -47,6 +48,10 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         ListTile(leading: const Icon(Icons.lock_outline), title: const Text('Đổi PIN Private'), onTap: () {
           Navigator.pop(sheetContext);
           QuangPrivateSecurity.configure(context);
+        }),
+        ListTile(leading: const Icon(Icons.vpn_lock_outlined), title: const Text('Proxy QuangTV'), subtitle: const Text('HTTP / HTTPS / SOCKS5 · Tài khoản · Kiểm tra IP'), onTap: () {
+          Navigator.pop(sheetContext);
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangProxyScreen()));
         }),
         ListTile(leading: const Icon(Icons.dns_outlined), title: const Text('DNS hệ thống'), subtitle: const Text('Tự động · Google DNS · Nhập thủ công'), onTap: () {
           Navigator.pop(sheetContext);

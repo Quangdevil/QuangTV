@@ -17,6 +17,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         global requests
+        if self.path.startswith('/proxy-only/'):
+            if self.headers.get('X-QuangTV-Test-Proxy') != 'authenticated-fixture':
+                self.send_error(403, 'Authenticated proxy required'); return
+            self.path = self.path[len('/proxy-only'):]
         if self.path == '/ota-metrics.json':
             data = json.dumps({'requests': requests}).encode()
             self.send_response(200)

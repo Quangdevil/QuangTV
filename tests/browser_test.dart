@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tv_viewer/screens/quang_browser_screen.dart';
+import 'package:tv_viewer/screens/quang_native_player.dart';
+import 'package:tv_viewer/models/channel.dart';
+import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:tv_viewer/screens/quang_discover_screen.dart';
 import 'package:tv_viewer/screens/quang_private_screen.dart';
 import 'package:video_player/video_player.dart';
@@ -39,6 +42,7 @@ void main() {
     await tester.tap(find.byTooltip('Cài đặt'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Đổi PIN Private'), findsOneWidget);
+    expect(find.text('Proxy QuangTV'), findsOneWidget);
     await tester.tap(find.text('DNS hệ thống'));
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Google DNS'), findsOneWidget);
@@ -50,7 +54,15 @@ void main() {
   });
   testWidgets('Browser discovers a direct MP4, respects bars and keyboard, downloads and opens native player', (tester) async {
     const browser = MethodChannel('quangtv/browser');
-    await tester.pumpWidget(const MaterialApp(home: QuangBrowserScreen(initialUrl: 'http://10.0.2.2:8765/browser.html')));
+    await tester.runAsync(() async {
+      final saved = await browser.invokeMapMethod<String, dynamic>('proxySave', {'enabled': true, 'type': 'http', 'host': '10.0.2.2', 'port': 8766, 'user': 'fixture-user', 'password': 'fixture-password'});
+      expect(saved?['enabled'], isTrue);
+      expect(saved?['hasPassword'], isTrue);
+      expect(saved?.containsKey('password'), isFalse);
+      final restored = await browser.invokeMapMethod<String, dynamic>('proxyGet');
+      expect(restored?['user'], 'fixture-user');
+    });
+    await tester.pumpWidget(const MaterialApp(home: QuangBrowserScreen(initialUrl: 'http://10.0.2.2:8765/proxy-only/browser.html')));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.runAsync(() async {
       Future<Map<dynamic, dynamic>> state() async => await browser.invokeMapMethod<dynamic, dynamic>('inspect') ?? {};
@@ -99,7 +111,19 @@ void main() {
     }
     expect(played, isTrue);
     debugPrint('QUANGTV_BROWSER_PLAYER_PASS nativePlaybackAdvanced=true');
+    debugPrint('QUANGTV_PROXY_ANDROID_PASS authenticatedWebView=true authenticatedDownload=true authenticatedMedia3=true encryptedConfig=true');
+    await tester.pumpWidget(const MaterialApp(home: QuangNativePlayer(channel: Channel(name: 'Proxy VLC HLS', url: 'http://10.0.2.2:8765/proxy-only/index.m3u8'), startWithVlc: true)));
+    final vlcDeadline = DateTime.now().add(const Duration(seconds: 50));
+    var vlcPlayed = false;
+    while (DateTime.now().isBefore(vlcDeadline)) {
+      await tester.pump(const Duration(milliseconds: 500));
+      final players = tester.widgetList<VlcPlayer>(find.byType(VlcPlayer));
+      if (players.isNotEmpty && players.first.controller.value.isPlaying && players.first.controller.value.position.inSeconds >= 3) { vlcPlayed = true; break; }
+    }
+    expect(vlcPlayed, isTrue);
+    debugPrint('QUANGTV_PROXY_VLC_PASS authenticatedHlsPlayback=true');
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
-  }, timeout: const Timeout(Duration(minutes: 3)));
+    await tester.runAsync(() async { await browser.invokeMethod<void>('proxySave', {'enabled': false}); });
+  }, timeout: const Timeout(Duration(minutes: 4)));
 }

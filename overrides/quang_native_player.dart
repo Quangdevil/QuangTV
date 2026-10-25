@@ -46,6 +46,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   final Set<int> failedSources = {};
   final Set<int> retriedSources = {};
   String diagnostic = '';
+  String? httpProxy;
   String engineStage = 'Đang chuẩn bị nguồn';
   String lastFailure = '';
   bool forceVlc = false;
@@ -197,6 +198,13 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   }
 
   Future<void> _initializePlayback() async {
+    try {
+      final proxy = await const MethodChannel('quangtv/browser').invokeMapMethod<String, dynamic>('proxyGet');
+      if (proxy?['enabled'] == true) httpProxy = 'http://127.0.0.1:${proxy!['localPort']}';
+    } on PlatformException {
+      if (mounted) setState(() { loading = false; error = 'Không áp dụng được proxy. Hãy kiểm tra Cài đặt.'; });
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     final key =
         'quangtv_headers_${base64Url.encode(utf8.encode(widget.channel.url))}';
@@ -316,6 +324,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           streamHeaders['User-Agent'] ?? 'QuangTV/1.3',
         ),
       ];
+      if (httpProxy != null) vlcHttp.add(':http-proxy=$httpProxy');
       final referrer = streamHeaders['Referer'] ?? streamHeaders['Referrer'];
       if (referrer != null && referrer.isNotEmpty) {
         vlcHttp.add(VlcHttpOptions.httpReferrer(referrer));

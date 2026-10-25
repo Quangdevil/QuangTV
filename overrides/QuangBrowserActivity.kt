@@ -159,9 +159,11 @@ class QuangBrowserActivity : Activity() {
         }
         current = WeakReference(this)
         val initial = intent.getStringExtra("url") ?: ""
+        QuangProxy.applyWeb(this, {
         if (state != null) web.restoreState(state)
         else if (httpUrl(initial)) web.loadUrl(initial)
         else web.loadData("<meta name='viewport' content='width=device-width'><h2>QuangTV · Trình duyệt</h2><p>Nhập địa chỉ hoặc từ khóa ở trên. Nhấn Tải video để chọn nguồn rồi nhấn Tải xuống. Đã tải mở tiến trình và tệp đã tải.</p><p>Hỗ trợ nguồn MP4/WebM và HLS trực tiếp. Không giải mã DRM, không gỡ watermark. Chỉ tải nội dung bạn có quyền lưu.</p>", "text/html", "UTF-8")
+        }, { Toast.makeText(this, "Không áp dụng được proxy. Hãy kiểm tra Cài đặt hoặc cập nhật Android System WebView.", Toast.LENGTH_LONG).show(); finish() })
     }
     private fun button(label: String, description: String, action: () -> Unit) = Button(this).apply {
         text = label; textSize = 12f; contentDescription = description
@@ -255,7 +257,7 @@ class QuangBrowserActivity : Activity() {
         try {
             val extension = if (Uri.parse(item.url).path?.endsWith(".webm") == true) "webm" else "mp4"
             val filename = "QuangTV-${System.currentTimeMillis()}.$extension"
-            val request = DownloadManager.Request(Uri.parse(item.url)).setTitle(filename)
+            val request = DownloadManager.Request(Uri.parse(QuangProxy.downloadUrl(this, item.url))).setTitle(filename)
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
             for ((key, value) in headers(item.url)) request.addRequestHeader(key, value)

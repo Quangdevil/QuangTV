@@ -116,7 +116,9 @@ class QuangTubeActivity : Activity() {
                 .setAutoEnterEnabled(true)
                 .build())
         }
+        QuangProxy.applyWeb(this, {
         if (savedInstanceState == null) web.loadUrl(intent.getStringExtra("url") ?: "https://m.youtube.com/") else web.restoreState(savedInstanceState)
+        }, { android.widget.Toast.makeText(this, "Không áp dụng được proxy. Hãy kiểm tra Cài đặt.", android.widget.Toast.LENGTH_LONG).show(); finish() })
     }
 
     private fun exitFullscreen() {
