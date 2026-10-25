@@ -141,67 +141,24 @@ gradle.write_text(gradle_source)
 
 # QuangTV OTA: download APK privately and launch Android's package installer.
 kotlin = activity.read_text()
-kotlin = kotlin.replace('import android.content.Intent', '''import android.content.Intent
-import android.os.Handler
-import android.os.Looper
-import androidx.core.content.FileProvider
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlin.concurrent.thread''', 1)
 ota = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/update").setMethodCallHandler { call, result ->
-            if (call.method != "install") {
-                result.notImplemented()
-            } else {
-                val url = call.argument<String>("url") ?: ""
-                if (!url.startsWith("https://github.com/Quangdevil/QuangTV/releases/download/")) {
-                    result.error("URL", "Invalid GitHub release URL", null)
-                } else {
-                    thread {
-                        try {
-                            val file = File(cacheDir, "quangtv-update.apk")
-                            var connection = URL(url).openConnection() as HttpURLConnection
-                            connection.connectTimeout = 20000
-                            connection.readTimeout = 30000
-                            connection.instanceFollowRedirects = true
-                            connection.connect()
-                            // GitHub assets redirect to HTTPS CDN hosts.
-                            var redirects = 0
-                            while (connection.responseCode in 300..399 && redirects++ < 6) {
-                                val next = URL(connection.getHeaderField("Location") ?: throw Exception("Missing redirect"))
-                                if (next.protocol != "https") throw Exception("Insecure redirect")
-                                connection.disconnect()
-                                connection = next.openConnection() as HttpURLConnection
-                                connection.connectTimeout = 20000
-                                connection.readTimeout = 30000
-                                connection.connect()
-                            }
-                            if (connection.responseCode != 200) throw Exception("Download HTTP ${connection.responseCode}")
-                            connection.inputStream.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
-                            connection.disconnect()
-                            if (file.length() < 1000000) throw Exception("APK incomplete")
-                            val apkUri = FileProvider.getUriForFile(this, "$packageName.updateprovider", file)
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            Handler(Looper.getMainLooper()).post {
-                                try {
-                                    startActivity(intent)
-                                    result.success(null)
-                                } catch (e: Exception) {
-                                    result.error("INSTALL", e.message, null)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Handler(Looper.getMainLooper()).post { result.error("DOWNLOAD", e.message, null) }
-                        }
-                    }
+            try {
+                when (call.method) {
+                    "status" -> result.success(QuangUpdateManager.status(this))
+                    "start" -> result.success(QuangUpdateManager.start(this,
+                        call.argument<String>("url") ?: "",
+                        call.argument<Number>("total")?.toLong() ?: 0,
+                        call.argument<String>("digest") ?: ""))
+                    "installReady" -> { QuangUpdateManager.install(this); result.success(null) }
+                    else -> result.notImplemented()
                 }
+            } catch (e: Exception) {
+                result.error("UPDATE", e.message, null)
             }
         }
 
 '''
+shutil.copyfile('overrides/QuangUpdateManager.kt', activity.parent / 'QuangUpdateManager.kt')
 anchor = '        // Video player intent channel'
 assert anchor in kotlin
 kotlin = kotlin.replace(anchor, ota + anchor, 1)
@@ -231,7 +188,7 @@ if 'android:usesCleartextTraffic=' not in m:
 manifest.write_text(m)
 paths = Path('upstream/flutter_app/android/app/src/main/res/xml/quangtv_update_paths.xml')
 paths.parent.mkdir(parents=True, exist_ok=True)
-paths.write_text('<?xml version="1.0" encoding="utf-8"?><paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="apk" path="."/></paths>')
+paths.write_text('<?xml version="1.0" encoding="utf-8"?><paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="apk" path="."/><files-path name="update" path="updates/"/></paths>')
 
 # Exercise the actual in-app player on an Android device, with both native engines.
 tests = Path('upstream/flutter_app/integration_test')
@@ -253,3 +210,5 @@ for style in style_root.findall('style'):
 styles35 = Path('upstream/flutter_app/android/app/src/main/res/values-v35/styles.xml')
 styles35.parent.mkdir(parents=True, exist_ok=True)
 ET.ElementTree(style_root).write(styles35, encoding='utf-8', xml_declaration=True)
+
+shutil.copyfile('tests/ota_update_test.dart', tests / 'ota_update_test.dart')

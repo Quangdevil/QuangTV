@@ -18,3 +18,6 @@ flutter test integration_test/native_hls_test.dart -d emulator-5554 --dart-defin
 
 cd "$repo_root"
 /usr/bin/python3 scripts/verify_native_frames.py
+
+cd "$repo_root/upstream/flutter_app"
+flutter test integration_test/ota_update_test.dart -d emulator-5554 2>&1 | tee "$repo_root/playback-evidence/ota-test-result.txt"
