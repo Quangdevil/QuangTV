@@ -137,9 +137,10 @@ gradle_source = gradle_source.replace(
     'signingConfig signingConfigs.release',
     1,
 )
-# Flutter's target-platform only limits Flutter binaries; VLC brings its own ABIs.
-# Filter the release variant explicitly while keeping x86_64 emulator debug builds.
-gradle_source += '\nandroid {\n    buildTypes {\n        release {\n            ndk {\n                abiFilters.clear()\n                abiFilters.add("arm64-v8a")\n            }\n        }\n    }\n    packagingOptions {\n        jniLibs { useLegacyPackaging true }\n    }\n}\n'
+# Compress native libraries; the release workflow selects the ARM64 ABI split.
+gradle_source += '\nandroid {\n    packagingOptions {\n        jniLibs { useLegacyPackaging true }\n    }\n}\n'
+# One published ABI: keep versionCode equal to the OTA build number.
+gradle_source = gradle_source.replace('variant.versionCode * 10 + abiVersionCode', 'variant.versionCode')
 gradle.write_text(gradle_source)
 
 # QuangTV OTA: download APK privately and launch Android's package installer.
