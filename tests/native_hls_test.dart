@@ -19,6 +19,7 @@ void main() {
         startWithVlc: engine == 'VLC',
       )));
       Duration? firstPosition;
+      int? firstVideoMs;
       var passed = false;
       var lastDiagnostic = DateTime.fromMillisecondsSinceEpoch(0);
       final deadline = DateTime.now().add(const Duration(seconds: 90));
@@ -45,11 +46,12 @@ void main() {
               lastDiagnostic = DateTime.now();
             }
             expect(v.hasError, isFalse, reason: v.errorDescription);
-            if (v.isPlaying && v.size.width > 0 && v.size.height > 0) position = v.position;
+            if (v.isPlaying) position = v.position;
           }
         }
         if (position != null) {
           firstPosition ??= position;
+          firstVideoMs ??= DateTime.now().millisecondsSinceEpoch;
           if (position - firstPosition >= const Duration(seconds: 5)) {
             passed = true;
             debugPrint('QUANGTV_PLAYBACK_PASS engine=$engine progressedMs=${(position - firstPosition).inMilliseconds}');
@@ -57,9 +59,10 @@ void main() {
           }
         }
       }
-      expect(passed, isTrue, reason: '$engine must show video dimensions and advance >=5s');
+      expect(passed, isTrue, reason: '$engine must play and advance >=5s; host also checks rendered video frames');
       // Keep the verified video visible long enough for host-side screenshots.
       await tester.pump(const Duration(seconds: 12));
+      debugPrint('QUANGTV_VISUAL engine=$engine startMs=$firstVideoMs endMs=${DateTime.now().millisecondsSinceEpoch}');
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 1));
     }, timeout: const Timeout(Duration(minutes: 3)));

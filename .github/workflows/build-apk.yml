@@ -49,7 +49,7 @@ jobs:
       - name: Generate deterministic HLS fixture
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg python3-pil
           mkdir -p /tmp/quangtv-hls
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 60 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 48 -c:a aac -f hls -hls_time 2 -hls_list_size 0 /tmp/quangtv-hls/index.m3u8
           python3 -m http.server 8765 --directory /tmp/quangtv-hls >/tmp/quangtv-hls-server.log 2>&1 &
