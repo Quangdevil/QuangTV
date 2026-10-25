@@ -194,7 +194,10 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           ]),
         ),
       );
-      vlc = player;
+      // VlcPlayer's widget attaches the native texture and initializes the controller.
+      // Without rebuilding after assigning vlc, no VlcPlayer is mounted and
+      // the 25-second timer always expires, regardless of stream validity.
+      setState(() => vlc = player);
       player.addListener(() {
         if (!mounted || token != vlcToken) return;
         final value = player.value;
