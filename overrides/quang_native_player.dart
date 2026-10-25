@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -35,6 +37,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   String engineStage = 'Đang chuẩn bị nguồn';
   String lastFailure = '';
   bool forceVlc = false;
+  Map<String, String> streamHeaders = {};
   static const _castChannel = MethodChannel('quangtv/cast');
   static const _externalChannel = MethodChannel('quangtv/external_player');
 
@@ -84,8 +87,21 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   @override
   void initState() {
     super.initState();
-    _open(0);
+    _initializePlayback();
     watchdog = Timer.periodic(const Duration(seconds: 1), (_) => _watch());
+  }
+
+  Future<void> _initializePlayback() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'quangtv_headers_${base64Url.encode(utf8.encode(widget.channel.url))}';
+    final saved = prefs.getString(key);
+    if (saved != null) {
+      try {
+        final decoded = jsonDecode(saved) as Map<String, dynamic>;
+        streamHeaders = decoded.map((k, v) => MapEntry(k, v.toString()));
+      } catch (_) {}
+    }
+    if (mounted) await _open(0);
   }
 
   void _watch() {
@@ -212,7 +228,11 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     final isHls = uri.path.toLowerCase().endsWith('.m3u8') || url.toLowerCase().contains('.m3u8?');
     final player = VideoPlayerController.networkUrl(uri,
       formatHint: isHls ? VideoFormat.hls : null,
-      httpHeaders: const {'User-Agent': 'Mozilla/5.0 (Linux; Android 17) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36', 'Accept': '*/*'},
+      httpHeaders: {
+        'User-Agent': 'QuangTV/1.3 Android Media3',
+        'Accept': '*/*',
+        ...streamHeaders,
+      },
     );
     try {
       await player.initialize().timeout(const Duration(seconds: 12));
