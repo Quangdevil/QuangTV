@@ -137,8 +137,12 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   }
 
   Future<void> _openVlc() async {
-    if (!mounted || usingVlc) return;
+    if (!mounted || (usingVlc && loading)) return;
     final token = ++vlcToken;
+    final oldVlc = vlc;
+    vlc = null;
+    if (oldVlc != null) await oldVlc.dispose();
+    if (!mounted || token != vlcToken) return;
     final old = controller;
     controller = null;
     usingVlc = true;
@@ -167,7 +171,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         }
       });
       vlcStartup = Timer(const Duration(seconds: 25), () {
-        if (mounted && token == vlcToken && loading) setState(() { loading = false; error = 'VLC không khởi tạo được nguồn sau 25 giây'; });
+        if (mounted && token == vlcToken && loading) setState(() { loading = false; error = 'VLC không khởi tạo được nguồn sau 25 giây. Kiểm tra URL/HTTP hoặc lỗi native VLC.'; });
       });
     } catch (e) {
       if (mounted && token == vlcToken) setState(() { loading = false; error = 'Lỗi VLC: ${e.runtimeType}'; });
@@ -281,7 +285,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           TextButton.icon(onPressed: _openExternal, icon: const Icon(Icons.open_in_new), label: const Text('Mở bằng trình phát ngoài')),
           Padding(padding: const EdgeInsets.all(12), child: SelectableText('Chẩn đoán: $lastFailure', textAlign: TextAlign.center)),
         ],
-        if (usingVlc && vlc != null) ...[
+        if (usingVlc && vlc != null && error == null) ...[
           AspectRatio(aspectRatio: 16 / 9, child: VlcPlayer(controller: vlc!, aspectRatio: 16 / 9, placeholder: const Center(child: CircularProgressIndicator()))),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             IconButton(tooltip: 'Thử lại', icon: const Icon(Icons.refresh), onPressed: _retry),
