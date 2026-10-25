@@ -182,8 +182,8 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
     controller.dispose();
     if (entered == null || !mounted) return;
     final uri = Uri.tryParse(entered);
-    if (uri == null || uri.scheme != 'https') {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Chỉ hỗ trợ liên kết HTTPS hợp lệ như TV bên ngoài')));
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Chỉ hỗ trợ liên kết HTTP hoặc HTTPS hợp lệ')));
       return;
     }
     setState(() => importing = true);
