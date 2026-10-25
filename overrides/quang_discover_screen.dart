@@ -79,16 +79,30 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       final lines = response.body.split(RegExp(r'\r?\n'));
       final result = <Channel>[];
       String name = '';
+      final headers = <String, String>{};
       for (final line in lines) {
         final s = line.trim();
         if (s.startsWith('#EXTINF:')) {
           name = s.contains(',') ? s.substring(s.indexOf(',') + 1).trim() : 'Kênh TV';
+        } else if (s.startsWith('#EXTVLCOPT:http-user-agent=')) {
+          headers['User-Agent'] = s.substring('#EXTVLCOPT:http-user-agent='.length).trim();
+        } else if (s.startsWith('#EXTVLCOPT:http-referrer=')) {
+          headers['Referer'] = s.substring('#EXTVLCOPT:http-referrer='.length).trim();
+        } else if (s.startsWith('#EXTHTTP:')) {
+          try {
+            final data = jsonDecode(s.substring('#EXTHTTP:'.length)) as Map<String, dynamic>;
+            for (final key in ['User-Agent', 'Referer', 'Cookie', 'Authorization']) {
+              if (data[key] is String) headers[key] = data[key] as String;
+            }
+          } catch (_) {}
         } else if (s.isNotEmpty && !s.startsWith('#')) {
           final stream = Uri.tryParse(s);
           if (stream != null && (stream.scheme == 'https' || stream.scheme == 'http')) {
             result.add(Channel(name: name.isEmpty ? 'Kênh TV' : name, url: s, country: 'Vietnam'));
+            if (headers.isNotEmpty) await savedPrefs.setString('quangtv_headers_${base64Url.encode(utf8.encode(s))}', jsonEncode(headers));
           }
           name = '';
+          headers.clear();
         }
       }
       final prefs = await SharedPreferences.getInstance();
