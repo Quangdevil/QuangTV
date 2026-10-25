@@ -73,6 +73,7 @@ class QuangBrowserActivity : Activity() {
     private val settings by lazy { getSharedPreferences("quangtv_browser", MODE_PRIVATE) }
     @Volatile private var blockAds = true
     private var pendingDownload: Media? = null
+    private var downloadsDialog: AlertDialog? = null
     private var fullscreen: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
     private val adHosts = setOf("doubleclick.net", "googlesyndication.com", "googleadservices.com", "adnxs.com")
@@ -82,9 +83,9 @@ class QuangBrowserActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         blockAds = settings.getBoolean("blockAds", true)
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE) }
+        root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE); isFocusableInTouchMode = true }
         WindowCompat.getInsetsController(window, root).apply { isAppearanceLightStatusBars = true; isAppearanceLightNavigationBars = true }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -117,6 +118,7 @@ class QuangBrowserActivity : Activity() {
         tools.addView(button("⋮", "Tùy chọn") { showOptions() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(tools)
         setContentView(root)
+        root.requestFocus()
         ViewCompat.requestApplyInsets(root)
         web.settings.apply {
             javaScriptEnabled = true; domStorageEnabled = true
@@ -279,7 +281,8 @@ class QuangBrowserActivity : Activity() {
                 handler.postDelayed(this, 800)
             }
         }
-        dialog.setOnDismissListener { handler.removeCallbacks(refresh) }
+        downloadsDialog = dialog
+        dialog.setOnDismissListener { handler.removeCallbacks(refresh); downloadsDialog = null }
         dialog.show(); refresh.run()
     }
     private fun showOptions() {
@@ -300,6 +303,8 @@ class QuangBrowserActivity : Activity() {
         pendingDownload = null
     }
     override fun onSaveInstanceState(out: Bundle) { web.saveState(out); super.onSaveInstanceState(out) }
+    override fun onResume() { super.onResume(); web.onResume() }
+    override fun onPause() { downloadsDialog?.dismiss(); web.onPause(); super.onPause() }
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null); exitFullscreen(); current = null
         root.removeView(web); web.destroy(); super.onDestroy()

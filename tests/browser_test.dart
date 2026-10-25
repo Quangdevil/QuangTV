@@ -14,11 +14,15 @@ void main() {
   testWidgets('Private actions stay in one row and the last channel is deletable', (tester) async {
     SharedPreferences.setMockInitialValues({'quangtv_private_channels': List.generate(30, (i) => jsonEncode({'name': 'Channel $i', 'url': 'https://example.org/$i.m3u8'}))});
     await tester.pumpWidget(const MaterialApp(home: QuangPrivateScreen()));
-    await tester.pump(const Duration(seconds: 1));
+    final loadedBy = DateTime.now().add(const Duration(seconds: 10));
+    while (find.text('Channel 0').evaluate().isEmpty && DateTime.now().isBefore(loadedBy)) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.text('Channel 0'), findsOneWidget);
     final y = tester.getRect(find.text('Thêm kênh')).center.dy;
     expect(tester.getRect(find.text('Nhập M3U')).center.dy, closeTo(y, 2));
     expect(tester.getRect(find.text('Tải lại M3U')).center.dy, closeTo(y, 2));
-    await tester.scrollUntilVisible(find.text('Channel 29'), 400, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.text('Channel 29'), 400, scrollable: find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first);
     await tester.tap(find.descendant(of: find.widgetWithText(ListTile, 'Channel 29'), matching: find.byIcon(Icons.delete_outline)));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Xóa kênh Private?'), findsOneWidget);
@@ -54,6 +58,7 @@ void main() {
       expect(current['ime'], isTrue);
       expect(current['top'], top);
       expect(current['height'], lessThan(height));
+      expect(current['height'], greaterThan(100));
       await browser.invokeMethod<void>('download');
       final downloadDeadline = DateTime.now().add(const Duration(seconds: 40));
       while (DateTime.now().isBefore(downloadDeadline)) {
