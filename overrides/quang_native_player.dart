@@ -33,6 +33,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   final Set<int> retriedSources = {};
   String diagnostic = '';
   static const _castChannel = MethodChannel('quangtv/cast');
+  static const _externalChannel = MethodChannel('quangtv/external_player');
 
   static const Map<String, List<String>> fallback = {
     'VTV1': [
@@ -193,7 +194,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       setState(() { loading = false; switching = false; error = 'Không có nguồn phát hợp lệ'; });
       return;
     }
-    final player = VideoPlayerController.networkUrl(Uri.parse(urls[index]));
+    final url = urls[index];
+    final isHls = Uri.parse(url).path.toLowerCase().endsWith('.m3u8') || url.toLowerCase().contains('.m3u8?');
+    final player = VideoPlayerController.networkUrl(Uri.parse(url), formatHint: isHls ? VideoFormat.hls : null);
     try {
       await player.initialize().timeout(const Duration(seconds: 12));
       if (!mounted || token != generation) { await player.dispose(); return; }
@@ -214,6 +217,16 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     failedSources.clear();
     retriedSources.clear();
     _open(0);
+  }
+
+  Future<void> _openExternal() async {
+    final url = sources.isNotEmpty ? sources[sourceIndex] : widget.channel.url;
+    try {
+      final ok = await _externalChannel.invokeMethod<bool>('open', {'url': url}) ?? false;
+      if (!ok && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không tìm thấy ứng dụng phát video tương thích.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không mở được trình phát ngoài: ${e.runtimeType}')));
+    }
   }
 
   Future<void> _openCast() async {
@@ -240,13 +253,17 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   Widget build(BuildContext context) {
     final p = controller;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.channel.name), actions: [IconButton(tooltip: 'Phản chiếu lên Samsung TV (Smart View)', icon: const Icon(Icons.cast), onPressed: _openCast)]),
+      appBar: AppBar(title: Text(widget.channel.name), actions: [
+        IconButton(tooltip: 'Mở trình phát ngoài (dự phòng)', icon: const Icon(Icons.open_in_new), onPressed: _openExternal),
+        IconButton(tooltip: 'Phản chiếu lên Samsung TV (Smart View)', icon: const Icon(Icons.cast), onPressed: _openCast),
+      ]),
       body: SafeArea(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         if (loading) const CircularProgressIndicator(),
         Text(usingVlc ? 'Đang phát bằng VLC nội bộ' : 'Đang phát bằng Android Media3${sources.length > 1 ? ' · Nguồn ${sourceIndex + 1}/${sources.length}' : ''}'),
         if (error != null) ...[
           Padding(padding: const EdgeInsets.all(16), child: Text(error!, textAlign: TextAlign.center)),
           FilledButton(onPressed: _retry, child: const Text('Thử lại')),
+          TextButton.icon(onPressed: _openExternal, icon: const Icon(Icons.open_in_new), label: const Text('Mở bằng trình phát ngoài')),
         ],
         if (usingVlc && vlc != null) ...[
           AspectRatio(aspectRatio: 16 / 9, child: VlcPlayer(controller: vlc!, aspectRatio: 16 / 9, placeholder: const Center(child: CircularProgressIndicator()))),
