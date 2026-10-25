@@ -332,7 +332,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           Padding(padding: const EdgeInsets.all(12), child: SelectableText('Chẩn đoán: $lastFailure', textAlign: TextAlign.center)),
         ],
         if (usingVlc && vlc != null && error == null) ...[
-          AspectRatio(aspectRatio: 16 / 9, child: VlcPlayer(controller: vlc!, aspectRatio: 16 / 9, placeholder: const Center(child: CircularProgressIndicator()))),
+          AspectRatio(aspectRatio: 16 / 9, child: VlcPlayer(controller: vlc!, virtualDisplay: false, aspectRatio: 16 / 9, placeholder: const Center(child: CircularProgressIndicator()))),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             IconButton(tooltip: 'Thử lại', icon: const Icon(Icons.refresh), onPressed: _retry),
             IconButton(tooltip: 'Tạm dừng', icon: const Icon(Icons.pause), onPressed: () => vlc?.pause()),
