@@ -173,7 +173,27 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       return;
     }
     try {
-      final player = VlcPlayerController.network(url, hwAcc: HwAcc.full, autoPlay: true);
+      // libVLC needs its own HTTP options; video_player headers do not propagate.
+      final vlcHttp = <String>[
+        VlcHttpOptions.httpReconnect(true),
+        VlcHttpOptions.httpForwardCookies(true),
+        VlcHttpOptions.httpUserAgent(streamHeaders['User-Agent'] ?? 'QuangTV/1.3'),
+      ];
+      final referrer = streamHeaders['Referer'] ?? streamHeaders['Referrer'];
+      if (referrer != null && referrer.isNotEmpty) {
+        vlcHttp.add(VlcHttpOptions.httpReferrer(referrer));
+      }
+      final player = VlcPlayerController.network(
+        url,
+        hwAcc: HwAcc.auto,
+        autoPlay: true,
+        options: VlcPlayerOptions(
+          http: VlcHttpOptions(vlcHttp),
+          advanced: VlcAdvancedOptions([
+            VlcAdvancedOptions.networkCaching(1500),
+          ]),
+        ),
+      );
       vlc = player;
       player.addListener(() {
         if (!mounted || token != vlcToken) return;
