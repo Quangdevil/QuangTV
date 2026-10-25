@@ -211,7 +211,7 @@ m = manifest.read_text()
 if 'android.permission.REQUEST_INSTALL_PACKAGES' not in m:
     m = m.replace('<manifest ', '<manifest ', 1)
     insert_at = m.find('>', m.find('<manifest')) + 1
-    m = m[:insert_at] + '\\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>' + m[insert_at:]
+    m = m[:insert_at] + '\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>' + m[insert_at:]
 if 'androidx.core.content.FileProvider' not in m:
     provider = '''<provider
             android:name="androidx.core.content.FileProvider"
@@ -222,7 +222,7 @@ if 'androidx.core.content.FileProvider' not in m:
         </provider>'''
     assert '<application' in m, 'Android application element not found'
     application_start = m.index('>', m.index('<application')) + 1
-    m = m[:application_start] + '\\n        ' + provider + m[application_start:]
+    m = m[:application_start] + '\n        ' + provider + m[application_start:]
 # IPTV playlists can be HTTPS while their HLS media segments use plain HTTP.
 # Permit cleartext for this IPTV client so Android Media3 and VLC can fetch them.
 if 'android:usesCleartextTraffic=' not in m:
