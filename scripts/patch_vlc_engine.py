@@ -75,3 +75,17 @@ s = s.replace(anchor, anchor + '''
                             height = textureView.getDecodedVideoHeight();
                         }''', 1)
 player.write_text(s)
+
+# Flutter's initSurfaceAndroidView may still choose texture-layer composition.
+# Force actual Android hierarchy composition for continuously updating VLC frames.
+interface_target = app / 'third_party/flutter_vlc_player_platform_interface'
+if interface_root != interface_target:
+    shutil.copytree(interface_root, interface_target, dirs_exist_ok=True)
+method_channel = interface_target / 'lib/src/method_channel/method_channel_vlc_player.dart'
+s = method_channel.read_text()
+assert 'PlatformViewsService.initSurfaceAndroidView(' in s or 'PlatformViewsService.initExpensiveAndroidView(' in s
+method_channel.write_text(s.replace('PlatformViewsService.initSurfaceAndroidView(', 'PlatformViewsService.initExpensiveAndroidView('))
+s = pubspec.read_text()
+if 'path: third_party/flutter_vlc_player_platform_interface' not in s:
+    s += '  flutter_vlc_player_platform_interface:\n    path: third_party/flutter_vlc_player_platform_interface\n'
+pubspec.write_text(s)
