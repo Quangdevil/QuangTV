@@ -49,6 +49,8 @@ void main() {
         }
       }
       expect(passed, isTrue, reason: '$engine must show video dimensions and advance >=5s');
+      // Keep the verified video visible long enough for host-side screenshots.
+      await tester.pump(const Duration(seconds: 12));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 1));
     }, timeout: const Timeout(Duration(minutes: 3)));

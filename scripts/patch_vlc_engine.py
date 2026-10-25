@@ -30,6 +30,15 @@ for old, new in [
 ]:
     assert old in s or new in s, f'VLC source changed: {old}'
     s = s.replace(old, new)
+# Fail early if dependency resolution ever changes the Dart/native wire protocol.
+interface = next(p for p in packages if p['name'] == 'flutter_vlc_player_platform_interface')
+interface_uri = urlparse(interface['rootUri'])
+interface_root = Path(unquote(interface_uri.path))
+if not interface_root.is_absolute():
+    interface_root = (config.parent / interface_root).resolve()
+wire_channel = 'dev.flutter.pigeon.VlcPlayerApi.initialize'
+assert wire_channel in (target / 'android/src/main/java/software/solid/fluttervlcplayer/Messages.java').read_text(), 'VLC Android Pigeon channel mismatch'
+assert wire_channel in (interface_root / 'lib/src/messages/messages.dart').read_text(), 'VLC Dart Pigeon channel mismatch'
 plugin.write_text(s)
 pubspec = app / 'pubspec.yaml'
 s = pubspec.read_text()
