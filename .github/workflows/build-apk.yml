@@ -59,7 +59,7 @@ jobs:
           mkdir -p /tmp/quangtv-hls
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 60 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 48 -c:a aac -f hls -hls_time 2 -hls_list_size 0 /tmp/quangtv-hls/index.m3u8
           ffmpeg -hide_banner -loglevel error -i /tmp/quangtv-hls/index.m3u8 -c copy /tmp/quangtv-hls/fixture.mp4
-          echo '<meta name="viewport" content="width=device-width"><h1>Browser fixture</h1><video controls src="fixture.mp4"></video>' > /tmp/quangtv-hls/browser.html
+          echo '<meta name="viewport" content="width=device-width"><h1>Browser fixture</h1><video controls preload="none" src="fixture.mp4"></video><script>fetch("fixture.mp4?resource=1").then(r=>r.arrayBuffer())</script>' > /tmp/quangtv-hls/browser.html
           python3 scripts/serve_test_media.py >/tmp/quangtv-hls-server.log 2>&1 &
       - name: Enable KVM for Android playback tests
         if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
@@ -86,6 +86,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -feature -Vulkan -memory 2048
           script: bash scripts/test_browser.sh
       - name: Retain playback logs even on failure
         if: always() && inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')

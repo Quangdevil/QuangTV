@@ -122,7 +122,7 @@ class QuangBrowserActivity : Activity() {
         ViewCompat.requestApplyInsets(root)
         web.settings.apply {
             javaScriptEnabled = true; domStorageEnabled = true
-            mediaPlaybackRequiresUserGesture = false
+            mediaPlaybackRequiresUserGesture = true
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportMultipleWindows(false)
         }

@@ -13,7 +13,12 @@ log_pid=$!
   done
 ) &
 frame_pid=$!
-trap 'kill "$log_pid" "$frame_pid" 2>/dev/null || true' EXIT
+cleanup() {
+  kill "$log_pid" "$frame_pid" 2>/dev/null || true
+  free -h > "$repo_root/playback-evidence/runner-memory.txt"
+  sudo dmesg | rg -i 'out of memory|killed process' > "$repo_root/playback-evidence/runner-oom.txt" || true
+}
+trap cleanup EXIT
 cd upstream/flutter_app
 flutter test integration_test/browser_test.dart -d emulator-5554 2>&1 | tee "$repo_root/playback-evidence/browser-test-result.txt"
 
