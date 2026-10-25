@@ -7,6 +7,9 @@ DATA=b'QUANGTV_VIDEO_FIXTURE'*8192
 seen={'http':0,'socks5':0,'dns':0,'originAuth':False,'connect':0,'redirect':0,'cookieLeak':False}
 class Origin(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path in ['/master.m3u8','/child.m3u8']:
+            playlist=(b'#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nchild.m3u8\n' if self.path=='/master.m3u8' else b'#EXTM3U\n#EXTINF:2,\nvideo.mp4\n#EXT-X-ENDLIST\n')
+            self.send_response(200);self.send_header('Content-Type','application/vnd.apple.mpegurl');self.send_header('Content-Length',str(len(playlist)));self.end_headers();self.wfile.write(playlist);return
         if self.path == '/redirect':
             self.send_response(302);self.send_header('Location','http://other.test/video.mp4');self.send_header('Content-Length','0');self.end_headers();return
         if self.headers.get('Host') == 'other.test':
@@ -82,6 +85,15 @@ for kind,handler in [('http',HTTPProxy),('socks5',SOCKSProxy)]:
             if valid:
                 assert result.stdout==DATA
                 result=curl(['--proxy','','-H','Range: bytes=123-',download]);assert result.returncode==0 and result.stdout==DATA[123:],result.stderr
+                master=download.replace('/media?','/playlist.m3u8?').replace('video.mp4','master.m3u8')
+                result=curl(['--proxy','',master]);assert result.returncode==0,result.stderr
+                playlist=result.stdout.decode()
+                key_url=playlist.split('URI="',1)[1].split('"',1)[0]
+                child_url=next(line for line in playlist.splitlines() if line.startswith('http://127.0.0.1:'))
+                assert curl(['--proxy','',key_url]).stdout==DATA
+                child=curl(['--proxy','',child_url]);assert child.returncode==0,child.stderr
+                segment_url=next(line for line in child.stdout.decode().splitlines() if line.startswith('http://127.0.0.1:'))
+                assert curl(['--proxy','',segment_url]).stdout==DATA
                 if kind=='http':
                     redirected=download.replace('video.mp4','redirect')
                     result=curl(['--proxy','','-L','-H','Cookie: fixture=session',redirected]);assert result.returncode==0 and result.stdout==DATA,result.stderr
@@ -100,4 +112,4 @@ with tempfile.TemporaryDirectory() as temp:
     finally:process.stdin.write('\n');process.stdin.flush();process.wait(timeout=5);server.shutdown();tls.shutdown()
 assert seen['http']>=3 and seen['socks5']>=2 and seen['dns']>=2 and seen['connect']>=1 and not seen['originAuth'] and seen['redirect']>0 and not seen['cookieLeak'],seen
 origin.shutdown()
-print('QUANGTV_PROXY_RELAY_PASS httpAuth=true socksAuth=true remoteDns=true httpsTunnel=true downloadRange=true badCredentialsBlocked=true originCredentialLeak=false redirectCookieScope=true')
+print('QUANGTV_PROXY_RELAY_PASS httpAuth=true socksAuth=true remoteDns=true httpsTunnel=true downloadRange=true badCredentialsBlocked=true originCredentialLeak=false redirectCookieScope=true nestedHlsAndKey=true')

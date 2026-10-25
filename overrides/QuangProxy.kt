@@ -25,13 +25,6 @@ object QuangProxy {
     private var relay: QuangProxyRelay? = null
     private var applied: String? = null
     private val originalSelector = ProxySelector.getDefault()
-    private val originalEnv = listOf("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY").associateWith { System.getenv(it) }
-    private fun nativeProxy(address: String?) {
-        for ((name, original) in originalEnv) {
-            val value = address ?: original
-            if (value == null) android.system.Os.unsetenv(name) else android.system.Os.setenv(name, value, true)
-        }
-    }
     private fun prefs(c: Context) = c.getSharedPreferences("quangtv_proxy", Context.MODE_PRIVATE)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -57,7 +50,6 @@ object QuangProxy {
     @Synchronized fun ensure(c: Context) {
         val value = try { config(c) } catch (e: Exception) {
             if (prefs(c).getBoolean("enabled", false)) {
-                nativeProxy("http://127.0.0.1:9")
                 ProxySelector.setDefault(object : ProxySelector() {
                     override fun select(uri: URI) = listOf(Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", 9)))
                     override fun connectFailed(uri: URI?, sa: SocketAddress?, ioe: java.io.IOException?) {}
@@ -71,8 +63,6 @@ object QuangProxy {
         if (value.optBoolean("enabled")) {
             val next = QuangProxyRelay(value.getString("type"), value.getString("host"), value.getInt("port"), value.optString("user"), value.optString("password"))
             relay = next
-            // libVLC's modern HTTP module reads the native environment, not Java ProxySelector.
-            nativeProxy("http://127.0.0.1:${next.port()}")
             ProxySelector.setDefault(object : ProxySelector() {
                 override fun select(uri: URI): List<Proxy> {
                     val local = uri.scheme !in listOf("http", "https") || uri.host in listOf("127.0.0.1", "localhost", "::1", "[::1]")
@@ -81,7 +71,6 @@ object QuangProxy {
                 override fun connectFailed(uri: URI?, sa: SocketAddress?, ioe: java.io.IOException?) { /* Do not fall back to the direct connection. */ }
             })
         } else {
-            nativeProxy(null)
             ProxySelector.setDefault(originalSelector)
         }
         applied = stamp

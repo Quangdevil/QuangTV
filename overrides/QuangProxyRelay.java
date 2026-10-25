@@ -39,7 +39,7 @@ public final class QuangProxyRelay implements AutoCloseable {
     private String downloadUrl(String url, String cookieHost) throws IOException {
         URI uri=URI.create(url);
         if (!Arrays.asList("http", "https").contains(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null) throw new IOException("Invalid media URL");
-        return "http://127.0.0.1:"+port()+"/"+token+"?url="+URLEncoder.encode(url,"UTF-8")+"&scope="+URLEncoder.encode(cookieHost,"UTF-8");
+        return "http://127.0.0.1:"+port()+"/"+token+(uri.getPath()!=null&&uri.getPath().toLowerCase(Locale.ROOT).endsWith(".m3u8")?"/playlist.m3u8":"/media")+"?url="+URLEncoder.encode(url,"UTF-8")+"&scope="+URLEncoder.encode(cookieHost,"UTF-8");
     }
     private static String readHeaders(InputStream in) throws IOException {
         ByteArrayOutputStream out=new ByteArrayOutputStream(); int state=0;
@@ -78,7 +78,7 @@ public final class QuangProxyRelay implements AutoCloseable {
         client.setSoTimeout(120000);client.setTcpNoDelay(true);
         String[] lines=readHeaders(client.getInputStream()).split("\r\n");String[] first=lines[0].split(" ",3);
         if(first.length!=3)throw new IOException("Invalid request");
-        if(first[1].startsWith("/"+token+"?url=") && (first[0].equals("GET")||first[0].equals("HEAD"))) { fetch(client,first,lines);return; }
+        if(first[1].startsWith("/"+token+"/") && first[1].contains("?url=") && (first[0].equals("GET")||first[0].equals("HEAD"))) { fetch(client,first,lines);return; }
         boolean connect=first[0].equals("CONNECT");
         URI destination=URI.create(connect?"https://"+first[1]:first[1]);String target=destination.getHost();
         if(target==null||(!connect&&!Arrays.asList("http","https").contains(destination.getScheme())))throw new IOException("Invalid target");
@@ -115,13 +115,48 @@ public final class QuangProxyRelay implements AutoCloseable {
         conn.setRequestProperty("Accept-Encoding","identity");
         try {
             int code=conn.getResponseCode();String location=conn.getHeaderField("Location");
+            String contentType=String.valueOf(conn.getContentType()).toLowerCase(Locale.ROOT);
+            if(contentType.contains("dash+xml")||contentType.contains("sstr+xml"))throw new IOException("This manifest requires Media3 with proxy");
+            byte[] playlist=null;
+            if(code==200 && !first[0].equals("HEAD") && (uri.getPath().toLowerCase(Locale.ROOT).endsWith(".m3u8")||contentType.contains("mpegurl"))) {
+                InputStream body=conn.getInputStream();String encoding=conn.getContentEncoding();
+                if("gzip".equalsIgnoreCase(encoding))body=new java.util.zip.GZIPInputStream(body);
+                else if("deflate".equalsIgnoreCase(encoding))body=new java.util.zip.InflaterInputStream(body);
+                try(InputStream input=body;ByteArrayOutputStream bytes=new ByteArrayOutputStream()) {
+                    byte[] buffer=new byte[8192];int n;
+                    while((n=input.read(buffer))!=-1){if(bytes.size()+n>2*1024*1024)throw new IOException("Playlist too large");bytes.write(buffer,0,n);}
+                    playlist=rewritePlaylist(url,bytes.toString("UTF-8"),cookieHost).getBytes(StandardCharsets.UTF_8);
+                }
+            }
             StringBuilder response=new StringBuilder("HTTP/1.1 "+code+" Response\r\nConnection: close\r\n");
-            for(Map.Entry<String,List<String>> h:conn.getHeaderFields().entrySet()) {if(h.getKey()!=null&&!Arrays.asList("connection","transfer-encoding","location").contains(h.getKey().toLowerCase(Locale.ROOT)))for(String value:h.getValue())response.append(h.getKey()).append(": ").append(value).append("\r\n");}
+            for(Map.Entry<String,List<String>> h:conn.getHeaderFields().entrySet()) {if(h.getKey()!=null&&!Arrays.asList("connection","transfer-encoding","location").contains(h.getKey().toLowerCase(Locale.ROOT)) && !(playlist!=null&&Arrays.asList("content-length","content-encoding","content-type","etag").contains(h.getKey().toLowerCase(Locale.ROOT))))for(String value:h.getValue())response.append(h.getKey()).append(": ").append(value).append("\r\n");}
+            if(playlist!=null)response.append("Content-Type: application/vnd.apple.mpegurl\r\nContent-Length: ").append(playlist.length).append("\r\n");
             if(location!=null)response.append("Location: ").append(downloadUrl(new URL(new URL(url),location).toString(),cookieHost)).append("\r\n");
             client.getOutputStream().write(response.append("\r\n").toString().getBytes(StandardCharsets.ISO_8859_1));
-            if(!first[0].equals("HEAD")){InputStream body=code>=400?conn.getErrorStream():conn.getInputStream();if(body!=null)try(InputStream input=body){copy(input,client.getOutputStream());}}
+            if(playlist!=null)client.getOutputStream().write(playlist);
+            else if(!first[0].equals("HEAD")){InputStream body=code>=400?conn.getErrorStream():conn.getInputStream();if(body!=null)try(InputStream input=body){copy(input,client.getOutputStream());}}
             client.getOutputStream().flush();
         } finally {conn.disconnect();}
+    }
+    private String rewritePlaylist(String base, String text, String cookieHost) throws IOException {
+        if(text.startsWith("\uFEFF"))text=text.substring(1);
+        StringBuilder result=new StringBuilder();
+        java.util.regex.Pattern attribute=java.util.regex.Pattern.compile("URI=\"([^\"]+)\"");
+        for(String line:text.split("\\r?\\n")) {
+            String value=line.trim();
+            if(!value.isEmpty()&&!value.startsWith("#"))line=mediaReference(base,value,cookieHost);
+            else if(value.startsWith("#")) {
+                java.util.regex.Matcher match=attribute.matcher(line);StringBuffer replaced=new StringBuffer();
+                while(match.find())match.appendReplacement(replaced,java.util.regex.Matcher.quoteReplacement("URI=\""+mediaReference(base,match.group(1),cookieHost)+"\""));
+                match.appendTail(replaced);line=replaced.toString();
+            }
+            result.append(line).append('\n');
+        }
+        return result.toString();
+    }
+    private String mediaReference(String base, String reference, String cookieHost) throws IOException {
+        if(reference.startsWith("data:"))return reference;
+        return downloadUrl(new URL(new URL(base),reference).toString(),cookieHost);
     }
     private static void copy(InputStream in, OutputStream out) throws IOException { byte[] buffer=new byte[32768]; int count; while((count=in.read(buffer))!=-1)out.write(buffer,0,count); }
     public void close() { closed=true;try{server.close();}catch(IOException ignored){}for(Socket s:sockets)try{s.close();}catch(IOException ignored){}workers.shutdownNow(); }

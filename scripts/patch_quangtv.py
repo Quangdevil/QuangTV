@@ -341,6 +341,11 @@ proxy_handler = '''            if (call.method == "proxyGet") {
                 } catch (_: Exception) { result.error("PROXY", "Cấu hình không hợp lệ hoặc WebView cần cập nhật", null) }
                 return@setMethodCallHandler
             }
+            if (call.method == "proxyMediaUrl") {
+                try { result.success(QuangProxy.downloadUrl(this, call.argument<String>("url") ?: "")) }
+                catch (_: Exception) { result.error("PROXY", "Không chuẩn bị được nguồn phát qua proxy", null) }
+                return@setMethodCallHandler
+            }
             if (call.method == "proxyTest") {
                 QuangProxy.test(this) { value -> if (value == null) result.error("PROXY", "Không kết nối được. Kiểm tra loại proxy, địa chỉ, tài khoản và mật khẩu.", null) else result.success(value) }
                 return@setMethodCallHandler
