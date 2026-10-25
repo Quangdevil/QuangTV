@@ -283,7 +283,21 @@ bridge = '''
 '''
 kotlin = kotlin.replace(marker, marker + bridge, 1)
 browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/browser").setMethodCallHandler { call, result ->
-            if (call.method == "open") {
+            if (call.method == "dnsStatus") {
+                try {
+                    val mode = android.provider.Settings.Global.getString(contentResolver, "private_dns_mode")
+                    val host = android.provider.Settings.Global.getString(contentResolver, "private_dns_specifier")
+                    result.success(when (mode) { "hostname" -> host ?: "DNS tùy chọn"; "off" -> "Tắt"; "opportunistic" -> "Tự động"; else -> "Xem trong cài đặt Android" })
+                } catch (_: Exception) { result.success("Xem trong cài đặt Android") }
+            } else if (call.method == "dnsSettings") {
+                try {
+                    startActivity(Intent("android.settings.PRIVATE_DNS_SETTINGS"))
+                    result.success(null)
+                } catch (_: Exception) {
+                    try { startActivity(Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)); result.success(null) }
+                    catch (_: Exception) { result.error("SETTINGS", "Không mở được cài đặt mạng", null) }
+                }
+            } else if (call.method == "open") {
                 if (browserReply != null) { result.error("BUSY", "Trình duyệt đang mở", null) }
                 else {
                     browserReply = result
@@ -293,7 +307,7 @@ browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
             } else if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 when (call.method) {
                     "inspect" -> result.success(QuangBrowserActivity.inspect())
-                    "focus", "select", "download", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
+                    "focus", "select", "download", "confirmDownload", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
                     else -> result.notImplemented()
                 }
             } else result.notImplemented()

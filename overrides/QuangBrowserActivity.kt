@@ -52,7 +52,8 @@ class QuangBrowserActivity : Activity() {
                 when (action) {
                     "focus" -> { it.address.requestFocus(); (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(it.address, InputMethodManager.SHOW_IMPLICIT) }
                     "select" -> it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
-                    "download" -> it.media.values.firstOrNull()?.let { candidate -> it.startDownload(candidate) }
+                    "download" -> it.found.performClick()
+                    "confirmDownload" -> it.downloadButton?.performClick()
                     "clearDownloads" -> {
                         for (id in it.settings.getStringSet("downloads", emptySet())!!) it.downloads.remove(id.toLong())
                         it.settings.edit().remove("downloads").apply()
@@ -66,6 +67,7 @@ class QuangBrowserActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var address: EditText
     private lateinit var found: Button
+    private var downloadButton: Button? = null
     private lateinit var progress: ProgressBar
     private val media = LinkedHashMap<String, Media>()
     private val handler = Handler(Looper.getMainLooper())
@@ -111,9 +113,9 @@ class QuangBrowserActivity : Activity() {
         val tools = LinearLayout(this).apply { gravity = Gravity.CENTER; setBackgroundColor(Color.WHITE) }
         tools.addView(button("‹", "Quay lại") { if (web.canGoBack()) web.goBack() else finish() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         tools.addView(button("›", "Tiến tới") { if (web.canGoForward()) web.goForward() }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        found = button("Video (0)", "Video tìm thấy") { showMedia() }
+        found = button("Tải video (0)", "Chọn video để tải hoặc xem") { showMedia() }
         tools.addView(found, LinearLayout.LayoutParams(0, dp(48), 1f))
-        tools.addView(button("Tải", "Quản lý tải xuống") { showDownloads() }, LinearLayout.LayoutParams(dp(52), dp(48)))
+        tools.addView(button("Đã tải", "Quản lý tải xuống") { showDownloads() }, LinearLayout.LayoutParams(dp(52), dp(48)))
         tools.addView(button("⋮", "Tùy chọn") { showOptions() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(tools)
         setContentView(root)
@@ -128,7 +130,7 @@ class QuangBrowserActivity : Activity() {
         }
         web.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
-                media.clear(); found.text = "Video (0)"; address.setText(url?.takeIf { httpUrl(it) } ?: "")
+                media.clear(); found.text = "Tải video (0)"; address.setText(url?.takeIf { httpUrl(it) } ?: "")
             }
             override fun onPageFinished(view: WebView, url: String?) { scanMedia() }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !httpUrl(request.url.toString())
@@ -137,7 +139,7 @@ class QuangBrowserActivity : Activity() {
                 if (blockAds && !request.isForMainFrame && adHosts.any { uri.host == it || uri.host?.endsWith(".$it") == true }) {
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                 }
-                if (request.method == "GET") detect(uri.toString())
+                if (request.method == "GET") detect(uri.toString(), request.requestHeaders.entries.any { it.key.equals("Sec-Fetch-Dest", true) && it.value == "video" })
                 return null
             }
         }
@@ -159,7 +161,7 @@ class QuangBrowserActivity : Activity() {
         val initial = intent.getStringExtra("url") ?: ""
         if (state != null) web.restoreState(state)
         else if (httpUrl(initial)) web.loadUrl(initial)
-        else web.loadData("<meta name='viewport' content='width=device-width'><h2>QuangTV · Trình duyệt</h2><p>Nhập địa chỉ hoặc từ khóa ở trên. Nhấn Video để xem nguồn phát tìm thấy rồi chọn xem hoặc tải.</p><p>Hỗ trợ nguồn MP4/WebM và HLS trực tiếp. Không giải mã DRM, không gỡ watermark. Chỉ tải nội dung bạn có quyền lưu.</p>", "text/html", "UTF-8")
+        else web.loadData("<meta name='viewport' content='width=device-width'><h2>QuangTV · Trình duyệt</h2><p>Nhập địa chỉ hoặc từ khóa ở trên. Nhấn Tải video để chọn nguồn rồi nhấn Tải xuống. Đã tải mở tiến trình và tệp đã tải.</p><p>Hỗ trợ nguồn MP4/WebM và HLS trực tiếp. Không giải mã DRM, không gỡ watermark. Chỉ tải nội dung bạn có quyền lưu.</p>", "text/html", "UTF-8")
     }
     private fun button(label: String, description: String, action: () -> Unit) = Button(this).apply {
         text = label; textSize = 12f; contentDescription = description
@@ -179,20 +181,37 @@ class QuangBrowserActivity : Activity() {
     }
     private fun detect(url: String, direct: Boolean = false) {
         if (!httpUrl(url)) return
-        val path = Uri.parse(url).path?.lowercase(Locale.ROOT) ?: ""
+        val parsed = Uri.parse(url)
+        val path = parsed.path?.lowercase(Locale.ROOT) ?: ""
+        val mime = parsed.getQueryParameter("mime_type") ?: parsed.getQueryParameter("mime") ?: ""
         val kind = when {
             path.endsWith(".m3u8") -> "HLS"
-            listOf(".mp4", ".webm", ".m4v", ".mov").any { path.endsWith(it) } || direct -> "Video"
+            listOf(".mp4", ".webm", ".m4v", ".mov").any { path.endsWith(it) } || mime.startsWith("video/") || mime.startsWith("video_") || direct -> "Video"
             else -> return
         }
         handler.post {
             if (!isFinishing && media.size < 40 && !media.containsKey(url)) {
-                media[url] = Media(url, kind); found.text = "Video (${media.size})"
+                media[url] = Media(url, kind); found.text = "Tải video (${media.size})"
             }
         }
     }
     private fun scanMedia(after: () -> Unit = {}) {
-        web.evaluateJavascript("""JSON.stringify(Array.from(document.querySelectorAll('video,video source')).filter(v=>!v.mediaKeys).map(v=>v.currentSrc||v.src).filter(Boolean))""") { value ->
+        web.evaluateJavascript("""(()=>{
+          const urls=Array.from(document.querySelectorAll('video,video source')).filter(v=>!v.mediaKeys).map(v=>v.currentSrc||v.src);
+          document.querySelectorAll('meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[itemprop="contentUrl"]').forEach(m=>urls.push(m.content));
+          performance.getEntriesByType('resource').filter(r=>r.initiatorType==='video').forEach(r=>urls.push(r.name));
+          const keys=new Set(['contentUrl','playAddr','downloadAddr','playable_url','playable_url_quality_hd','browser_native_sd_url','browser_native_hd_url']);
+          let visited=0;
+          const walk=(v,depth)=>{
+            if(!v||typeof v!=='object'||depth>24||++visited>30000)return;
+            Object.entries(v).forEach(([k,x])=>{
+              if(keys.has(k)&&typeof x==='string'&&/^https?:\/\//.test(x))urls.push(x);
+              if(x&&typeof x==='object')walk(x,depth+1);
+            });
+          };
+          document.querySelectorAll('script[type="application/json"],script[type="application/ld+json"]').forEach(s=>{if(s.textContent.length<2000000){try{walk(JSON.parse(s.textContent),0)}catch(e){}}});
+          return JSON.stringify(Array.from(new Set(urls.filter(Boolean))).slice(0,80));
+        })()""") { value ->
             try {
                 val decoded = org.json.JSONTokener(value).nextValue() as? String ?: "[]"
                 val list = JSONArray(decoded)
@@ -207,6 +226,7 @@ class QuangBrowserActivity : Activity() {
     }
     private fun showMedia() { scanMedia { if (!isFinishing) showMediaDialog() } }
     private fun showMediaDialog() {
+        downloadButton = null
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), dp(8)) }
         val dialog = AlertDialog.Builder(this).setTitle("Video tìm thấy").setView(ScrollView(this).apply { addView(box) }).setNegativeButton("Đóng", null).create()
         if (media.isEmpty()) box.addView(TextView(this).apply { text = "Chưa thấy nguồn video trực tiếp. Hãy phát video trên trang rồi thử lại. Video blob/DRM hoặc nguồn bị hạn chế có thể không hỗ trợ." })
@@ -215,7 +235,9 @@ class QuangBrowserActivity : Activity() {
             box.addView(TextView(this).apply { text = "${item.kind} · ${uri.host}\n${uri.lastPathSegment ?: "Video"}"; setPadding(0, dp(12), 0, 0) })
             val row = LinearLayout(this)
             row.addView(button("Xem", "Xem bằng player") { dialog.dismiss(); choose(item) }, LinearLayout.LayoutParams(0, dp(48), 1f))
-            row.addView(button(if (item.kind == "HLS") "HLS: chỉ xem" else "Tải", "Tải video") { startDownload(item) }.apply { isEnabled = item.kind != "HLS" }, LinearLayout.LayoutParams(0, dp(48), 1f))
+            val download = button(if (item.kind == "HLS") "HLS: chỉ xem" else "Tải xuống", "Tải video này") { dialog.dismiss(); startDownload(item); showDownloads() }.apply { isEnabled = item.kind != "HLS" }
+            if (downloadButton == null && download.isEnabled) downloadButton = download
+            row.addView(download, LinearLayout.LayoutParams(0, dp(48), 1f))
             box.addView(row)
         }
         dialog.show()

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tv_viewer/screens/quang_browser_screen.dart';
+import 'package:tv_viewer/screens/quang_discover_screen.dart';
 import 'package:tv_viewer/screens/quang_private_screen.dart';
 import 'package:video_player/video_player.dart';
 
@@ -30,6 +31,22 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
     debugPrint('QUANGTV_PRIVATE_LAYOUT_PASS oneRow=true lastDeleteAccessible=true');
+  });
+  testWidgets('Settings separates Private PIN and system DNS', (tester) async {
+    SharedPreferences.setMockInitialValues({'quangtv_cached_channels': '[]'});
+    await tester.pumpWidget(const MaterialApp(home: QuangDiscoverScreen()));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.byTooltip('Cài đặt'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Đổi PIN Private'), findsOneWidget);
+    await tester.tap(find.text('DNS hệ thống'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Google DNS'), findsOneWidget);
+    expect(find.text('Nhập DNS thủ công'), findsOneWidget);
+    await tester.tap(find.text('Đóng'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+    debugPrint('QUANGTV_DNS_SETTINGS_PASS separatePanel=true googleAndCustom=true');
   });
   testWidgets('Browser discovers a direct MP4, respects bars and keyboard, downloads and opens native player', (tester) async {
     const browser = MethodChannel('quangtv/browser');
@@ -60,6 +77,8 @@ void main() {
       expect(current['height'], lessThan(height));
       expect(current['height'], greaterThan(100));
       await browser.invokeMethod<void>('download');
+      await Future<void>.delayed(const Duration(seconds: 1));
+      await browser.invokeMethod<void>('confirmDownload');
       final downloadDeadline = DateTime.now().add(const Duration(seconds: 40));
       while (DateTime.now().isBefore(downloadDeadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 500));

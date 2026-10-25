@@ -39,6 +39,63 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     _restore();
   }
 
+  Future<void> _showSettings() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const ListTile(title: Text('Cài đặt', style: TextStyle(fontWeight: FontWeight.bold))),
+        ListTile(leading: const Icon(Icons.lock_outline), title: const Text('Đổi PIN Private'), onTap: () {
+          Navigator.pop(sheetContext);
+          QuangPrivateSecurity.configure(context);
+        }),
+        ListTile(leading: const Icon(Icons.dns_outlined), title: const Text('DNS hệ thống'), subtitle: const Text('Tự động · Google DNS · Nhập thủ công'), onTap: () {
+          Navigator.pop(sheetContext);
+          _showDnsSettings();
+        }),
+      ])),
+    );
+  }
+
+  Future<void> _showDnsSettings() async {
+    const bridge = MethodChannel('quangtv/browser');
+    String current = 'Xem trạng thái trong cài đặt Android';
+    try { current = await bridge.invokeMethod<String>('dnsStatus') ?? current; } on PlatformException { /* Android may restrict this read. */ }
+    if (!mounted) return;
+    await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('DNS hệ thống'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Hiện tại: $current'),
+        const SizedBox(height: 12),
+        const Text('Android yêu cầu bạn xác nhận thay đổi DNS trong cài đặt hệ thống. DNS không đổi IP hoặc vị trí sang Mỹ.'),
+        ListTile(contentPadding: EdgeInsets.zero, title: const Text('Google DNS'), subtitle: const Text('8.8.8.8 / 8.8.4.4\nPrivate DNS: dns.google'), onTap: () async {
+          await Clipboard.setData(const ClipboardData(text: 'dns.google'));
+          if (!dialogContext.mounted) return;
+          Navigator.pop(dialogContext);
+          await _openDnsSystem('Chọn tên máy chủ nhà cung cấp, dán dns.google rồi nhấn Lưu.');
+        }),
+        ListTile(contentPadding: EdgeInsets.zero, title: const Text('Nhập DNS thủ công'), subtitle: const Text('Nhập tên máy chủ Private DNS trong Android'), onTap: () async {
+          Navigator.pop(dialogContext);
+          await _openDnsSystem('Chọn tên máy chủ nhà cung cấp và nhập tên DNS của bạn.');
+        }),
+        ListTile(contentPadding: EdgeInsets.zero, title: const Text('Tự động / Tắt'), subtitle: const Text('Dùng DNS của mạng đang kết nối'), onTap: () async {
+          Navigator.pop(dialogContext);
+          await _openDnsSystem('Chọn Tự động hoặc Tắt rồi nhấn Lưu trong Android.');
+        }),
+        const Text('Nếu muốn nhập hai địa chỉ IP: mở Wi-Fi → mạng hiện tại → cài đặt IP tĩnh → DNS 1 / DNS 2. Cần giữ đúng IP và gateway của mạng.'),
+      ])),
+      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Đóng'))],
+    ));
+  }
+
+  Future<void> _openDnsSystem(String instruction) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(instruction), duration: const Duration(seconds: 10)));
+    try { await const MethodChannel('quangtv/browser').invokeMethod<void>('dnsSettings'); }
+    on PlatformException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không mở được trang DNS. Hãy mở Cài đặt Android → Kết nối → DNS riêng tư.')));
+    }
+  }
+
   Future<void> _restore() async {
     final prefs = await SharedPreferences.getInstance();
     deletedChannels = (prefs.getStringList('quangtv_deleted_channels') ?? []).toSet();
@@ -311,7 +368,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           if (!await QuangPrivateSecurity.verify(context) || !context.mounted) return;
           await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangPrivateScreen()));
         }),
-        IconButton(tooltip: 'Cài đặt Private', icon: const Icon(Icons.settings), onPressed: () => QuangPrivateSecurity.configure(context)),
+        IconButton(tooltip: 'Cài đặt', icon: const Icon(Icons.settings), onPressed: _showSettings),
       ]),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
         SizedBox(width: double.infinity, child: SegmentedButton<int>(
