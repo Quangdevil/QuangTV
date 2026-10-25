@@ -36,6 +36,7 @@ class QuangTubeActivity : Activity() {
         } ?: mapOf("url" to "", "progress" to 0, "position" to 0.0, "playing" to false, "error" to "closed")
         fun close() { current?.get()?.finish() }
     }
+    private var pageReady = false
     private var pageProgress = 0
     private var pageError = ""
     private var position = 0.0
@@ -43,7 +44,7 @@ class QuangTubeActivity : Activity() {
     private val probeHandler = Handler(Looper.getMainLooper())
     private val probe = object : Runnable {
         override fun run() {
-            if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            if (pageReady && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 web.evaluateJavascript("""JSON.stringify((()=>{const v=document.querySelector('video');return {position:v?v.currentTime:0,playing:v?!v.paused:false};})())""") { value ->
                     try {
                         val decoded = org.json.JSONTokener(value).nextValue() as? String ?: "{}"
@@ -97,7 +98,16 @@ class QuangTubeActivity : Activity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
         web.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                pageReady = false
+                pageError = ""
+                adSkip.stop()
+                android.util.Log.i("QuangTube", "page started: $url")
+            }
             override fun onPageFinished(view: WebView?, url: String?) {
+                pageReady = true
+                adSkip.start()
+                android.util.Log.i("QuangTube", "page finished: $url")
                 if (url?.contains("/watch") == true) {
                     web.evaluateJavascript("""(()=>{const b=document.querySelector('.ytp-large-play-button');if(b)b.click();const v=document.querySelector('video');if(v)v.play().catch(()=>{});})()""", null)
                 }
@@ -176,7 +186,7 @@ class QuangTubeActivity : Activity() {
     }
     override fun onResume() {
         super.onResume()
-        adSkip.start()
+        if (pageReady) adSkip.start()
         if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) probeHandler.post(probe)
     }
     override fun onPause() {
