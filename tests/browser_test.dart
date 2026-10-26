@@ -65,7 +65,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: QuangBrowserScreen(initialUrl: 'http://10.0.2.2:8765/proxy-only/browser.html')));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.runAsync(() async {
-      Future<Map<dynamic, dynamic>> state() async => await browser.invokeMapMethod<dynamic, dynamic>('inspect') ?? {};
+      Future<Map<dynamic, dynamic>> state() async => await browser.invokeMapMethod<dynamic, dynamic>('inspect').timeout(const Duration(seconds: 10)) ?? {};
       Map<dynamic, dynamic> current = {};
       final deadline = DateTime.now().add(const Duration(seconds: 40));
       while (DateTime.now().isBefore(deadline)) {
@@ -114,26 +114,32 @@ void main() {
       }
       expect(current['downloaded'], greaterThan(0));
       debugPrint('QUANGTV_BROWSER_PASS directDiscovery=true safeTop=true keyboardResizesBottom=true downloadedBytes=${current['downloaded']}');
-      await browser.invokeMethod<void>('openDownloads');
+      debugPrint('CHECKPOINT_DOWNLOAD_COMPLETE');
+      await browser.invokeMethod<void>('openDownloads').timeout(const Duration(seconds: 10));
       await Future<void>.delayed(const Duration(milliseconds: 300));
-      await browser.invokeMethod<void>('openCompleted');
+      await browser.invokeMethod<void>('openCompleted').timeout(const Duration(seconds: 10));
       final previewDeadline = DateTime.now().add(const Duration(seconds: 20));
       while (DateTime.now().isBefore(previewDeadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 300));
         if ((await state())['previewPlaying'] == true) break;
       }
       expect((await state())['previewPlaying'], isTrue);
-      await browser.invokeMethod<void>('closePreview');
-      await browser.invokeMethod<void>('playPage');
+      debugPrint('CHECKPOINT_PREVIEW_PLAYING');
+      await browser.invokeMethod<void>('closePreview').timeout(const Duration(seconds: 10));
+      await browser.invokeMethod<void>('playPage').timeout(const Duration(seconds: 10));
       await Future<void>.delayed(const Duration(seconds: 2));
-      await browser.invokeMethod<void>('landscape');
+      debugPrint('CHECKPOINT_BEFORE_LANDSCAPE');
+      await browser.invokeMethod<void>('landscape').timeout(const Duration(seconds: 10));
+      debugPrint('CHECKPOINT_LANDSCAPE_REQUESTED');
       final landscapeDeadline = DateTime.now().add(const Duration(seconds: 15));
       while (DateTime.now().isBefore(landscapeDeadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 300));
         if ((await state())['fullscreen'] == true) break;
       }
       expect((await state())['fullscreen'], isTrue);
-      await browser.invokeMethod<void>('portrait');
+      debugPrint('CHECKPOINT_BEFORE_PORTRAIT');
+      await browser.invokeMethod<void>('portrait').timeout(const Duration(seconds: 10));
+      debugPrint('CHECKPOINT_PORTRAIT_REQUESTED');
       await Future<void>.delayed(const Duration(seconds: 1));
       expect((await state())['fullscreen'], isFalse);
       debugPrint('QUANGTV_BROWSER_UI_PASS tabs=true downloadedFilePlayback=true quickProxy=true landscapeFullscreen=true adsBlocked=true');

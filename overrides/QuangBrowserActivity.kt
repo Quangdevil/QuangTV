@@ -49,6 +49,7 @@ class QuangBrowserActivity : Activity() {
         } ?: emptyMap()
         fun testAction(action: String) {
             current?.get()?.let {
+                android.util.Log.i("QuangBrowserTest", "action=$action begin")
                 when (action) {
                     "focus" -> { it.address.requestFocus(); (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(it.address, InputMethodManager.SHOW_IMPLICIT) }
                     "select" -> it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
@@ -70,6 +71,7 @@ class QuangBrowserActivity : Activity() {
                     }
                     "close" -> it.finish()
                 }
+                android.util.Log.i("QuangBrowserTest", "action=$action end")
             }
         }
     }
@@ -128,7 +130,7 @@ class QuangBrowserActivity : Activity() {
         address = EditText(this).apply {
             textSize = 14f; setSingleLine(true); hint = "Địa chỉ web hoặc từ khóa"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
-            imeOptions = EditorInfo.IME_ACTION_GO
+            imeOptions = EditorInfo.IME_ACTION_GO or EditorInfo.IME_FLAG_NO_EXTRACT_UI
             setOnEditorActionListener { _, action, _ ->
                 if (action == EditorInfo.IME_ACTION_GO) { navigate(text.toString()); true } else false
             }
@@ -390,6 +392,7 @@ class QuangBrowserActivity : Activity() {
         return bytes
     }
     private fun showDownloads() {
+        if (downloadsDialog?.isShowing == true) return
         val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(12), dp(20), dp(12)) }
         val dialog = AlertDialog.Builder(this).setTitle("Tải xuống").setView(ScrollView(this).apply { addView(rows) })
             .setNeutralButton("Hủy tải đang chạy") { _, _ ->
@@ -468,6 +471,7 @@ class QuangBrowserActivity : Activity() {
     }
     override fun onConfigurationChanged(config: android.content.res.Configuration) {
         super.onConfigurationChanged(config)
+        android.util.Log.i("QuangBrowserLayout", "orientation=${config.orientation}")
         if (config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
             web.evaluateJavascript("""(()=>{const v=Array.from(document.querySelectorAll('video')).find(v=>!v.paused&&!v.ended&&!v.mediaKeys);if(!v)return false;const parents=[];for(let p=v.parentElement;p;p=p.parentElement){parents.push([p,p.getAttribute('style')]);p.style.setProperty('transform','none','important');p.style.setProperty('position','static','important');p.style.setProperty('overflow','visible','important');}window.__quangFull={v,s:v.getAttribute('style'),parents};v.style.cssText+=';position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:black!important;object-fit:contain!important';return true})()""") { result ->
                 if (result == "true") { address.clearFocus(); root.requestFocus(); (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(address.windowToken, 0); orientationFullscreen = true; addressBar.visibility = View.GONE; toolbar.visibility = View.GONE; progress.visibility = View.GONE; WindowCompat.getInsetsController(window, root).hide(WindowInsetsCompat.Type.systemBars()); ViewCompat.requestApplyInsets(root) }
