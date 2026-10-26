@@ -71,20 +71,32 @@ class QuangBrowserActivity : Activity() {
                         it.address.clearFocus(); it.root.requestFocus()
                         (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(it.root.windowToken, 0)
                         it.web.evaluateJavascript("(()=>{const v=document.querySelector('video');v.muted=true;v.play().catch(console.error)})()", null)
-                        it.handler.postDelayed({ it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }, 800)
-                        it.handler.postDelayed({
-                            it.rotationPassed = it.orientationFullscreen && it.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-                            android.util.Log.i("QuangBrowserTest", "landscapeFullscreen=${it.rotationPassed}")
-                            it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                        }, 6500)
-                        it.handler.postDelayed({
+                        val returnToPlayer = {
                             lastRotation = mapOf("rotationPassed" to it.rotationPassed, "fullscreen" to it.orientationFullscreen)
                             for (id in it.settings.getStringSet("downloads", emptySet())!!) it.downloads.remove(id.toLong())
                             it.settings.edit().remove("downloads").apply()
-                            // Return to the real Flutter player after checking both native
-                            // orientations, so its test surface can draw again.
                             it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
-                        }, 8500)
+                            Unit
+                        }
+                        var checks = 0
+                        val ready = object : Runnable {
+                            override fun run() {
+                                it.web.evaluateJavascript("(()=>{const v=document.querySelector('video');return !!v&&!v.paused&&v.readyState>=3&&v.currentTime>=1})()") { playing ->
+                                    if (playing == "true") {
+                                        android.util.Log.i("QuangBrowserTest", "videoFramesAdvanced=true")
+                                        it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                        it.handler.postDelayed({
+                                            it.rotationPassed = it.orientationFullscreen && it.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                                            android.util.Log.i("QuangBrowserTest", "landscapeFullscreen=${it.rotationPassed}")
+                                            it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                        }, 6500)
+                                        it.handler.postDelayed({ returnToPlayer() }, 8500)
+                                    } else if (++checks < 60) it.handler.postDelayed(this, 250)
+                                    else returnToPlayer()
+                                }
+                            }
+                        }
+                        it.handler.postDelayed(ready, 250)
                     }
                     "landscape" -> it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                     "portrait" -> it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT

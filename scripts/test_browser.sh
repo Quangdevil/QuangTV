@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo_root="$(pwd)"
+export QUANGTV_EVIDENCE="$repo_root/playback-evidence"
 mkdir -p "$repo_root/playback-evidence"
 adb shell settings put secure immersive_mode_confirmations confirmed
 adb logcat -c
@@ -15,6 +16,14 @@ log_pid=$!
 frame_pid=$!
 cleanup() {
   kill "$log_pid" "$frame_pid" 2>/dev/null || true
+  python3 - <<'PYCRASH'
+import glob,pathlib,shutil
+out=pathlib.Path(__import__('os').environ['QUANGTV_EVIDENCE'])/'emulator-crashes';out.mkdir(parents=True,exist_ok=True)
+for name in glob.glob('/tmp/android-runner/emu-crash-*'):
+    p=pathlib.Path(name)
+    if p.is_dir(): shutil.copytree(p,out/p.name,dirs_exist_ok=True)
+    elif p.is_file(): shutil.copy2(p,out/p.name)
+PYCRASH
   free -h > "$repo_root/playback-evidence/runner-memory.txt"
   sudo dmesg | grep -Ei 'out of memory|killed process' > "$repo_root/playback-evidence/runner-oom.txt" || true
 }
