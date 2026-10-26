@@ -250,7 +250,7 @@ class QuangBrowserActivity : Activity() {
                 tabMedia[view]?.clear()
                 if (view === web) { found.text = "Tải video"; activeUrls = emptySet(); address.setText(url?.takeIf { httpUrl(it) } ?: "") }
             }
-            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); if (view === web) scanMedia() }
+            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); installMediaMute(view); if (view === web) scanMedia() }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
                 if (uri.scheme == "intent") {
@@ -277,7 +277,7 @@ class QuangBrowserActivity : Activity() {
         }
         view.webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                if (!isUserGesture || resultMsg == null || tabs.size >= 8) return false
+                if (blockAds || !isUserGesture || resultMsg == null || tabs.size >= 8) { if (blockAds) blockedAds.incrementAndGet(); return false }
                 newTab("about:blank")
                 val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
                 transport.webView = web; resultMsg.sendToTarget(); return true
@@ -347,11 +347,12 @@ class QuangBrowserActivity : Activity() {
     private fun detect(url: String, direct: Boolean = false, owner: WebView = web) {
         if (!httpUrl(url)) return
         val parsed = Uri.parse(url)
+        if (adHost(parsed.host)) return
         val path = parsed.path?.lowercase(Locale.ROOT) ?: ""
         val mime = parsed.getQueryParameter("mime_type") ?: parsed.getQueryParameter("mime") ?: ""
         val kind = when {
             path.endsWith(".m3u8") -> "HLS"
-            listOf(".mp4", ".webm", ".m4v", ".mov").any { path.endsWith(it) } || mime.startsWith("video/") || mime.startsWith("video_") || direct -> "Video"
+            listOf(".mp4", ".webm", ".m4v", ".mov").any { path.endsWith(it) } || mime.startsWith("video/") || mime.startsWith("video_") || (direct && (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".m4v") || path.endsWith(".mov"))) -> "Video"
             else -> return
         }
         handler.post {
@@ -499,6 +500,27 @@ class QuangBrowserActivity : Activity() {
         downloadsDialog = dialog
         dialog.setOnDismissListener { handler.removeCallbacks(refresh); downloadsDialog = null }
         dialog.show(); refresh.run()
+    }
+    private fun installMediaMute(view: WebView) {
+        // A persistent DOM observer covers SPA navigation and dynamically inserted players.
+        // WebView cannot mute cross-origin iframes; those require native audio policy.
+        view.evaluateJavascript("""(()=>{
+          if(window.__quangMuteInstalled)return;
+          window.__quangMuteInstalled=true;
+          const mute=()=>{
+            document.querySelectorAll('video,audio').forEach(m=>{
+              if(!m.muted)m.muted=true;
+              if(m.volume!==0)m.volume=0;
+              m.setAttribute('muted','');
+              m.defaultMuted=true;
+            });
+          };
+          document.addEventListener('play',mute,true);
+          document.addEventListener('playing',mute,true);
+          new MutationObserver(mute).observe(document.documentElement,{childList:true,subtree:true});
+          setInterval(mute,600);
+          mute();
+        })()""", null)
     }
     private fun applyAdStyle(view: WebView) {
         if (!blockAds) { view.evaluateJavascript("document.getElementById('quang-ad-style')?.remove()", null); return }
