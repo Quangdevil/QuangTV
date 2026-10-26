@@ -111,6 +111,7 @@ void main() {
       );
       await tester.testTextInput.receiveAction(TextInputAction.search);
       bool passed = false;
+      String blockedReason = '';
       await tester.runAsync(() async {
         double? first;
         final openedAt = DateTime.now();
@@ -128,6 +129,7 @@ void main() {
             }
             final error = status['error']?.toString() ?? '';
             if (error.isNotEmpty) {
+              blockedReason = error;
               debugPrint('QUANGTV_YOUTUBE_BLOCKED $error');
               break;
             }
@@ -152,7 +154,7 @@ void main() {
         passed,
         isTrue,
         reason:
-            'A public YouTube video must really play in integrated QuangTube',
+            'A public YouTube video must really play in integrated QuangTube. $blockedReason',
       );
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 1));

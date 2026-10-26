@@ -37,7 +37,7 @@ class QuangTubeActivity : Activity() {
     private val probe = object : Runnable {
         override fun run() {
             if (pageReady && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-                web.evaluateJavascript("""JSON.stringify((()=>{const v=document.querySelector('video');const e=document.querySelector('.ytp-error-content-wrap,ytm-player-error-message-renderer');return {position:v?v.currentTime:0,playing:v?!v.paused:false,error:e?(e.innerText||''):''};})())""") { value ->
+                web.evaluateJavascript("""JSON.stringify((()=>{const v=document.querySelector('video');const e=document.querySelector('.ytp-error-content-wrap,ytm-player-error-message-renderer');const status=window.ytInitialPlayerResponse?.playabilityStatus;const body=(document.body?.innerText||'').replace(/\s+/g,' ');const blocked=/sign in to confirm.*not a bot/i.test(body);const reason=blocked?'YouTube requires sign-in to confirm this network is not a bot':(e?.innerText||((status&&status.status!=='OK')?status.reason:'')||'');return {position:v?v.currentTime:0,playing:v?!v.paused:false,error:reason.slice(0,256)};})())""") { value ->
                     try {
                         val decoded = org.json.JSONTokener(value).nextValue() as? String ?: "{}"
                         val state = org.json.JSONObject(decoded)
