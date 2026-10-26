@@ -105,7 +105,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           emulator-build: 15261927
-          api-level: 35
+          api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_2
@@ -116,12 +116,12 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           emulator-build: 15261927
-          api-level: 35
+          api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader -feature -Vulkan,-HardwareDecoder -memory 2048
+          emulator-options: -no-window -show-kernel -no-snapshot -noaudio -no-boot-anim -gpu swiftshader -feature -Vulkan,-HardwareDecoder -memory 2048
           script: bash scripts/test_browser.sh
       - name: Retain playback logs even on failure
         if: always() && inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')

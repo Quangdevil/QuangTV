@@ -9,10 +9,13 @@ adb logcat -c
 adb logcat -v threadtime > "$repo_root/playback-evidence/browser-logcat.txt" &
 log_pid=$!
 (
-  while true; do
-    adb exec-out screencap -p > "$repo_root/playback-evidence/browser-$(date +%s).png" || true
-    sleep 5
+  # Avoid screenshot readback while the emulator is initializing a decoder.
+  # Capture the actual moving video after its clock advances and rotation settles.
+  while ! grep -q 'videoFramesAdvanced=true' "$repo_root/playback-evidence/browser-logcat.txt"; do
+    sleep 1
   done
+  sleep 2
+  adb exec-out screencap -p > "$repo_root/playback-evidence/browser-landscape-playing.png" || true
 ) &
 frame_pid=$!
 cleanup() {
