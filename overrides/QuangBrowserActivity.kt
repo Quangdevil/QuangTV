@@ -515,6 +515,7 @@ class QuangBrowserActivity : Activity() {
           window.__quangMuteInstalled=true;
           const mute=()=>{
             document.querySelectorAll('video,audio').forEach(m=>{
+              if(m.__quangUserAudio)return;
               if(!m.muted)m.muted=true;
               if(m.volume!==0)m.volume=0;
               m.setAttribute('muted','');
@@ -582,10 +583,10 @@ class QuangBrowserActivity : Activity() {
           btn('−10s',()=>seek(-10));
           btn('▶ / ❚❚',()=>v.paused?v.play():v.pause());
           btn('+10s',()=>seek(10));
-          btn('Âm thanh',()=>{v.muted=!v.muted;v.volume=v.muted?0:1;});
+          btn('Âm thanh',()=>{v.__quangUserAudio=true;v.muted=!v.muted;v.volume=v.muted?0:1;});
           const volume=document.createElement('input');volume.type='range';volume.min='0';volume.max='1';volume.step='0.05';volume.value=String(v.muted?0:v.volume);
           volume.style.cssText='width:95px;max-width:20vw';volume.setAttribute('aria-label','Âm lượng');
-          volume.oninput=()=>{v.volume=Number(volume.value);v.muted=v.volume===0;};
+          volume.oninput=()=>{v.__quangUserAudio=true;v.volume=Number(volume.value);v.muted=v.volume===0;};
           bar.appendChild(volume);
           const reveal=()=>{bar.style.opacity='1';bar.style.pointerEvents='auto';clearTimeout(window.__quangHideControls);window.__quangHideControls=setTimeout(()=>{bar.style.opacity='0';bar.style.pointerEvents='none'},4000)};
           v.addEventListener('click',reveal);
