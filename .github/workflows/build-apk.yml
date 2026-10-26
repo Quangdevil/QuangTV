@@ -56,11 +56,36 @@ jobs:
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
         run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
+      - name: Restore permanent QuangTV release keystore
+        if: github.ref == 'refs/heads/main'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.QUANGTV_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.QUANGTV_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.QUANGTV_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.QUANGTV_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::Missing QUANGTV_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing QUANGTV_STORE_PASSWORD secret"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Missing QUANGTV_KEY_PASSWORD secret"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::Missing QUANGTV_KEY_ALIAS secret"; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > upstream/flutter_app/android/app/quangtv-release.jks
+          {
+            echo 'storeFile=quangtv-release.jks'
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+          } > upstream/flutter_app/android/key.properties
+          chmod 600 upstream/flutter_app/android/key.properties upstream/flutter_app/android/app/quangtv-release.jks
+      - name: Compile signed QuangTV release APK
+        if: github.ref == 'refs/heads/main'
+        working-directory: upstream/flutter_app
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0 --build-number=${{ github.run_number }}
       - name: Generate deterministic HLS fixture
         if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg python3-pil
+          timeout 60s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq || true
+          timeout 180s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y ffmpeg python3-pil
           mkdir -p /tmp/quangtv-hls
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 60 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 48 -c:a aac -f hls -hls_time 2 -hls_list_size 0 /tmp/quangtv-hls/index.m3u8
           ffmpeg -hide_banner -loglevel error -i /tmp/quangtv-hls/index.m3u8 -c copy /tmp/quangtv-hls/fixture.mp4
@@ -104,31 +129,6 @@ jobs:
           overwrite: true
           path: playback-evidence/
           if-no-files-found: warn
-      - name: Restore permanent QuangTV release keystore
-        if: github.ref == 'refs/heads/main'
-        env:
-          KEYSTORE_BASE64: ${{ secrets.QUANGTV_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.QUANGTV_STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.QUANGTV_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.QUANGTV_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          test -n "$KEYSTORE_BASE64" || { echo "::error::Missing QUANGTV_KEYSTORE_BASE64 secret"; exit 1; }
-          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing QUANGTV_STORE_PASSWORD secret"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "::error::Missing QUANGTV_KEY_PASSWORD secret"; exit 1; }
-          test -n "$KEY_ALIAS" || { echo "::error::Missing QUANGTV_KEY_ALIAS secret"; exit 1; }
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > upstream/flutter_app/android/app/quangtv-release.jks
-          {
-            echo 'storeFile=quangtv-release.jks'
-            echo "storePassword=$KEYSTORE_PASSWORD"
-            echo "keyPassword=$KEY_PASSWORD"
-            echo "keyAlias=$KEY_ALIAS"
-          } > upstream/flutter_app/android/key.properties
-          chmod 600 upstream/flutter_app/android/key.properties upstream/flutter_app/android/app/quangtv-release.jks
-      - name: Compile signed QuangTV release APK
-        if: github.ref == 'refs/heads/main'
-        working-directory: upstream/flutter_app
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0 --build-number=${{ github.run_number }}
       - name: Name APK by version and build
         if: github.ref == 'refs/heads/main'
         run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk"
