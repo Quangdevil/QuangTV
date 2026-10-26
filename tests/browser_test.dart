@@ -95,7 +95,7 @@ void main() {
         expect((await response.fold<int>(0, (total, bytes) => total + bytes.length)), greaterThan(0));
       } finally { client.close(force: true); }
       final proxied = await browser.invokeMapMethod<String, dynamic>('networkCheck', {'url': 'http://10.0.2.2:8765/proxy-only/fixture.mp4', 'viaProxy': true});
-      expect(proxied?['code'], 200);
+      expect(proxied?['code'], 206);
       debugPrint('QUANGTV_APP_PROXY_PASS homeToggle=true directDefault=true dartHttpRouted=true diagnostics=true');
     });
     await tester.pumpWidget(const MaterialApp(home: QuangBrowserScreen(initialUrl: 'http://10.0.2.2:8765/proxy-only/browser.html')));
