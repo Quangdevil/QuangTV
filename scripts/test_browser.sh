@@ -5,6 +5,9 @@ export QUANGTV_EVIDENCE="$repo_root/playback-evidence"
 mkdir -p "$repo_root/playback-evidence"
 adb shell settings put secure immersive_mode_confirmations confirmed
 adb shell getprop > "$repo_root/playback-evidence/emulator-properties.txt"
+# Record the selected GPU backend; never silently fall back to the crashing one.
+adb shell dumpsys SurfaceFlinger > "$repo_root/playback-evidence/emulator-renderer.txt"
+grep -Ei 'Mesa|lavapipe|llvmpipe' "$repo_root/playback-evidence/emulator-renderer.txt"
 adb logcat -c
 adb logcat -v threadtime > "$repo_root/playback-evidence/browser-logcat.txt" &
 log_pid=$!

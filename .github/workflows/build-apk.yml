@@ -42,6 +42,14 @@ jobs:
           cache: true
       - name: Apply QuangTV UI integration
         run: python3 scripts/patch_quangtv.py
+      - name: Restore Gradle dependency cache
+        id: gradle-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: quangtv-gradle-linux-agp892-desugar215-v1
       - name: Flutter dependencies
         working-directory: upstream/flutter_app
         run: flutter pub get
@@ -122,6 +130,14 @@ jobs:
           flutter build apk --debug --target-platform android-x64 --target integration_test/browser_test.dart
           cd android
           ./gradlew --stop
+      - name: Save compiled dependency cache before runtime tests
+        if: steps.gradle-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: quangtv-gradle-linux-agp892-desugar215-v1
       - name: Test browser, native playback, controls and OTA on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -131,7 +147,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -show-kernel -no-snapshot -noaudio -no-boot-anim -gpu swiftshader -feature -Vulkan,-HardwareDecoder -memory 2048 -cores 2
+          emulator-options: -no-window -show-kernel -no-snapshot -noaudio -no-boot-anim -gpu lavapipe -verbose -feature -Vulkan,-HardwareDecoder -memory 2048 -cores 2
           script: |
             bash scripts/test_browser.sh
             bash scripts/test_native_hls.sh
@@ -161,7 +177,7 @@ jobs:
           VERSION="1.3.0"
           TAG="quangtv-v${VERSION}-build${{ github.run_number }}"
           APK="QuangTV-v${VERSION}-build${{ github.run_number }}-arm64.apk"
-          gh release create "$TAG" "$APK" --draft --title "QuangTV v${VERSION} (build ${{ github.run_number }})" --notes "Signed ARM64 APK. Browser, Media3/VLC, controls and OTA emulator tests passed. Install over previous releases without uninstalling."
+          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --draft --title "QuangTV v${VERSION} (build ${{ github.run_number }})" --notes "Signed ARM64 APK. Browser, Media3/VLC, controls and OTA emulator tests passed. Install over previous releases without uninstalling."
           mkdir -p "$RUNNER_TEMP/ota-download"
           gh release download "$TAG" --pattern "$APK" --dir "$RUNNER_TEMP/ota-download"
           cmp "$APK" "$RUNNER_TEMP/ota-download/$APK"
