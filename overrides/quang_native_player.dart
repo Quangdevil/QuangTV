@@ -655,7 +655,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
               Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
-                  onTap: _revealControls,
+                  onTap: _toggleControls,
                   onDoubleTapDown: (details) {
                     final width = MediaQuery.sizeOf(context).width;
                     _seekRelative(details.localPosition.dx < width / 2 ? -10 : 10);
