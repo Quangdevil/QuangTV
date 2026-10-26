@@ -4,6 +4,7 @@ repo_root="$(pwd)"
 export QUANGTV_EVIDENCE="$repo_root/playback-evidence"
 mkdir -p "$repo_root/playback-evidence"
 adb shell settings put secure immersive_mode_confirmations confirmed
+adb shell getprop > "$repo_root/playback-evidence/emulator-properties.txt"
 adb logcat -c
 adb logcat -v threadtime > "$repo_root/playback-evidence/browser-logcat.txt" &
 log_pid=$!
@@ -16,7 +17,7 @@ log_pid=$!
 frame_pid=$!
 cleanup() {
   kill "$log_pid" "$frame_pid" 2>/dev/null || true
-  python3 - <<'PYCRASH'
+  python3 - <<'PYCRASH' || true
 import glob,pathlib,shutil
 out=pathlib.Path(__import__('os').environ['QUANGTV_EVIDENCE'])/'emulator-crashes';out.mkdir(parents=True,exist_ok=True)
 for name in glob.glob('/tmp/android-runner/emu-crash-*'):
