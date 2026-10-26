@@ -1,5 +1,5 @@
 """Deterministic, authenticated proxy tests. No real account or public network."""
-import base64, http.server, pathlib, select, socket, socketserver, ssl, subprocess, tempfile, threading, urllib.parse
+import base64, http.server, pathlib, select, socket, socketserver, ssl, struct, subprocess, tempfile, threading, urllib.parse
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 CLASSES=tempfile.mkdtemp(prefix='quang-proxy-classes-')
 subprocess.run(['java','com.sun.tools.javac.Main','-d',CLASSES,str(ROOT/'overrides/QuangProxyRelay.java'),str(ROOT/'tests/proxy/RelayMain.java')],check=True)
@@ -94,10 +94,15 @@ for kind,handler in [('http',HTTPProxy),('socks5',SOCKSProxy)]:
                 if kind=='http':
                     held=[]
                     try:
-                        for _ in range(32):
+                        for _ in range(64):
                             sock=socket.create_connection(('127.0.0.1',local),timeout=5);held.append(sock)
                             sock.sendall(f'CONNECT education.test:{origin.server_port} HTTP/1.1\r\nHost: education.test\r\n\r\n'.encode())
                             assert headers(sock).startswith(b'HTTP/1.1 200'), 'Concurrent browser tunnel rejected'
+                        with socket.create_connection(('127.0.0.1',local),timeout=5) as overflow:
+                            assert headers(overflow).startswith(b'HTTP/1.1 503'), 'Overload must be explicit'
+                        for _ in range(8):
+                            cancelled=socket.create_connection(('127.0.0.1',local),timeout=5)
+                            cancelled.setsockopt(socket.SOL_SOCKET,socket.SO_LINGER,struct.pack('ii',1,0));cancelled.close()
                         for sock in held: sock.sendall(b'GET /video.mp4 HTTP/1.1\r\nHost: education.test\r\nConnection: close\r\n\r\n')
                         for sock in held:
                             assert headers(sock).startswith(b'HTTP/1.0 200')
@@ -132,4 +137,4 @@ with tempfile.TemporaryDirectory() as temp:
     finally:process.stdin.write('\n');process.stdin.flush();process.wait(timeout=5);server.shutdown();tls.shutdown()
 assert seen['http']>=3 and seen['socks5']>=2 and seen['dns']>=2 and seen['connect']>=1 and not seen['originAuth'] and seen['redirect']>0 and not seen['cookieLeak'],seen
 origin.shutdown()
-print('QUANGTV_PROXY_RELAY_PASS httpAuth=true socksAuth=true remoteDns=true httpsTunnel=true downloadRange=true badCredentialsBlocked=true originCredentialLeak=false redirectCookieScope=true nestedHlsAndKey=true concurrentTunnels32=true socksIpTypes=true')
+print('QUANGTV_PROXY_RELAY_PASS httpAuth=true socksAuth=true remoteDns=true httpsTunnel=true downloadRange=true badCredentialsBlocked=true originCredentialLeak=false redirectCookieScope=true nestedHlsAndKey=true concurrentTunnels64=true overloadIsolated=true socksIpTypes=true')

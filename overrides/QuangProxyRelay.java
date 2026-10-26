@@ -26,7 +26,12 @@ public final class QuangProxyRelay implements AutoCloseable {
             while (!closed) {
                 try {
                     Socket client=server.accept();
-                    if (!slots.tryAcquire()) { client.getOutputStream().write("HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".getBytes(StandardCharsets.US_ASCII)); client.close(); continue; }
+                    if (!slots.tryAcquire()) {
+                        try { client.getOutputStream().write("HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".getBytes(StandardCharsets.US_ASCII)); }
+                        catch (IOException ignored) { /* A rejected/cancelled client must not close the relay. */ }
+                        finally { try { client.close(); } catch (IOException ignored) {} }
+                        continue;
+                    }
                     sockets.add(client);
                     workers.execute(() -> { try { handle(client); } catch (Exception ignored) { try { client.getOutputStream().write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".getBytes(StandardCharsets.US_ASCII)); } catch(Exception ignoredAgain) {} } finally { sockets.remove(client); try { client.close(); } catch(IOException ignored) {} slots.release(); } });
                 } catch (IOException e) { if (!closed) close(); }
