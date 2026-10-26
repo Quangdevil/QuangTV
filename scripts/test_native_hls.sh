@@ -28,9 +28,16 @@ flutter test integration_test/ota_update_test.dart -d emulator-5554 2>&1 | tee "
 ota_status=${PIPESTATUS[0]}
 
 cd "$repo_root"
-/usr/bin/python3 scripts/verify_native_frames.py
+python3 scripts/verify_native_frames.py
 
 visual_status=$?
 if (( hls_status != 0 || ota_status != 0 || visual_status != 0 )); then
   exit 1
 fi
+
+set -e
+for marker in 'QUANGTV_PLAYBACK_PASS engine=Media3' 'QUANGTV_PLAYBACK_PASS engine=VLC' 'QUANGTV_CONTROLS_PASS engine=Media3' 'QUANGTV_CONTROLS_PASS engine=VLC' 'QUANGTV_UI_PASS engine=Media3' 'QUANGTV_UI_PASS engine=VLC'; do
+  grep -q "$marker" "$repo_root/playback-evidence/test-result.txt"
+done
+grep -q QUANGTV_OTA_PASS "$repo_root/playback-evidence/ota-test-result.txt"
+grep -q QUANGTV_YOUTUBE_PASS "$repo_root/playback-evidence/ota-test-result.txt"
