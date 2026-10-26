@@ -387,7 +387,7 @@ g = gradle.read_text().replace('compileOptions {', 'compileOptions {\n        co
 g += '\ndependencies { coreLibraryDesugaring "com.android.tools:desugar_jdk_libs_nio:2.1.5"; implementation "com.github.TeamNewPipe:NewPipeExtractor:v0.26.5" }\n'
 gradle.write_text(g)
 proguard = Path('upstream/flutter_app/android/app/proguard-rules.pro')
-proguard.write_text(proguard.read_text() + '\n-keep class org.mozilla.javascript.** { *; }\n-keep class org.mozilla.classfile.ClassFileWriter\n-dontwarn org.mozilla.javascript.tools.**\n')
+proguard.write_text(proguard.read_text() + '\n-keep class org.mozilla.javascript.** { *; }\n-keep class org.mozilla.classfile.ClassFileWriter\n-dontwarn org.mozilla.javascript.tools.**\n-dontwarn org.mozilla.javascript.JavaToJSONConverters\n-dontwarn javax.script.**\n-dontwarn jdk.dynalink.**\n')
 
 # AGP 8.8+ fixes D8 issue 362339872 with core-library desugaring directory inputs.
 settings_gradle = Path('upstream/flutter_app/android/settings.gradle')
