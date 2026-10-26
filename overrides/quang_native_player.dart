@@ -286,11 +286,13 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       if (vtvKey != null) {
         // Keep live VTV on Media3: a failing native VLC fallback can
         // crash the process, and repeated retries obscure the real error.
-        if (mounted) setState(() {
-          loading = false;
-          switching = false;
-          error = 'Không phát được VTV bằng Media3. Kiểm tra nguồn mạng hoặc thử lại.';
-        });
+        if (mounted) {
+          setState(() {
+            loading = false;
+            switching = false;
+            error = 'Không phát được VTV bằng Media3. Kiểm tra nguồn mạng hoặc thử lại.';
+          });
+        }
         return;
       }
       sourceIndex = 0;
