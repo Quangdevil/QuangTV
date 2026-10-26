@@ -57,7 +57,8 @@ jobs:
           path: ${{ runner.temp }}/quangtv-ffmpeg-8.1/ffmpeg.tar.xz
           key: ffmpeg-linux64-d113aa5b57ab0dcf
       - name: Install image verification dependency
-        run: python3 -m pip install --only-binary=:all: Pillow==11.3.0
+        run: |
+          python3 -m pip install --only-binary=:all: Pillow==11.3.0
       - name: Install verified FFmpeg test tools
         run: bash scripts/setup_test_ffmpeg.sh
       - name: Generate and decode deterministic HLS fixture
