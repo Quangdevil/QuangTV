@@ -99,7 +99,10 @@ void main() {
       debugPrint('QUANGTV_APP_PROXY_PASS homeToggle=true directDefault=true dartHttpRouted=true diagnostics=true');
     });
     await tester.pumpWidget(const MaterialApp(home: QuangBrowserScreen(initialUrl: 'http://10.0.2.2:8765/proxy-only/browser.html')));
-    await tester.pump(const Duration(milliseconds: 500));
+    debugPrint('CHECKPOINT_BROWSER_NATIVE_OPEN_REQUESTED');
+    // The native Activity pauses Flutter rendering. A pump here requests a
+    // Flutter frame that Android cannot deliver until the browser closes.
+    // Poll the actual native state instead; keep every UI/playback assertion.
     await tester.runAsync(() async {
       Future<Map<dynamic, dynamic>> state() async => await browser.invokeMapMethod<dynamic, dynamic>('inspect').timeout(const Duration(seconds: 10)) ?? {};
       Map<dynamic, dynamic> current = {};
@@ -109,6 +112,7 @@ void main() {
         current = await state();
         if ((current['count'] as num? ?? 0) > 0) break;
       }
+      debugPrint('CHECKPOINT_BROWSER_NATIVE_READY count=${current['count']}');
       expect(current['count'], greaterThan(0));
       expect(current['blockedAds'], greaterThan(0));
       await browser.invokeMethod<void>('showTabs');
