@@ -126,21 +126,9 @@ void main() {
       expect((await state())['previewPlaying'], isTrue);
       debugPrint('CHECKPOINT_PREVIEW_PLAYING');
       await browser.invokeMethod<void>('closePreview').timeout(const Duration(seconds: 10));
-      await browser.invokeMethod<void>('playPage').timeout(const Duration(seconds: 10));
-      await Future<void>.delayed(const Duration(seconds: 2));
-      debugPrint('CHECKPOINT_BEFORE_LANDSCAPE');
-      await browser.invokeMethod<void>('landscape').timeout(const Duration(seconds: 10));
-      debugPrint('CHECKPOINT_LANDSCAPE_REQUESTED');
-      final landscapeDeadline = DateTime.now().add(const Duration(seconds: 15));
-      while (DateTime.now().isBefore(landscapeDeadline)) {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-        if ((await state())['fullscreen'] == true) break;
-      }
-      expect((await state())['fullscreen'], isTrue);
-      debugPrint('CHECKPOINT_BEFORE_PORTRAIT');
-      await browser.invokeMethod<void>('portrait').timeout(const Duration(seconds: 10));
-      debugPrint('CHECKPOINT_PORTRAIT_REQUESTED');
-      await Future<void>.delayed(const Duration(seconds: 1));
+      await browser.invokeMethod<void>('rotatePlayback').timeout(const Duration(seconds: 10));
+      await Future<void>.delayed(const Duration(seconds: 9));
+      expect((await state())['rotationPassed'], isTrue);
       expect((await state())['fullscreen'], isFalse);
       debugPrint('QUANGTV_BROWSER_UI_PASS tabs=true downloadedFilePlayback=true quickProxy=true landscapeFullscreen=true adsBlocked=true');
       await browser.invokeMethod<void>('clearDownloads');

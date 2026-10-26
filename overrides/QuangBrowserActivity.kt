@@ -35,7 +35,7 @@ import java.lang.ref.WeakReference
 import java.util.Locale
 import org.json.JSONArray
 
-/** System WebView, direct media discovery and Android-managed downloads. No proxy or extraction backend. */
+/** System WebView, direct media discovery and Android-managed downloads. Native proxy transport and public video extraction. */
 class QuangBrowserActivity : Activity() {
     data class Media(val url: String, val kind: String)
     companion object {
@@ -43,7 +43,7 @@ class QuangBrowserActivity : Activity() {
         fun inspect(): Map<String, Any> = current?.get()?.let {
             val point = IntArray(2); it.root.getLocationOnScreen(point)
             val insets = ViewCompat.getRootWindowInsets(it.root)
-            mapOf("blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
+            mapOf("rotationPassed" to it.rotationPassed, "blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
                 "statusBar" to (insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0),
                 "downloaded" to it.downloadedBytes(), "height" to it.web.height, "ime" to (insets?.isVisible(WindowInsetsCompat.Type.ime()) ?: false))
         } ?: emptyMap()
@@ -62,7 +62,21 @@ class QuangBrowserActivity : Activity() {
                     "openDownloads" -> it.downloadsButton.performClick()
                     "openCompleted" -> it.openCompletedButton?.performClick()
                     "closePreview" -> it.previewDialog?.dismiss()
-                    "playPage" -> { it.web.settings.mediaPlaybackRequiresUserGesture = false; it.web.evaluateJavascript("document.querySelector('video').play()", null) }
+                    "playPage" -> it.web.evaluateJavascript("(()=>{const v=document.querySelector('video');v.muted=true;v.play().catch(console.error)})()", null)
+                    "rotatePlayback" -> {
+                        // Drive both OS rotations natively: the hidden Flutter test surface
+                        // cannot deliver a frame while the native activity is landscape.
+                        it.rotationPassed = false
+                        it.address.clearFocus(); it.root.requestFocus()
+                        (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(it.root.windowToken, 0)
+                        it.web.evaluateJavascript("(()=>{const v=document.querySelector('video');v.muted=true;v.play().catch(console.error)})()", null)
+                        it.handler.postDelayed({ it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }, 800)
+                        it.handler.postDelayed({
+                            it.rotationPassed = it.orientationFullscreen && it.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                            android.util.Log.i("QuangBrowserTest", "landscapeFullscreen=${it.rotationPassed}")
+                            it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        }, 6500)
+                    }
                     "landscape" -> it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                     "portrait" -> it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                     "clearDownloads" -> {
@@ -98,6 +112,7 @@ class QuangBrowserActivity : Activity() {
     private var downloadsDialog: AlertDialog? = null
     private val blockedAds = java.util.concurrent.atomic.AtomicInteger()
     private var orientationFullscreen = false
+    private var rotationPassed = false
     private var activeUrls = emptySet<String>()
     private lateinit var addressBar: LinearLayout
     private lateinit var toolbar: LinearLayout
@@ -472,6 +487,8 @@ class QuangBrowserActivity : Activity() {
     override fun onConfigurationChanged(config: android.content.res.Configuration) {
         super.onConfigurationChanged(config)
         android.util.Log.i("QuangBrowserLayout", "orientation=${config.orientation}")
+        address.clearFocus(); root.requestFocus()
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(root.windowToken, 0)
         if (config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
             web.evaluateJavascript("""(()=>{const v=Array.from(document.querySelectorAll('video')).find(v=>!v.paused&&!v.ended&&!v.mediaKeys);if(!v)return false;const parents=[];for(let p=v.parentElement;p;p=p.parentElement){parents.push([p,p.getAttribute('style')]);p.style.setProperty('transform','none','important');p.style.setProperty('position','static','important');p.style.setProperty('overflow','visible','important');}window.__quangFull={v,s:v.getAttribute('style'),parents};v.style.cssText+=';position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:black!important;object-fit:contain!important';return true})()""") { result ->
                 if (result == "true") { address.clearFocus(); root.requestFocus(); (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(address.windowToken, 0); orientationFullscreen = true; addressBar.visibility = View.GONE; toolbar.visibility = View.GONE; progress.visibility = View.GONE; WindowCompat.getInsetsController(window, root).hide(WindowInsetsCompat.Type.systemBars()); ViewCompat.requestApplyInsets(root) }
