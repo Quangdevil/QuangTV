@@ -28,3 +28,5 @@ Build 170 passed all browser assertions, Media3/VLC playback clocks and controls
 The live YouTube test again received a sign-in/bot challenge. It remains a failing required test, never a success/skip. Run the original native/OTA/YouTube suite before the browser suite's optional extractor diagnostic, so extractor requests cannot contaminate the ordinary WebView playback baseline. Both suites and all their assertions still run.
 
 The Android suite orchestrator runs both suites even when the first fails, then returns failure if either status is nonzero. This preserves full diagnostics without allowing a failed test to publish an APK.
+
+Build 171 still failed pixel motion checks with automatic libVLC direct rendering. Use hardware decoding without opaque direct rendering (`HwAcc.decoding`, which disables mediacodec-dr/omxil-dr in the plugin). Retain all visual/motion checks, codec functionality and controls; this change must be validated before release.

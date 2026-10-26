@@ -370,7 +370,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       }
       final player = VlcPlayerController.network(
         playbackUrl,
-        hwAcc: HwAcc.auto,
+        // Keep hardware decoding while avoiding opaque zero-copy surfaces that
+        // can freeze while the audio/playback clock continues advancing.
+        hwAcc: HwAcc.decoding,
         autoPlay: false,
         options: VlcPlayerOptions(
           http: VlcHttpOptions(vlcHttp),
