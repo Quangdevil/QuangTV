@@ -24,6 +24,7 @@ object QuangProxy {
     private val worker = Executors.newSingleThreadExecutor()
     private var relay: QuangProxyRelay? = null
     private var applied: String? = null
+    var onChanged: ((Map<String, Any>) -> Unit)? = null
     private val originalSelector = ProxySelector.getDefault()
     private fun prefs(c: Context) = c.getSharedPreferences("quangtv_proxy", Context.MODE_PRIVATE)
     private fun key(): SecretKey {
@@ -90,6 +91,7 @@ object QuangProxy {
         val body = cipher.doFinal(value.toString().toByteArray(Charsets.UTF_8))
         check(prefs(c).edit().putString("encrypted", Base64.encodeToString(cipher.iv, Base64.NO_WRAP)+":"+Base64.encodeToString(body, Base64.NO_WRAP)).putBoolean("enabled", enabled).commit())
         ensure(c)
+        main.post { onChanged?.invoke(state(c)) }
     }
     fun toggle(c: Context, enabled: Boolean) {
         val v = config(c)
@@ -106,6 +108,31 @@ object QuangProxy {
         } catch (_: Exception) { failed() }
     }
     @Synchronized fun downloadUrl(c: Context, url: String): String { ensure(c); return relay?.downloadUrl(url) ?: url }
+    fun checkNetwork(c: Context, raw: String, viaProxy: Boolean, done: (Map<String, Any>) -> Unit) {
+        worker.execute {
+            val start = System.nanoTime()
+            val result = try {
+                val uri = URI(raw)
+                require(uri.scheme in listOf("http", "https") && uri.host != null && uri.userInfo == null) { "URL không hợp lệ" }
+                val proxy = if (viaProxy) { ensure(c); relay?.javaProxy() ?: throw IllegalStateException("Bật VPN ứng dụng ở màn hình IPTV trước khi kiểm tra qua proxy") } else Proxy.NO_PROXY
+                val connection = URL(raw).openConnection(proxy) as HttpURLConnection
+                connection.connectTimeout = 8000; connection.readTimeout = 8000; connection.instanceFollowRedirects = false
+                connection.setRequestProperty("Range", "bytes=0-0")
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 QuangTV-NetworkCheck")
+                try {
+                    val code = connection.responseCode
+                    mapOf<String, Any>("ok" to (code in 200..399), "stage" to "HTTP", "code" to code,
+                        "detail" to when { code == 403 -> "Đã kết nối, nhưng trang từ chối HTTP 403"; code == 429 -> "Trang giới hạn yêu cầu HTTP 429"; else -> "HTTP $code" })
+                } finally { connection.disconnect() }
+            } catch (e: Exception) {
+                val stage = when(e) { is UnknownHostException -> "DNS"; is javax.net.ssl.SSLException -> "TLS"; is SocketTimeoutException -> "TIMEOUT"; is ConnectException -> "TCP"; else -> "NETWORK" }
+                val detail = when(stage) { "DNS" -> "Không phân giải được DNS"; "TLS" -> "Lỗi chứng chỉ hoặc bắt tay TLS"; "TIMEOUT" -> "Kết nối hết thời gian chờ"; "TCP" -> "Không kết nối được máy chủ/cổng"; else -> if(e is IllegalArgumentException || e is IllegalStateException) e.message ?: "Lỗi kết nối" else "Lỗi đường truyền" }
+                mapOf<String, Any>("ok" to false, "stage" to stage, "detail" to detail)
+            }.toMutableMap()
+            result["ms"] = (System.nanoTime()-start)/1000000
+            main.post { done(result) }
+        }
+    }
     fun test(c: Context, done: (Map<String, Any>?) -> Unit) {
         worker.execute {
             val result = try {

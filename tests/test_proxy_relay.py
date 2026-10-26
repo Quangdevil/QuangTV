@@ -66,9 +66,12 @@ class SOCKSProxy(socketserver.BaseRequestHandler):
         assert readn(self.request,3)==b'\x05\x01\x02';self.request.sendall(b'\x05\x02')
         assert readn(self.request,1)==b'\x01';u=readn(self.request,readn(self.request,1)[0]);p=readn(self.request,readn(self.request,1)[0])
         if (u,p)!=(b'fixture-user',b'fixture-password'):self.request.sendall(b'\x01\x01');return
-        self.request.sendall(b'\x01\x00');assert readn(self.request,4)==b'\x05\x01\x00\x03'
-        name=readn(self.request,readn(self.request,1)[0]);port=int.from_bytes(readn(self.request,2),'big')
-        assert name==b'education.test';seen['dns']+=1;seen['socks5']+=1
+        self.request.sendall(b'\x01\x00');request=readn(self.request,4); assert request[:3]==b'\x05\x01\x00'
+        if request[3]==3:
+            name=readn(self.request,readn(self.request,1)[0]); assert name==b'education.test';seen['dns']+=1
+        else:
+            assert request[3] in (1,4); readn(self.request,4 if request[3]==1 else 16)
+        port=int.from_bytes(readn(self.request,2),'big'); seen['socks5']+=1
         with socket.create_connection(('127.0.0.1',origin.server_port),timeout=5) as remote:
             self.request.sendall(b'\x05\x00\x00\x01\x7f\x00\x00\x01\x00\x00');pipe(self.request,remote)
 class Server(socketserver.ThreadingTCPServer):allow_reuse_address=True;daemon_threads=True
@@ -84,6 +87,23 @@ for kind,handler in [('http',HTTPProxy),('socks5',SOCKSProxy)]:
             assert (result.returncode==0)==valid,(kind,result.stderr)
             if valid:
                 assert result.stdout==DATA
+                if kind=='socks5':
+                    for literal in ['127.0.0.1','[::1]']:
+                        result=curl(['--proxy',f'http://127.0.0.1:{local}',f'http://{literal}:{origin.server_port}/video.mp4'])
+                        assert result.returncode==0 and result.stdout==DATA,result.stderr
+                if kind=='http':
+                    held=[]
+                    try:
+                        for _ in range(32):
+                            sock=socket.create_connection(('127.0.0.1',local),timeout=5);held.append(sock)
+                            sock.sendall(f'CONNECT education.test:{origin.server_port} HTTP/1.1\r\nHost: education.test\r\n\r\n'.encode())
+                            assert headers(sock).startswith(b'HTTP/1.1 200'), 'Concurrent browser tunnel rejected'
+                        for sock in held: sock.sendall(b'GET /video.mp4 HTTP/1.1\r\nHost: education.test\r\nConnection: close\r\n\r\n')
+                        for sock in held:
+                            assert headers(sock).startswith(b'HTTP/1.0 200')
+                            assert readn(sock,len(DATA))==DATA
+                    finally:
+                        for sock in held: sock.close()
                 result=curl(['--proxy','','-H','Range: bytes=123-',download]);assert result.returncode==0 and result.stdout==DATA[123:],result.stderr
                 master=download.replace('/media?','/playlist.m3u8?').replace('video.mp4','master.m3u8')
                 result=curl(['--proxy','',master]);assert result.returncode==0,result.stderr
@@ -112,4 +132,4 @@ with tempfile.TemporaryDirectory() as temp:
     finally:process.stdin.write('\n');process.stdin.flush();process.wait(timeout=5);server.shutdown();tls.shutdown()
 assert seen['http']>=3 and seen['socks5']>=2 and seen['dns']>=2 and seen['connect']>=1 and not seen['originAuth'] and seen['redirect']>0 and not seen['cookieLeak'],seen
 origin.shutdown()
-print('QUANGTV_PROXY_RELAY_PASS httpAuth=true socksAuth=true remoteDns=true httpsTunnel=true downloadRange=true badCredentialsBlocked=true originCredentialLeak=false redirectCookieScope=true nestedHlsAndKey=true')
+print('QUANGTV_PROXY_RELAY_PASS httpAuth=true socksAuth=true remoteDns=true httpsTunnel=true downloadRange=true badCredentialsBlocked=true originCredentialLeak=false redirectCookieScope=true nestedHlsAndKey=true concurrentTunnels32=true socksIpTypes=true')

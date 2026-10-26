@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:tv_viewer/screens/quang_network.dart';
+import 'package:tv_viewer/screens/quang_proxy_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,6 +64,39 @@ void main() {
       expect(saved?.containsKey('password'), isFalse);
       final restored = await browser.invokeMapMethod<String, dynamic>('proxyGet');
       expect(restored?['user'], 'fixture-user');
+      await QuangNetwork.install();
+    });
+    await tester.pumpWidget(MaterialApp(home: Scaffold(appBar: AppBar(actions: const [QuangProxyToggle()]))));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byTooltip('Tắt VPN ứng dụng'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('quangtv-home-vpn')));
+    await tester.runAsync(() async { await Future<void>.delayed(const Duration(milliseconds: 500)); });
+    await tester.pump();
+    expect(find.byTooltip('Bật VPN ứng dụng'), findsOneWidget);
+    await tester.runAsync(() async {
+      final client = HttpClient();
+      try {
+        final response = await (await client.getUrl(Uri.parse('http://10.0.2.2:8765/proxy-only/fixture.mp4'))).close();
+        expect(response.statusCode, 403);
+        await response.drain<void>();
+      } finally { client.close(force: true); }
+      final direct = await browser.invokeMapMethod<String, dynamic>('networkCheck', {'url': 'http://10.0.2.2:8765/browser.html', 'viaProxy': false});
+      expect(direct?['code'], 200);
+    });
+    await tester.tap(find.byKey(const ValueKey('quangtv-home-vpn')));
+    await tester.runAsync(() async { await Future<void>.delayed(const Duration(milliseconds: 500)); });
+    await tester.pump();
+    expect(find.byTooltip('Tắt VPN ứng dụng'), findsOneWidget);
+    await tester.runAsync(() async {
+      final client = HttpClient();
+      try {
+        final response = await (await client.getUrl(Uri.parse('http://10.0.2.2:8765/proxy-only/fixture.mp4'))).close();
+        expect(response.statusCode, 200);
+        expect((await response.fold<int>(0, (total, bytes) => total + bytes.length)), greaterThan(0));
+      } finally { client.close(force: true); }
+      final proxied = await browser.invokeMapMethod<String, dynamic>('networkCheck', {'url': 'http://10.0.2.2:8765/proxy-only/fixture.mp4', 'viaProxy': true});
+      expect(proxied?['code'], 200);
+      debugPrint('QUANGTV_APP_PROXY_PASS homeToggle=true directDefault=true dartHttpRouted=true diagnostics=true');
     });
     await tester.pumpWidget(const MaterialApp(home: QuangBrowserScreen(initialUrl: 'http://10.0.2.2:8765/proxy-only/browser.html')));
     await tester.pump(const Duration(milliseconds: 500));

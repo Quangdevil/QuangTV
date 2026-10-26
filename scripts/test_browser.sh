@@ -22,6 +22,6 @@ trap cleanup EXIT
 cd upstream/flutter_app
 flutter test integration_test/browser_test.dart -d emulator-5554 2>&1 | tee "$repo_root/playback-evidence/browser-test-result.txt"
 
-for marker in QUANGTV_PRIVATE_LAYOUT_PASS QUANGTV_BROWSER_PASS QUANGTV_BROWSER_PLAYER_PASS QUANGTV_PROXY_ANDROID_PASS QUANGTV_PROXY_VLC_PASS QUANGTV_BROWSER_UI_PASS QUANGTV_YOUTUBE_MUX_PASS; do
+for marker in QUANGTV_APP_PROXY_PASS QUANGTV_PRIVATE_LAYOUT_PASS QUANGTV_BROWSER_PASS QUANGTV_BROWSER_PLAYER_PASS QUANGTV_PROXY_ANDROID_PASS QUANGTV_PROXY_VLC_PASS QUANGTV_BROWSER_UI_PASS QUANGTV_YOUTUBE_MUX_PASS; do
   grep -q -- "$marker" "$repo_root/playback-evidence/browser-test-result.txt"
 done

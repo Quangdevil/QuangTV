@@ -55,7 +55,7 @@ jobs:
           flutter pub get
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
-        run: flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
+        run: flutter analyze lib/screens/quang_network.dart lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
       - name: Restore permanent QuangTV release keystore
         if: github.ref == 'refs/heads/main'
         env:

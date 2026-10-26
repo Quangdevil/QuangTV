@@ -33,8 +33,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   List<Channel> personalChannels = [];
   Set<String> deletedChannels = {};
   List<Channel> privateChannels = [];
-  bool proxyEnabled = false;
-  bool proxyBusy = false;
   bool loading = false;
   String error = '';
 
@@ -43,25 +41,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     super.initState();
     if (!licensesAdded) { licensesAdded = true; LicenseRegistry.addLicense(() async* { yield LicenseEntryWithLineBreaks(['NewPipeExtractor'], await rootBundle.loadString('assets/licenses/newpipe.txt')); }); }
     _restore();
-    _readProxy();
-  }
-
-  Future<void> _readProxy() async {
-    try {
-      final v = await const MethodChannel('quangtv/browser').invokeMapMethod<String, dynamic>('proxyGet');
-      if (mounted) setState(() => proxyEnabled = v?['enabled'] == true);
-    } on PlatformException { /* The configuration screen offers recovery. */ }
-  }
-
-  Future<void> _toggleProxy() async {
-    if (proxyBusy) return;
-    setState(() => proxyBusy = true);
-    try {
-      final v = await const MethodChannel('quangtv/browser').invokeMapMethod<String, dynamic>('proxyToggle', {'enabled': !proxyEnabled});
-      if (mounted) setState(() => proxyEnabled = v?['enabled'] == true);
-    } on PlatformException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? 'Chưa bật được proxy')));
-    } finally { if (mounted) setState(() => proxyBusy = false); }
   }
 
   Future<void> _showSettings() async {
@@ -75,7 +54,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         }),
         ListTile(leading: const Icon(Icons.vpn_lock_outlined), title: const Text('Proxy QuangTV'), subtitle: const Text('HTTP / HTTPS / SOCKS5 · Tài khoản · Kiểm tra IP'), onTap: () {
           Navigator.pop(sheetContext);
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangProxyScreen())).then((_) => _readProxy());
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangProxyScreen()));
         }),
         ListTile(leading: const Icon(Icons.info_outline), title: const Text('Giấy phép phần mềm'), onTap: () { Navigator.pop(sheetContext); showLicensePage(context: context, applicationName: 'QuangTV'); }),
         ListTile(leading: const Icon(Icons.dns_outlined), title: const Text('DNS hệ thống'), subtitle: const Text('Tự động · Google DNS · Nhập thủ công'), onTap: () {
@@ -398,7 +377,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
           if (!await QuangPrivateSecurity.verify(context) || !context.mounted) return;
           await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangPrivateScreen()));
         }),
-        IconButton(tooltip: proxyEnabled ? 'Tắt proxy' : 'Bật proxy', icon: Icon(Icons.vpn_lock, color: proxyEnabled ? Colors.green : null), onPressed: proxyBusy ? null : _toggleProxy),
         IconButton(tooltip: 'Cài đặt', icon: const Icon(Icons.settings), onPressed: _showSettings),
       ]),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [

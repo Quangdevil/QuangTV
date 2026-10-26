@@ -12,7 +12,7 @@ p=Path("upstream/flutter_app/lib/screens/home_screen.dart")
 s=p.read_text()
 anchor="import 'package:flutter/material.dart';"
 assert anchor in s
-s=s.replace(anchor,anchor+"\nimport 'package:url_launcher/url_launcher.dart';\nimport 'quang_discover_screen.dart';\nimport 'quang_update_screen.dart';",1)
+s=s.replace(anchor,anchor+"\nimport 'package:url_launcher/url_launcher.dart';\nimport 'quang_discover_screen.dart';\nimport 'quang_update_screen.dart';\nimport 'quang_proxy_screen.dart';",1)
 anchor="        actions: ["
 assert anchor in s
 s=s.replace(anchor,"""        actions: [
@@ -26,6 +26,12 @@ s=s.replace(anchor,"""        actions: [
             },
           ),
 """,1)
+# Remove the whole Sort menu and place the app transport switch there.
+start=s.index('          Consumer<ChannelProvider>(\n            builder: (context, provider, _) => PopupMenuButton<String>(\n              tooltip: \'Sort Channels\'')
+end=s.index('          // Settings gear button', start)
+s=s[:start]+'          QuangProxyToggle(compact: compactAppBar),\n'+s[end:]
+legacy=s.index('  /// Legacy sort options bottom sheet (#145)')
+s=s[:legacy]+s[s.rfind('\n}'): ]
 s=s.replace("'📺 TV Viewer'","'QuangTV'",1)
 p.write_text(s)
 
@@ -330,7 +336,11 @@ shutil.copyfile('overrides/QuangProxyRelay.java', java_source / 'QuangProxyRelay
 gradle = Path('upstream/flutter_app/android/app/build.gradle')
 gradle.write_text(gradle.read_text() + '\ndependencies { implementation "androidx.webkit:webkit:1.12.1" }\n')
 kotlin = activity.read_text()
-proxy_handler = '''            if (call.method == "proxyGet") {
+proxy_handler = '''            if (call.method == "networkCheck") {
+                QuangProxy.checkNetwork(this, call.argument<String>("url") ?: "", call.argument<Boolean>("viaProxy") == true) { result.success(it) }
+                return@setMethodCallHandler
+            }
+            if (call.method == "proxyGet") {
                 try { result.success(QuangProxy.state(this)) } catch (_: Exception) { result.error("PROXY", "Không đọc được cấu hình proxy mã hóa. Hãy lưu lại cấu hình.", null) }
                 return@setMethodCallHandler
             }
@@ -370,7 +380,7 @@ proxy_handler = '''            if (call.method == "proxyGet") {
 '''
 anchor = '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/browser").setMethodCallHandler { call, result ->\n'
 assert anchor in kotlin
-kotlin = kotlin.replace(anchor, '        try { QuangProxy.ensure(this) } catch (_: Exception) {}\n' + anchor + proxy_handler, 1)
+kotlin = kotlin.replace(anchor, '        try { QuangProxy.ensure(this) } catch (_: Exception) {}\n        QuangProxy.onChanged = { value -> MethodChannel(flutterEngine.dartExecutor.binaryMessenger, \"quangtv/browser\").invokeMethod(\"proxyChanged\", value) }\n' + anchor + proxy_handler, 1)
 activity.write_text(kotlin)
 m = manifest.read_text()
 import re
@@ -398,3 +408,10 @@ license_assets = Path('upstream/flutter_app/assets/licenses')
 license_assets.mkdir(parents=True, exist_ok=True)
 shutil.copyfile('COPYING.NewPipe', license_assets / 'newpipe.txt')
 pubspec.write_text(pubspec.read_text().replace('  uses-material-design: true', '  uses-material-design: true\n  assets:\n    - assets/licenses/newpipe.txt', 1))
+
+# Include Dart HTTP traffic as well as native players/WebViews in the app proxy.
+shutil.copyfile('overrides/quang_network.dart', 'upstream/flutter_app/lib/screens/quang_network.dart')
+main_file=Path('upstream/flutter_app/lib/main.dart')
+main_source=main_file.read_text().replace("import 'dart:async';", "import 'dart:async';\nimport 'screens/quang_network.dart';", 1)
+main_source=main_source.replace('  WidgetsFlutterBinding.ensureInitialized();', '  WidgetsFlutterBinding.ensureInitialized();\n  await QuangNetwork.install();', 1)
+main_file.write_text(main_source)

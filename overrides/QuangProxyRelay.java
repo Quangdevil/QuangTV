@@ -14,7 +14,7 @@ public final class QuangProxyRelay implements AutoCloseable {
     private final ServerSocket server;
     private final Set<Socket> sockets = ConcurrentHashMap.newKeySet();
     private final ExecutorService workers = Executors.newCachedThreadPool(r -> { Thread t = new Thread(r, "QuangProxy"); t.setDaemon(true); return t; });
-    private final Semaphore slots = new Semaphore(24);
+    private final Semaphore slots = new Semaphore(64);
     private final String token = UUID.randomUUID().toString();
     private volatile boolean closed;
 
@@ -26,7 +26,7 @@ public final class QuangProxyRelay implements AutoCloseable {
             while (!closed) {
                 try {
                     Socket client=server.accept();
-                    if (!slots.tryAcquire()) { client.close(); continue; }
+                    if (!slots.tryAcquire()) { client.getOutputStream().write("HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".getBytes(StandardCharsets.US_ASCII)); client.close(); continue; }
                     sockets.add(client);
                     workers.execute(() -> { try { handle(client); } catch (Exception ignored) { try { client.getOutputStream().write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".getBytes(StandardCharsets.US_ASCII)); } catch(Exception ignoredAgain) {} } finally { sockets.remove(client); try { client.close(); } catch(IOException ignored) {} slots.release(); } });
                 } catch (IOException e) { if (!closed) close(); }
@@ -64,8 +64,13 @@ public final class QuangProxyRelay implements AutoCloseable {
                     out.write(1);out.write(u.length);out.write(u);out.write(p.length);out.write(p);out.flush();
                     if(in.readUnsignedByte()!=1||in.readUnsignedByte()!=0)throw new IOException("Proxy authentication failed");
                 } else if(method!=0 || !user.isEmpty())throw new IOException("Proxy authentication failed");
-                byte[] name=target.getBytes(StandardCharsets.UTF_8);if(name.length>255)throw new IOException("Host too long");
-                out.write(new byte[]{5,1,0,3});out.write(name.length);out.write(name);out.write(port>>8);out.write(port&255);out.flush();
+                String hostName=target.startsWith("[")&&target.endsWith("]")?target.substring(1,target.length()-1):target;
+                boolean literal=hostName.contains(":")||hostName.matches("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+");
+                byte[] name=literal?InetAddress.getByName(hostName).getAddress():IDN.toASCII(hostName).getBytes(StandardCharsets.US_ASCII);
+                if(name.length>255)throw new IOException("Host too long");
+                out.write(new byte[]{5,1,0,(byte)(literal?(name.length==16?4:1):3)});
+                if(!literal)out.write(name.length);
+                out.write(name);out.write(port>>8);out.write(port&255);out.flush();
                 if(in.readUnsignedByte()!=5||in.readUnsignedByte()!=0)throw new IOException("SOCKS connect rejected");
                 in.readUnsignedByte();int addressType=in.readUnsignedByte();int count=addressType==1?4:addressType==4?16:addressType==3?in.readUnsignedByte():-1;
                 if(count<0)throw new IOException("SOCKS address");byte[] bound=new byte[count+2];in.readFully(bound);
