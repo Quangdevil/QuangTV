@@ -127,12 +127,10 @@ void main() {
       debugPrint('CHECKPOINT_PREVIEW_PLAYING');
       await browser.invokeMethod<void>('closePreview').timeout(const Duration(seconds: 10));
       await browser.invokeMethod<void>('rotatePlayback').timeout(const Duration(seconds: 10));
-      await Future<void>.delayed(const Duration(seconds: 9));
+      await Future<void>.delayed(const Duration(seconds: 11));
       expect((await state())['rotationPassed'], isTrue);
       expect((await state())['fullscreen'], isFalse);
       debugPrint('QUANGTV_BROWSER_UI_PASS tabs=true downloadedFilePlayback=true quickProxy=true landscapeFullscreen=true adsBlocked=true');
-      await browser.invokeMethod<void>('clearDownloads');
-      await browser.invokeMethod<void>('select');
     });
     final deadline = DateTime.now().add(const Duration(seconds: 40));
     var played = false;

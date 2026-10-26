@@ -40,13 +40,14 @@ class QuangBrowserActivity : Activity() {
     data class Media(val url: String, val kind: String)
     companion object {
         private var current: WeakReference<QuangBrowserActivity>? = null
+        private var lastRotation: Map<String, Any> = emptyMap()
         fun inspect(): Map<String, Any> = current?.get()?.let {
             val point = IntArray(2); it.root.getLocationOnScreen(point)
             val insets = ViewCompat.getRootWindowInsets(it.root)
             mapOf("rotationPassed" to it.rotationPassed, "blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
                 "statusBar" to (insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0),
                 "downloaded" to it.downloadedBytes(), "height" to it.web.height, "ime" to (insets?.isVisible(WindowInsetsCompat.Type.ime()) ?: false))
-        } ?: emptyMap()
+        } ?: lastRotation
         fun testAction(action: String) {
             current?.get()?.let {
                 android.util.Log.i("QuangBrowserTest", "action=$action begin")
@@ -76,6 +77,14 @@ class QuangBrowserActivity : Activity() {
                             android.util.Log.i("QuangBrowserTest", "landscapeFullscreen=${it.rotationPassed}")
                             it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                         }, 6500)
+                        it.handler.postDelayed({
+                            lastRotation = mapOf("rotationPassed" to it.rotationPassed, "fullscreen" to it.orientationFullscreen)
+                            for (id in it.settings.getStringSet("downloads", emptySet())!!) it.downloads.remove(id.toLong())
+                            it.settings.edit().remove("downloads").apply()
+                            // Return to the real Flutter player after checking both native
+                            // orientations, so its test surface can draw again.
+                            it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
+                        }, 8500)
                     }
                     "landscape" -> it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                     "portrait" -> it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
