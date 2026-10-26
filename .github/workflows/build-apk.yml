@@ -84,8 +84,11 @@ jobs:
       - name: Generate deterministic HLS fixture
         if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         run: |
-          command -v ffmpeg || { echo "::error::ffmpeg missing on runner"; exit 1; }
-          python3 -c "from PIL import Image; print('Pillow available')" || echo "Pillow optional for fixture"
+          mkdir -p "$RUNNER_TEMP/ffmpeg-bin"
+          curl --fail --location --retry 3 --connect-timeout 15 --max-time 120 -o "$RUNNER_TEMP/ffmpeg.tar.xz" https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" --wildcards --strip-components=1 -C "$RUNNER_TEMP/ffmpeg-bin" '*/ffmpeg'
+          export PATH="$RUNNER_TEMP/ffmpeg-bin:$PATH"
+          ffmpeg -version | head -n 1
           mkdir -p /tmp/quangtv-hls
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 60 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 48 -c:a aac -f hls -hls_time 2 -hls_list_size 0 /tmp/quangtv-hls/index.m3u8
           ffmpeg -hide_banner -loglevel error -i /tmp/quangtv-hls/index.m3u8 -c copy /tmp/quangtv-hls/fixture.mp4
