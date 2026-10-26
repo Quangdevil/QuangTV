@@ -250,8 +250,8 @@ class QuangBrowserActivity : Activity() {
                 tabMedia[view]?.clear()
                 if (view === web) { found.text = "Tải video"; activeUrls = emptySet(); address.setText(url?.takeIf { httpUrl(it) } ?: "") }
             }
-            override fun onPageCommitVisible(view: WebView, url: String?) { installMediaMute(view); applyAdStyle(view) }
-            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); installMediaMute(view); if (view === web) scanMedia() }
+            override fun onPageCommitVisible(view: WebView, url: String?) { installMediaMute(view); applyAdStyle(view); installAdGuard(view) }
+            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); installAdGuard(view); installMediaMute(view); if (view === web) scanMedia() }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
                 if (uri.scheme == "intent") {
@@ -284,7 +284,7 @@ class QuangBrowserActivity : Activity() {
                 transport.webView = web; resultMsg.sendToTarget(); return true
             }
             override fun onProgressChanged(view: WebView, value: Int) {
-                if (value == 25 || value == 50 || value == 75) installMediaMute(view)
+                if (value == 25 || value == 50 || value == 75) { installMediaMute(view); installAdGuard(view) }
                 if (view !== web) return
                 progress.progress = value
                 progress.visibility = if (value == 100) View.GONE else View.VISIBLE
@@ -527,6 +527,20 @@ class QuangBrowserActivity : Activity() {
           new MutationObserver(mute).observe(document.documentElement,{childList:true,subtree:true});
           setInterval(mute,150);
           mute();
+        })()""", null)
+    }
+    private fun installAdGuard(view: WebView) {
+        if (!blockAds) return
+        view.evaluateJavascript("""(()=>{
+          if(window.__quangAdGuard)return;
+          window.__quangAdGuard=true;
+          const blocked=['doubleclick.net','googlesyndication.com','exoclick.com','trafficjunky.net','popads.net','popcash.net','adsterra.com','propellerads.com','juicyads.com','tsyndicate.com'];
+          const adUrl=value=>{try{const h=new URL(value,location.href).hostname;return blocked.some(d=>h===d||h.endsWith('.'+d))}catch{return false}};
+          window.open=()=>null;
+          document.addEventListener('click',e=>{
+            const a=e.target?.closest?.('a[href]');
+            if(a&&(adUrl(a.href)||a.target==='_blank')){e.preventDefault();e.stopImmediatePropagation();}
+          },true);
         })()""", null)
     }
     private fun applyAdStyle(view: WebView) {
