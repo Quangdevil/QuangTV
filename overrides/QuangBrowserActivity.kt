@@ -64,6 +64,31 @@ class QuangBrowserActivity : Activity() {
                     "openCompleted" -> it.openCompletedButton?.performClick()
                     "closePreview" -> it.previewDialog?.dismiss()
                     "playPage" -> it.web.evaluateJavascript("(()=>{const v=document.querySelector('video');v.muted=true;v.play().catch(console.error)})()", null)
+                    "previewAndRotate" -> {
+                        it.previewPassed = false
+                        it.downloadsButton.performClick()
+                        it.handler.postDelayed({
+                            it.openCompletedButton?.performClick()
+                            var checks = 0
+                            val verify = object : Runnable {
+                                override fun run() {
+                                    val video = it.previewPlayer
+                                    if (video != null && video.isPlaying && video.currentPosition >= 1000) {
+                                        it.previewPassed = true
+                                        android.util.Log.i("QuangBrowserTest", "previewFramesAdvanced=true")
+                                        it.previewDialog?.dismiss()
+                                        it.handler.postDelayed({ testAction("rotatePlayback") }, 1000)
+                                    } else if (++checks < 80) it.handler.postDelayed(this, 250)
+                                    else {
+                                        lastRotation = mapOf("previewPassed" to false, "rotationPassed" to false, "fullscreen" to false)
+                                        it.previewDialog?.dismiss()
+                                        it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
+                                    }
+                                }
+                            }
+                            it.handler.postDelayed(verify, 250)
+                        }, 400)
+                    }
                     "rotatePlayback" -> {
                         // Drive both OS rotations natively: the hidden Flutter test surface
                         // cannot deliver a frame while the native activity is landscape.
@@ -72,7 +97,7 @@ class QuangBrowserActivity : Activity() {
                         (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(it.root.windowToken, 0)
                         it.web.evaluateJavascript("(()=>{const v=document.querySelector('video');v.muted=true;v.play().catch(console.error)})()", null)
                         val returnToPlayer = {
-                            lastRotation = mapOf("rotationPassed" to it.rotationPassed, "fullscreen" to it.orientationFullscreen)
+                            lastRotation = mapOf("previewPassed" to it.previewPassed, "rotationPassed" to it.rotationPassed, "fullscreen" to it.orientationFullscreen)
                             for (id in it.settings.getStringSet("downloads", emptySet())!!) it.downloads.remove(id.toLong())
                             it.settings.edit().remove("downloads").apply()
                             it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
@@ -134,6 +159,7 @@ class QuangBrowserActivity : Activity() {
     private val blockedAds = java.util.concurrent.atomic.AtomicInteger()
     private var orientationFullscreen = false
     private var rotationPassed = false
+    private var previewPassed = false
     private var activeUrls = emptySet<String>()
     private lateinit var addressBar: LinearLayout
     private lateinit var toolbar: LinearLayout

@@ -313,7 +313,7 @@ browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
             } else if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 when (call.method) {
                     "inspect" -> result.success(QuangBrowserActivity.inspect())
-                    "focus", "select", "download", "confirmDownload", "toggleProxy", "showTabs", "newTab", "firstTab", "openDownloads", "openCompleted", "closePreview", "playPage", "rotatePlayback", "landscape", "portrait", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
+                    "focus", "select", "download", "confirmDownload", "toggleProxy", "showTabs", "newTab", "firstTab", "openDownloads", "openCompleted", "closePreview", "playPage", "previewAndRotate", "rotatePlayback", "landscape", "portrait", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
                     else -> result.notImplemented()
                 }
             } else result.notImplemented()

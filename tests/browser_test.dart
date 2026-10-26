@@ -151,19 +151,11 @@ void main() {
       expect(current['downloaded'], greaterThan(0));
       debugPrint('QUANGTV_BROWSER_PASS directDiscovery=true safeTop=true keyboardResizesBottom=true downloadedBytes=${current['downloaded']}');
       debugPrint('CHECKPOINT_DOWNLOAD_COMPLETE');
-      await browser.invokeMethod<void>('openDownloads').timeout(const Duration(seconds: 10));
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      await browser.invokeMethod<void>('openCompleted').timeout(const Duration(seconds: 10));
-      final previewDeadline = DateTime.now().add(const Duration(seconds: 20));
-      while (DateTime.now().isBefore(previewDeadline)) {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-        if ((await state())['previewPlaying'] == true) break;
-      }
-      expect((await state())['previewPlaying'], isTrue);
-      debugPrint('CHECKPOINT_PREVIEW_PLAYING');
-      await browser.invokeMethod<void>('closePreview').timeout(const Duration(seconds: 10));
-      await browser.invokeMethod<void>('rotatePlayback').timeout(const Duration(seconds: 10));
-      await Future<void>.delayed(const Duration(seconds: 35));
+      // Native windows hide the Flutter test surface. Drive the complete native
+      // preview/rotation flow there and inspect only after it returns to Flutter.
+      await browser.invokeMethod<void>('previewAndRotate').timeout(const Duration(seconds: 10));
+      await Future<void>.delayed(const Duration(seconds: 55));
+      expect((await state())['previewPassed'], isTrue, reason: 'Downloaded video must advance before closing its preview');
       expect((await state())['rotationPassed'], isTrue);
       expect((await state())['fullscreen'], isFalse);
       debugPrint('QUANGTV_BROWSER_UI_PASS tabs=true downloadedFilePlayback=true quickProxy=true landscapeFullscreen=true adsBlocked=true');
