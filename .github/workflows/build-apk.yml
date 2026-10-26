@@ -84,8 +84,8 @@ jobs:
       - name: Generate deterministic HLS fixture
         if: inputs.ui_only_release != true && !contains(github.event.head_commit.message, '[ui-only-release]')
         run: |
-          timeout 60s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq || true
-          timeout 180s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y ffmpeg python3-pil
+          command -v ffmpeg || { echo "::error::ffmpeg missing on runner"; exit 1; }
+          python3 -c "from PIL import Image; print('Pillow available')" || echo "Pillow optional for fixture"
           mkdir -p /tmp/quangtv-hls
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 60 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 48 -c:a aac -f hls -hls_time 2 -hls_list_size 0 /tmp/quangtv-hls/index.m3u8
           ffmpeg -hide_banner -loglevel error -i /tmp/quangtv-hls/index.m3u8 -c copy /tmp/quangtv-hls/fixture.mp4
