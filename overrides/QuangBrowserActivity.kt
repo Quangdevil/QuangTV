@@ -616,9 +616,25 @@ class QuangBrowserActivity : Activity() {
                         .setMessage("Chỉ thử nội dung công khai. Không đăng nhập, gửi mật khẩu hoặc thông tin doanh nghiệp riêng tư qua Worker. Worker phải cho phép tên miền đích và có thể yêu cầu Cloudflare Access.")
                         .setNegativeButton("Hủy", null)
                         .setPositiveButton("Thử") { _, _ ->
-                            val hostname = java.net.IDN.toASCII("mây-việt-web-proxy.daquang.workers.dev")
-                            val url = Uri.Builder().scheme("https").authority(hostname).appendPath("proxy").appendQueryParameter("url", currentUrl).build().toString()
-                            web.loadUrl(url)
+                            val entry = EditText(this).apply {
+                                setSingleLine(true)
+                                setText(settings.getString("mayVietWorker", "https://may-viet-web-proxy.daquang.workers.dev"))
+                                selectAll()
+                            }
+                            AlertDialog.Builder(this).setTitle("Địa chỉ Worker của bạn")
+                                .setMessage("Nhập đúng hostname ASCII đã triển khai trên Cloudflare. Tên hiển thị có dấu không nhất thiết là URL thật.")
+                                .setView(entry)
+                                .setNegativeButton("Hủy", null)
+                                .setPositiveButton("Mở") { _, _ ->
+                                    val worker = Uri.parse(entry.text.toString().trim().trimEnd('/'))
+                                    if (worker.scheme != "https" || worker.host?.endsWith(".workers.dev") != true) {
+                                        Toast.makeText(this, "Cần URL https của Cloudflare Worker.", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        settings.edit().putString("mayVietWorker", worker.toString()).apply()
+                                        val url = worker.buildUpon().appendPath("proxy").appendQueryParameter("url", currentUrl).build().toString()
+                                        web.loadUrl(url)
+                                    }
+                                }.show()
                         }.show()
                 }
             }
