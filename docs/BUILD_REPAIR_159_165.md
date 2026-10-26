@@ -10,6 +10,7 @@ This repair changes CI tooling and debug-only YouTube diagnostics. It preserves 
 | 162 | ffmpeg missing | Removing provisioning did not make FFmpeg available. |
 | 163 | FFmpeg 7.0.2 static: SIGSEGV/139 reading HLS | Replace the unpinned binary with a checksum-pinned toolchain; retain the same HLS remux command and require real HLS decoding. |
 | 164 | Invalid YAML colon in a shell command | Corrected block scalar in 165; workflow parsed before retry. |
+| 166 | Signature verifier could not parse the new apksigner label | APK v2 verification itself succeeded. Support both `Signer #1` and `V2 Signer` certificate labels; require one signer and the exact permanent certificate. Add positive/negative regression tests. |
 | 165 | Live QuangTube playback could not start | Screenshot shows YouTube sign-in/bot verification on the runner network. Do not bypass authentication or convert this failure to success. Improve debug-only error detection. |
 
 Build 165 passed: proxy HTTP/SOCKS and WebSocket tests, five Worker tests, FFmpeg fixture decode, Dart analysis, signed-release compilation, browser discovery/download/playback/landscape, native Media3 and VLC playback, rendered moving frames, mute/volume, tap/autohide, rotation retention, OTA byte/checksum/single-request/reopen tests. The live YouTube test failed, so no release was published.
