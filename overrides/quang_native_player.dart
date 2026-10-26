@@ -270,7 +270,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     lastFailure = reason;
     engineStage = 'Media3 lỗi, đang chuyển nguồn';
     // Retry the same stream once before trying a different source.
-    if (retriedSources.add(sourceIndex)) {
+    // A failing live VTV endpoint should not consume another 12-second
+    // initialization cycle before trying an alternative CDN.
+    if (vtvKey == null && retriedSources.add(sourceIndex)) {
       await _open(sourceIndex);
       return;
     }
@@ -281,7 +283,16 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       (i) => (sourceIndex + i + 1) % all.length,
     ).where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
-      // Always retry the ORIGINAL channel URL with VLC, not a VTV fallback CDN.
+      if (vtvKey != null) {
+        // Keep live VTV on Media3: a failing native VLC fallback can
+        // crash the process, and repeated retries obscure the real error.
+        if (mounted) setState(() {
+          loading = false;
+          switching = false;
+          error = 'Không phát được VTV bằng Media3. Kiểm tra nguồn mạng hoặc thử lại.';
+        });
+        return;
+      }
       sourceIndex = 0;
       await _openVlc();
       return;
