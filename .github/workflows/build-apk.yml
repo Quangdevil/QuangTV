@@ -153,9 +153,7 @@ jobs:
           disable-animations: true
           pre-emulator-launch-script: bash scripts/setup_ci_graphics.sh
           emulator-options: -no-window -show-kernel -no-snapshot -noaudio -no-boot-anim -gpu host -verbose -feature -Vulkan,-HardwareDecoder -memory 2048 -cores 2
-          script: |
-            bash scripts/test_browser.sh
-            bash scripts/test_native_hls.sh
+          script: bash scripts/test_android.sh
       - name: Retain playback logs even on failure
         if: always()
         uses: actions/upload-artifact@v4

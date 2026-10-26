@@ -52,18 +52,7 @@ print('VLC factory and channels now belong to each engine; shared pub cache unch
 # LibVLC may decode HLS before getCurrentVideoTrack() exposes dimensions.
 # Report dimensions from the actual decoded-video layout callback in that case.
 texture = target / 'android/src/main/java/software/solid/fluttervlcplayer/VLCTextureView.java'
-s = texture.read_text()
-s = s.replace('private boolean wasPlaying = false;', '''private boolean wasPlaying = false;
-    private volatile int decodedVideoWidth = 0;
-    private volatile int decodedVideoHeight = 0;
-    public int getDecodedVideoWidth() { return decodedVideoWidth; }
-    public int getDecodedVideoHeight() { return decodedVideoHeight; }''')
-anchor = 'if (width * height == 0) return;'
-assert anchor in s
-s = s.replace(anchor, '''if (width * height == 0) return;
-        decodedVideoWidth = visibleWidth > 0 ? visibleWidth : width;
-        decodedVideoHeight = visibleHeight > 0 ? visibleHeight : height;''', 1)
-texture.write_text(s)
+shutil.copyfile('overrides/VLCTextureView.java', texture)
 player = target / 'android/src/main/java/software/solid/fluttervlcplayer/FlutterVlcPlayer.java'
 s = player.read_text()
 anchor = '''                            width = currentVideoTrack.width;
@@ -89,3 +78,26 @@ s = pubspec.read_text()
 if 'path: third_party/flutter_vlc_player_platform_interface' not in s:
     s += '  flutter_vlc_player_platform_interface:\n    path: third_party/flutter_vlc_player_platform_interface\n'
 pubspec.write_text(s)
+
+# PlatformView/TextureView is the sole consumer. Registering the same buffer with
+# Flutter's texture registry creates two consumers and can freeze decoded output.
+s = player.read_text()
+for old in [
+    '    private final TextureRegistry.SurfaceTextureEntry textureEntry;\n',
+    '        textureEntry = textureRegistry.createSurfaceTexture();\n',
+    '        textureView.setSurfaceTexture(textureEntry.surfaceTexture());\n',
+    '        textureView.setTextureEntry(textureEntry);\n',
+    '        textureEntry.release();\n',
+]:
+    assert old in s, f'VLC surface ownership source changed: {old}'
+    s = s.replace(old, '', 1)
+s = s.replace('        mediaPlayer.getVLCVout().setVideoSurface(textureView.getSurfaceTexture());\n', '', 1)
+s = s.replace('        textureView.dispose();\n', '', 1)
+anchor = '            mediaPlayer.getVLCVout().detachViews();'
+assert anchor in s
+s = s.replace(anchor, '            textureView.setMediaPlayer(null);', 1)
+anchor = '        if (libVLC != null) {'
+assert anchor in s
+s = s.replace(anchor, '        textureView.dispose();\n' + anchor, 1)
+player.write_text(s)
+print('VLC hybrid view owns one Android surface; decoder detaches before disposal')
