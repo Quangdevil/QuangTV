@@ -127,12 +127,11 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Precompile minified playback and debug browser integration APKs before Emulator
+      - name: Precompile R8-minified Android integration APK before Emulator
         working-directory: upstream/flutter_app
         run: |
-          flutter build apk --release --target-platform android-x64 --target integration_test/native_hls_test.dart --dart-define=HLS_TEST_URL=http://10.0.2.2:8765/index.m3u8
-          python3 ../../scripts/verify_vlc_dex.py build/app/outputs/flutter-apk/app-release.apk
           flutter build apk --debug --target-platform android-x64 --target integration_test/browser_test.dart
+          python3 ../../scripts/verify_vlc_dex.py build/app/outputs/flutter-apk/app-debug.apk
           cd android
           ./gradlew --stop
       - name: Save compiled dependency cache before runtime tests
@@ -202,7 +201,7 @@ jobs:
           VERSION="1.3.0"
           TAG="quangtv-v${VERSION}-build${{ env.BUILD_NUMBER }}"
           APK="QuangTV-v${VERSION}-build${{ env.BUILD_NUMBER }}-arm64.apk"
-          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --draft --title "QuangTV v${VERSION} (build ${{ env.BUILD_NUMBER }})" --notes "Signed compact ARM64 APK. VLC JNI classes verified in minified DEX and release-mode Media3/VLC playback, controls, browser and OTA emulator tests passed. Direct YouTube entry and local viewing history restored. Install over previous releases without uninstalling."
+          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --draft --title "QuangTV v${VERSION} (build ${{ env.BUILD_NUMBER }})" --notes "Signed compact ARM64 APK. VLC JNI classes verified in minified DEX and R8-minified Android Media3/VLC playback, controls, browser and OTA emulator tests passed. Direct YouTube entry and local viewing history restored. Install over previous releases without uninstalling."
           mkdir -p "$RUNNER_TEMP/ota-download"
           gh release download "$TAG" --pattern "$APK" --dir "$RUNNER_TEMP/ota-download"
           cmp "$APK" "$RUNNER_TEMP/ota-download/$APK"

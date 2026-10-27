@@ -436,3 +436,11 @@ main_file=Path('upstream/flutter_app/lib/main.dart')
 main_source=main_file.read_text().replace("import 'dart:async';", "import 'dart:async';\nimport 'screens/quang_network.dart';", 1)
 main_source=main_source.replace('  WidgetsFlutterBinding.ensureInitialized();', '  WidgetsFlutterBinding.ensureInitialized();\n  await QuangNetwork.install();', 1)
 main_file.write_text(main_source)
+
+# Flutter's test runner requires VM service extensions, so exercise the native
+# bridge under R8 in the debug harness as well as inspecting the real release DEX.
+# Keep diagnostic Log.i calls for host-driven native interaction assertions.
+import re
+minified_test_rules = re.sub(r'-assumenosideeffects class android\.util\.Log \{.*?\}', '', proguard.read_text(), flags=re.S)
+(proguard.parent / 'proguard-debug-rules.pro').write_text(minified_test_rules)
+gradle.write_text(gradle.read_text() + '\nandroid { buildTypes { debug { minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-debug-rules.pro" } } }\n')
