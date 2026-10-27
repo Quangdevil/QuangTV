@@ -31,3 +31,10 @@ jobs:
               for name in ['lib/arm64-v8a/libapp.so','lib/arm64-v8a/libvlc.so','classes.dex','AndroidManifest.xml']:
                   print('ENTRY',name,'same=', name in xa and name in ya and hashlib.sha256(x.read(name)).digest()==hashlib.sha256(y.read(name)).digest())
           PY
+      - name: Compare decoded Android manifests
+        run: |
+          set -euo pipefail
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          "$AAPT" dump xmltree old/*.apk AndroidManifest.xml > old-manifest.txt
+          "$AAPT" dump xmltree new/*.apk AndroidManifest.xml > new-manifest.txt
+          diff -u old-manifest.txt new-manifest.txt || test "$?" -eq 1
