@@ -83,13 +83,14 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Test historical Android player and visible frames
+        id: android_playback
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: bash scripts/test_native_hls.sh
+          script: bash scripts/test_rollback_player.sh
       - name: Retain test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -105,7 +106,7 @@ jobs:
           set -euo pipefail
           TAG=quangtv-v1.3.0-build176-restored120
           APK=QuangTV-v1.3.0-build176-restored120-arm64.apk
-          gh release create "$TAG" "$APK" --target 8b80b018a0884027fbef226a84f8d795d113492f --draft --title 'QuangTV build 176 (khôi phục build 120)' --notes 'Khôi phục mã ứng dụng build 120 với versionCode 176, ký bằng khóa cũ. Các tính năng bổ sung sau build 120 không có trong bản này. Đã kiểm thử Media3, VLC và xoay màn hình với luồng HLS mẫu; chưa xác nhận VTV thật trên mạng của bạn.'
+          gh release create "$TAG" "$APK" --target 8b80b018a0884027fbef226a84f8d795d113492f --draft --title 'QuangTV build 176 (khôi phục build 120)' --notes 'Khôi phục mã ứng dụng build 120 với versionCode 176, ký bằng khóa cũ. Các tính năng bổ sung sau build 120 không có trong bản này. Đã kiểm thử Media3, VLC và xoay màn hình với luồng HLS mẫu; chưa xác nhận VTV thật trên mạng của bạn. YouTube được kiểm thử và ghi lại riêng, sẽ xử lý ở bản sau.'
           gh release download "$TAG" --pattern "$APK" --dir "$RUNNER_TEMP/verify-release"
           cmp "$APK" "$RUNNER_TEMP/verify-release/$APK"
           gh release edit "$TAG" --draft=false --latest
@@ -117,3 +118,12 @@ jobs:
           assert any(a['name'] == 'QuangTV-v1.3.0-build176-restored120-arm64.apk' for a in r['assets'])
           print('QUANGTV_ROLLBACK_OTA_PASS build=176')
           PY
+      - name: Report deferred YouTube test result
+        if: always() && steps.android_playback.outcome == 'success'
+        run: |
+          set -euo pipefail
+          status=$(cat playback-evidence/youtube-exit.txt)
+          if [ "$status" != 0 ]; then
+            echo "::error::YouTube test failed; publication was explicitly requested before YouTube repair. See test evidence."
+            exit 1
+          fi
