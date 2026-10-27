@@ -1,0 +1,119 @@
+name: Rebuild build 120 as 176
+on:
+  push:
+    branches: [restore/build120-176]
+permissions:
+  contents: write
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tv-viewer-app/tv_viewer
+          ref: 188df516a8acb4a2fda0d65fed8b6199c734603f
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+          cache: true
+      - name: Restore historical source and dependencies
+        run: |
+          set -euo pipefail
+          python3 scripts/patch_quangtv.py
+          cd upstream/flutter_app
+          flutter pub get
+          cd ../..
+          python3 scripts/patch_vlc_engine.py
+          cd upstream/flutter_app
+          flutter pub get
+          flutter analyze lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart
+      - name: Restore signing configuration
+        env:
+          KEYSTORE_BASE64: ${{ secrets.QUANGTV_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.QUANGTV_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.QUANGTV_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.QUANGTV_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" && test -n "$KEYSTORE_PASSWORD" && test -n "$KEY_PASSWORD" && test -n "$KEY_ALIAS"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > upstream/flutter_app/android/app/quangtv-release.jks
+          { echo 'storeFile=quangtv-release.jks'; echo "storePassword=$KEYSTORE_PASSWORD"; echo "keyPassword=$KEY_PASSWORD"; echo "keyAlias=$KEY_ALIAS"; } > upstream/flutter_app/android/key.properties
+          chmod 600 upstream/flutter_app/android/key.properties upstream/flutter_app/android/app/quangtv-release.jks
+      - name: Build and verify signed ARM64 APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.QUANGTV_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.QUANGTV_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          cd upstream/flutter_app
+          flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0 --build-number=176
+          cd ../..
+          cp upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk QuangTV-v1.3.0-build176-restored120-arm64.apk
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs QuangTV-v1.3.0-build176-restored120-arm64.apk > signature.txt
+          "$BUILD_TOOLS/aapt" dump badging QuangTV-v1.3.0-build176-restored120-arm64.apk > package.txt
+          head -1 package.txt
+          cat signature.txt
+          python3 scripts/verify_release_apk.py QuangTV-v1.3.0-build176-restored120-arm64.apk
+          grep -q "package: name='com.quangduren.quangtv' versionCode='176'" package.txt
+          EXPECTED=$(keytool -exportcert -keystore upstream/flutter_app/android/app/quangtv-release.jks -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" | sha256sum | cut -d' ' -f1)
+          python3 scripts/verify_signer_certificate.py signature.txt "$EXPECTED"
+          echo 'QUANGTV_ROLLBACK_SIGNATURE_PASS versionCode=176'
+      - name: Generate HLS test fixture
+        run: |
+          set -euo pipefail
+          command -v ffmpeg || { sudo apt-get update -qq; sudo apt-get install -y ffmpeg; }
+          python3 -c 'import PIL' || { sudo apt-get update -qq; sudo apt-get install -y python3-pil; }
+          mkdir -p /tmp/quangtv-hls
+          ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 60 -c:v libx264 -preset ultrafast -threads 2 -pix_fmt yuv420p -g 48 -c:a aac -f hls -hls_time 2 -hls_list_size 0 /tmp/quangtv-hls/index.m3u8
+          ffmpeg -hide_banner -loglevel error -xerror -i /tmp/quangtv-hls/index.m3u8 -t 3 -f null -
+          python3 -m http.server 8765 --directory /tmp/quangtv-hls >/tmp/quangtv-hls-server.log 2>&1 &
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test historical Android player and visible frames
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: bash scripts/test_native_hls.sh
+      - name: Retain test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-120-test-evidence
+          path: playback-evidence/
+          if-no-files-found: warn
+      - name: Publish verified restoration to OTA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG=quangtv-v1.3.0-build176-restored120
+          APK=QuangTV-v1.3.0-build176-restored120-arm64.apk
+          gh release create "$TAG" "$APK" --target 8b80b018a0884027fbef226a84f8d795d113492f --draft --title 'QuangTV build 176 (khôi phục build 120)' --notes 'Khôi phục mã ứng dụng build 120 với versionCode 176, ký bằng khóa cũ. Các tính năng bổ sung sau build 120 không có trong bản này. Đã kiểm thử Media3, VLC và xoay màn hình với luồng HLS mẫu; chưa xác nhận VTV thật trên mạng của bạn.'
+          gh release download "$TAG" --pattern "$APK" --dir "$RUNNER_TEMP/verify-release"
+          cmp "$APK" "$RUNNER_TEMP/verify-release/$APK"
+          gh release edit "$TAG" --draft=false --latest
+          gh api "repos/$GH_REPO/releases/latest" > "$RUNNER_TEMP/latest.json"
+          python3 - <<'PY'
+          import json, os
+          r = json.load(open(os.environ['RUNNER_TEMP'] + '/latest.json'))
+          assert r['tag_name'] == 'quangtv-v1.3.0-build176-restored120' and not r['draft'] and not r['prerelease']
+          assert any(a['name'] == 'QuangTV-v1.3.0-build176-restored120-arm64.apk' for a in r['assets'])
+          print('QUANGTV_ROLLBACK_OTA_PASS build=176')
+          PY
