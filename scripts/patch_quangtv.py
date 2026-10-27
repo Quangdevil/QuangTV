@@ -16,7 +16,6 @@ s=s.replace(anchor,anchor+"\nimport 'package:flutter/services.dart';\nimport 'pa
 anchor="        actions: ["
 assert anchor in s
 s=s.replace(anchor,"""        actions: [
-          IconButton(tooltip: 'Cập nhật QuangTV', icon: const Icon(Icons.system_update), onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangUpdateScreen())); }),
           IconButton(
             tooltip: 'YouTube',
             icon: const Icon(Icons.smart_display, color: Colors.red),
@@ -28,14 +27,7 @@ s=s.replace(anchor,"""        actions: [
               }
             },
           ),
-          // QuangTV navigation: one discover screen, no overlay stacks.
-          IconButton(
-            tooltip: 'Khám phá',
-            icon: const Icon(Icons.explore_outlined),
-            onPressed: () async {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangDiscoverScreen()));
-            },
-          ),
+
 """,1)
 # Remove the whole Sort menu and place the app transport switch there.
 start=s.index('          Consumer<ChannelProvider>(\n            builder: (context, provider, _) => PopupMenuButton<String>(\n              tooltip: \'Sort Channels\'')
@@ -44,6 +36,11 @@ s=s[:start]+'          QuangProxyToggle(compact: compactAppBar),\n'+s[end:]
 legacy=s.index('  /// Legacy sort options bottom sheet (#145)')
 s=s[:legacy]+s[s.rfind('\n}'): ]
 s=s.replace("'📺 TV Viewer'","'QuangTV'",1)
+# Keep YouTube and proxy visible on narrow cover screens; secondary destinations
+# remain in the existing overflow instead of consuming additional toolbar slots.
+s=s.replace("if (value == 'help') {", "if (value == 'discover') { Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangDiscoverScreen())); } else if (value == 'update') { Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangUpdateScreen())); } else if (value == 'help') {", 1)
+s=s.replace('            itemBuilder: (context) => [', "            itemBuilder: (context) => [\n              const PopupMenuItem(value: 'discover', child: Text('Khám phá · Podcast · Radio')),\n              const PopupMenuItem(value: 'update', child: Text('Cập nhật QuangTV')),", 1)
+
 p.write_text(s)
 
 manifest=Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
