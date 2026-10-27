@@ -111,6 +111,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk"
       - name: Verify signed release APK
+        id: verify_apk
         if: github.ref == 'refs/heads/main'
         env:
           KEYSTORE_PASSWORD: ${{ secrets.QUANGTV_STORE_PASSWORD }}
@@ -139,6 +140,7 @@ jobs:
             ~/.gradle/wrapper
           key: quangtv-gradle-linux-agp892-desugar215-v1
       - name: Test browser, native playback, controls and OTA on Android
+        id: android_tests
         env:
           DISPLAY: ':99'
           LIBGL_ALWAYS_SOFTWARE: 'true'
@@ -162,6 +164,22 @@ jobs:
           overwrite: true
           path: playback-evidence/
           if-no-files-found: warn
+      - name: Publish VTV diagnostic prerelease
+        if: always() && github.ref == 'refs/heads/main' && steps.verify_apk.outcome == 'success' && steps.android_tests.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          grep -q 'QUANGTV_VTV_FAILOVER_PASS media3Rejected=true vlcAdvanced=true' playback-evidence/test-result.txt
+          grep -qx 'QUANGTV_HLS_TEST_EXIT=0' playback-evidence/test-result.txt
+          grep -q 'QUANGTV_RENDER_PASS engine=Media3' playback-evidence/visual-result.txt
+          grep -q 'QUANGTV_RENDER_PASS engine=VLC' playback-evidence/visual-result.txt
+          grep -q 'QUANGTV_ROTATION_PASS engine=Media3' playback-evidence/visual-result.txt
+          grep -q 'QUANGTV_ROTATION_PASS engine=VLC' playback-evidence/visual-result.txt
+          grep -qx 'QUANGTV_VISUAL_VERIFICATION_EXIT=0' playback-evidence/visual-result.txt
+          APK="QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk"
+          TAG="quangtv-v1.3.0-vtv-test-build${{ github.run_number }}"
+          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --prerelease --latest=false --title "QuangTV VTV thử nghiệm (build ${{ github.run_number }})" --notes "Bản thử nghiệm ký bằng khóa chính thức: Media3/VLC và chuyển nguồn VTV đã kiểm tra bằng luồng HLS mẫu trên giả lập. Chưa xác minh VTV thực tế; các kiểm thử Android khác chưa đạt. Kiểm thử YouTube sẽ xử lý sau. Bản này không phải OTA chính thức."
       - name: Publish APK
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4

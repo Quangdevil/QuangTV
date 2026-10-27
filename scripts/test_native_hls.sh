@@ -22,15 +22,16 @@ cd upstream/flutter_app
 set +e
 flutter test integration_test/native_hls_test.dart -d emulator-5554 --dart-define=HLS_TEST_URL=http://10.0.2.2:8765/index.m3u8 2>&1 | tee "$repo_root/playback-evidence/test-result.txt"
 hls_status=${PIPESTATUS[0]}
+printf 'QUANGTV_HLS_TEST_EXIT=%s\n' "$hls_status" >> "$repo_root/playback-evidence/test-result.txt"
 
 cd "$repo_root/upstream/flutter_app"
 flutter test integration_test/ota_update_test.dart -d emulator-5554 2>&1 | tee "$repo_root/playback-evidence/ota-test-result.txt"
 ota_status=${PIPESTATUS[0]}
 
 cd "$repo_root"
-python3 scripts/verify_native_frames.py
-
-visual_status=$?
+python3 scripts/verify_native_frames.py 2>&1 | tee "$repo_root/playback-evidence/visual-result.txt"
+visual_status=${PIPESTATUS[0]}
+printf 'QUANGTV_VISUAL_VERIFICATION_EXIT=%s\n' "$visual_status" >> "$repo_root/playback-evidence/visual-result.txt"
 if (( hls_status != 0 || ota_status != 0 || visual_status != 0 )); then
   exit 1
 fi
