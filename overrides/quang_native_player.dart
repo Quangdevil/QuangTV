@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import '../models/channel.dart';
+import 'quang_web_screen.dart';
 
 /// Public, anonymous HLS fallbacks. No credentials or signed URLs.
 class QuangNativePlayer extends StatefulWidget {
@@ -174,6 +175,29 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     }
   }
 
+  Future<void> _seekRelative(int seconds) async {
+    _revealControls();
+    final p = controller;
+    if (usingVlc || p == null || !canSeek) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Luồng trực tiếp này không hỗ trợ tua.')),
+      );
+      return;
+    }
+    final end = p.value.duration.inMilliseconds;
+    final target = (p.value.position.inMilliseconds + seconds * 1000)
+        .clamp(0, end);
+    try {
+      await p.seekTo(Duration(milliseconds: target));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không tua được nguồn video này.')),
+        );
+      }
+    }
+  }
+
   Future<void> _changeVolume(double next) async {
     _revealControls();
     setState(() {
@@ -272,8 +296,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     diagnostic = reason;
     lastFailure = reason;
     engineStage = 'Media3 lỗi, đang chuyển nguồn';
-    // Retry the same stream once before trying a different source.
-    if (retriedSources.add(sourceIndex)) {
+    // A forbidden source will not recover by immediately repeating the request.
+    final forbidden = RegExp(r'\b403\b').hasMatch(reason);
+    if (!forbidden && (vtvKey == null || sourceIndex == 0) && retriedSources.add(sourceIndex)) {
       await _open(sourceIndex);
       return;
     }
@@ -284,7 +309,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       (i) => (sourceIndex + i + 1) % all.length,
     ).where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
-      // Always retry the ORIGINAL channel URL with VLC, not a VTV fallback CDN.
+      // Try the original URL with VLC once; its own startup timer and error
+      // handling stop the retry loop if it cannot play this stream either.
       sourceIndex = 0;
       await _openVlc();
       return;
@@ -337,7 +363,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       }
       final player = VlcPlayerController.network(
         playbackUrl,
-        hwAcc: HwAcc.auto,
+        // Keep hardware decoding while avoiding opaque zero-copy surfaces that
+        // can freeze while the audio/playback clock continues advancing.
+        hwAcc: HwAcc.decoding,
         autoPlay: false,
         options: VlcPlayerOptions(
           http: VlcHttpOptions(vlcHttp),
@@ -469,7 +497,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       if (!mounted || token != generation) return;
       switching = false;
       loading = false;
-      await _failover();
+      await _failover(diagnostic);
     }
   }
 
@@ -595,7 +623,6 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         body: GestureDetector(
           behavior: HitTestBehavior.opaque,
           key: const ValueKey('player-tap-surface'),
-          onTap: _toggleControls,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -616,6 +643,18 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                         ? VideoPlayer(p)
                         : const SizedBox.shrink(),
                   ),
+                ),
+              ),
+              // Transparent touch layer above native video textures, below controls.
+              // The VLC platform view may otherwise swallow parent gestures.
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _toggleControls,
+                  onDoubleTapDown: (details) {
+                    final width = MediaQuery.sizeOf(context).width;
+                    _seekRelative(details.localPosition.dx < width / 2 ? -10 : 10);
+                  },
                 ),
               ),
               if (loading && visible)
@@ -646,6 +685,16 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                             onPressed: _openExternal,
                             child: const Text('Mở trình phát ngoài'),
                           ),
+                          if (vtvKey != null)
+                            TextButton.icon(
+                              icon: const Icon(Icons.live_tv),
+                              label: const Text('Mở VTVgo chính thức'),
+                              onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
+                                builder: (_) => QuangWebScreen(title: 'VTVgo', initialUrl: Uri.parse('https://vtvgo.vn/')),
+                              )),
+                            ),
+                          if (RegExp(r'\b403\b').hasMatch(lastFailure))
+                            const Text('Máy chủ từ chối nguồn phát (HTTP 403). Thử cập nhật danh sách kênh hoặc mở VTVgo.', textAlign: TextAlign.center),
                           SelectableText('Chẩn đoán: $lastFailure'),
                         ],
                       ),
@@ -726,6 +775,11 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                                     onPressed: _retry,
                                   ),
                                   IconButton(
+                                    tooltip: 'Tua lùi 10 giây',
+                                    icon: const Icon(Icons.replay_10),
+                                    onPressed: () => _seekRelative(-10),
+                                  ),
+                                  IconButton(
                                     tooltip: 'Phát / Tạm dừng',
                                     icon: Icon(
                                       (usingVlc
@@ -755,6 +809,11 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                                       }
                                       if (mounted) setState(() {});
                                     },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Tua tới 10 giây',
+                                    icon: const Icon(Icons.forward_10),
+                                    onPressed: () => _seekRelative(10),
                                   ),
                                   if (sources.length > 1)
                                     IconButton(

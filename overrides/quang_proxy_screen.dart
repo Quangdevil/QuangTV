@@ -69,7 +69,7 @@ class _QuangProxyScreenState extends State<QuangProxyScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Proxy QuangTV')),
     body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
-      const Text('Áp dụng cho HTTP/HTTPS trong trình duyệt, QuangTube, player Media3/VLC và tải video. Không phải VPN toàn điện thoại; không chuyển các ứng dụng khác hoặc UDP/WebRTC qua proxy.'),
+      const Text('Áp dụng cho HTTP/HTTPS trong trình duyệt, player Media3/VLC và tải video. Khi mở QuangTube, proxy ứng dụng tự tắt. Không phải VPN toàn điện thoại; không chuyển các ứng dụng khác hoặc UDP/WebRTC qua proxy.'),
       const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Bật/tắt tại vị trí Sort cũ trên màn hình IPTV. Nhấn giữ nút để mở cấu hình. Mặc định dùng mạng trực tiếp; không tự chuyển sang proxy trả phí.')),
       OutlinedButton.icon(onPressed: busy ? null : _paste, icon: const Icon(Icons.content_paste), label: const Text('Dán IP:cổng:tài khoản:mật khẩu')),
       DropdownButtonFormField<String>(initialValue: type, key: ValueKey(type), decoration: const InputDecoration(labelText: 'Loại proxy'), items: const [DropdownMenuItem(value: 'http', child: Text('HTTP (hỗ trợ web HTTPS)')), DropdownMenuItem(value: 'https', child: Text('HTTPS (TLS tới proxy)')), DropdownMenuItem(value: 'socks5', child: Text('SOCKS5 (DNS qua proxy)'))], onChanged: busy ? null : (value) => setState(() => type = value ?? 'http')),
@@ -122,7 +122,7 @@ class _QuangProxyToggleState extends State<QuangProxyToggle> with WidgetsBinding
     valueListenable: QuangNetwork.state,
     builder: (context, value, _) {
       final on = value['enabled'] == true;
-      return Tooltip(message: on ? 'Tắt VPN ứng dụng' : 'Bật VPN ứng dụng', triggerMode: TooltipTriggerMode.manual, child: GestureDetector(
+      return Tooltip(message: on ? 'Tắt proxy' : 'Bật proxy', triggerMode: TooltipTriggerMode.manual, child: GestureDetector(
         onLongPress: () async { await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const QuangProxyScreen())); await _refresh(); },
         child: IconButton(key: const ValueKey('quangtv-home-vpn'),
           iconSize: widget.compact ? 20 : null,

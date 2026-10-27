@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
+      - name: Allocate monotonic version above installed rollback build 177
+        run: echo "BUILD_NUMBER=$(( ${{ github.run_number }} + 1 ))" >> "$GITHUB_ENV"
       - name: Checkout QuangTV build recipe
         uses: actions/checkout@v4
       - name: Checkout pinned MIT TV Viewer source
@@ -106,10 +108,10 @@ jobs:
       - name: Compile signed QuangTV release APK
         if: github.ref == 'refs/heads/main'
         working-directory: upstream/flutter_app
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0 --build-number=${{ env.BUILD_NUMBER }}
       - name: Name APK by version and build
         if: github.ref == 'refs/heads/main'
-        run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk"
+        run: cp upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "QuangTV-v1.3.0-build${{ env.BUILD_NUMBER }}-arm64.apk"
       - name: Verify signed release APK
         id: verify_apk
         if: github.ref == 'refs/heads/main'
@@ -118,16 +120,18 @@ jobs:
           KEY_ALIAS: ${{ secrets.QUANGTV_KEY_ALIAS }}
         run: |
           test -s upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          bash scripts/verify_android_signature.sh "QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk" "${{ github.run_number }}"
+          bash scripts/verify_android_signature.sh "QuangTV-v1.3.0-build${{ env.BUILD_NUMBER }}-arm64.apk" "${{ env.BUILD_NUMBER }}"
           python3 scripts/verify_release_apk.py upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
       - name: Enable KVM for Android playback tests
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Precompile integration APK before starting Emulator
+      - name: Precompile minified playback and debug browser integration APKs before Emulator
         working-directory: upstream/flutter_app
         run: |
+          flutter build apk --release --target-platform android-x64 --target integration_test/native_hls_test.dart --dart-define=HLS_TEST_URL=http://10.0.2.2:8765/index.m3u8
+          python3 ../../scripts/verify_vlc_dex.py build/app/outputs/flutter-apk/app-release.apk
           flutter build apk --debug --target-platform android-x64 --target integration_test/browser_test.dart
           cd android
           ./gradlew --stop
@@ -160,7 +164,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-playback-evidence-${{ github.run_number }}
+          name: native-playback-evidence-${{ env.BUILD_NUMBER }}
           overwrite: true
           path: playback-evidence/
           if-no-files-found: warn
@@ -177,15 +181,15 @@ jobs:
           grep -q 'QUANGTV_ROTATION_PASS engine=Media3' playback-evidence/visual-result.txt
           grep -q 'QUANGTV_ROTATION_PASS engine=VLC' playback-evidence/visual-result.txt
           grep -qx 'QUANGTV_VISUAL_VERIFICATION_EXIT=0' playback-evidence/visual-result.txt
-          APK="QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk"
-          TAG="quangtv-v1.3.0-vtv-test-build${{ github.run_number }}"
-          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --prerelease --latest=false --title "QuangTV VTV thử nghiệm (build ${{ github.run_number }})" --notes "Bản thử nghiệm ký bằng khóa chính thức: Media3/VLC và chuyển nguồn VTV đã kiểm tra bằng luồng HLS mẫu trên giả lập. Chưa xác minh VTV thực tế; các kiểm thử Android khác chưa đạt. Kiểm thử YouTube sẽ xử lý sau. Bản này không phải OTA chính thức."
+          APK="QuangTV-v1.3.0-build${{ env.BUILD_NUMBER }}-arm64.apk"
+          TAG="quangtv-v1.3.0-vtv-test-build${{ env.BUILD_NUMBER }}"
+          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --prerelease --latest=false --title "QuangTV VTV thử nghiệm (build ${{ env.BUILD_NUMBER }})" --notes "Bản thử nghiệm ký bằng khóa chính thức: Media3/VLC và chuyển nguồn VTV đã kiểm tra bằng luồng HLS mẫu trên giả lập. Chưa xác minh VTV thực tế; các kiểm thử Android khác chưa đạt. Kiểm thử YouTube sẽ xử lý sau. Bản này không phải OTA chính thức."
       - name: Publish APK
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
-          name: QuangTV-v1.3.0-build${{ github.run_number }}-arm64
-          path: QuangTV-v1.3.0-build${{ github.run_number }}-arm64.apk
+          name: QuangTV-v1.3.0-build${{ env.BUILD_NUMBER }}-arm64
+          path: QuangTV-v1.3.0-build${{ env.BUILD_NUMBER }}-arm64.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -196,9 +200,9 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="1.3.0"
-          TAG="quangtv-v${VERSION}-build${{ github.run_number }}"
-          APK="QuangTV-v${VERSION}-build${{ github.run_number }}-arm64.apk"
-          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --draft --title "QuangTV v${VERSION} (build ${{ github.run_number }})" --notes "Signed ARM64 APK. Browser, Media3/VLC, controls and OTA emulator tests passed. Install over previous releases without uninstalling."
+          TAG="quangtv-v${VERSION}-build${{ env.BUILD_NUMBER }}"
+          APK="QuangTV-v${VERSION}-build${{ env.BUILD_NUMBER }}-arm64.apk"
+          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --draft --title "QuangTV v${VERSION} (build ${{ env.BUILD_NUMBER }})" --notes "Signed compact ARM64 APK. VLC JNI classes verified in minified DEX and release-mode Media3/VLC playback, controls, browser and OTA emulator tests passed. Direct YouTube entry and local viewing history restored. Install over previous releases without uninstalling."
           mkdir -p "$RUNNER_TEMP/ota-download"
           gh release download "$TAG" --pattern "$APK" --dir "$RUNNER_TEMP/ota-download"
           cmp "$APK" "$RUNNER_TEMP/ota-download/$APK"

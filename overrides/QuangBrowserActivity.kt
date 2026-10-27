@@ -250,7 +250,8 @@ class QuangBrowserActivity : Activity() {
                 tabMedia[view]?.clear()
                 if (view === web) { found.text = "Tải video"; activeUrls = emptySet(); address.setText(url?.takeIf { httpUrl(it) } ?: "") }
             }
-            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); if (view === web) scanMedia() }
+            override fun onPageCommitVisible(view: WebView, url: String?) { installMediaMute(view); applyAdStyle(view); installAdGuard(view) }
+            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); installAdGuard(view); installMediaMute(view); if (view === web) scanMedia() }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
                 if (uri.scheme == "intent") {
@@ -277,12 +278,17 @@ class QuangBrowserActivity : Activity() {
         }
         view.webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                if (!isUserGesture || resultMsg == null || tabs.size >= 8) return false
+                if (blockAds || !isUserGesture || resultMsg == null || tabs.size >= 8) { if (blockAds) blockedAds.incrementAndGet(); return false }
                 newTab("about:blank")
                 val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
                 transport.webView = web; resultMsg.sendToTarget(); return true
             }
-            override fun onProgressChanged(view: WebView, value: Int) { if (view !== web) return; progress.progress = value; progress.visibility = if (value == 100) View.GONE else View.VISIBLE }
+            override fun onProgressChanged(view: WebView, value: Int) {
+                if (value == 25 || value == 50 || value == 75) { installMediaMute(view); installAdGuard(view) }
+                if (view !== web) return
+                progress.progress = value
+                progress.visibility = if (value == 100) View.GONE else View.VISIBLE
+            }
             override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                 if (view == null || fullscreen != null) { callback?.onCustomViewHidden(); return }
                 fullscreen = view; fullscreenCallback = callback
@@ -347,11 +353,12 @@ class QuangBrowserActivity : Activity() {
     private fun detect(url: String, direct: Boolean = false, owner: WebView = web) {
         if (!httpUrl(url)) return
         val parsed = Uri.parse(url)
+        if (adHost(parsed.host)) return
         val path = parsed.path?.lowercase(Locale.ROOT) ?: ""
         val mime = parsed.getQueryParameter("mime_type") ?: parsed.getQueryParameter("mime") ?: ""
         val kind = when {
             path.endsWith(".m3u8") -> "HLS"
-            listOf(".mp4", ".webm", ".m4v", ".mov").any { path.endsWith(it) } || mime.startsWith("video/") || mime.startsWith("video_") || direct -> "Video"
+            listOf(".mp4", ".webm", ".m4v", ".mov").any { path.endsWith(it) } || mime.startsWith("video/") || mime.startsWith("video_") || (direct && (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".m4v") || path.endsWith(".mov"))) -> "Video"
             else -> return
         }
         handler.post {
@@ -500,6 +507,42 @@ class QuangBrowserActivity : Activity() {
         dialog.setOnDismissListener { handler.removeCallbacks(refresh); downloadsDialog = null }
         dialog.show(); refresh.run()
     }
+    private fun installMediaMute(view: WebView) {
+        // A persistent DOM observer covers SPA navigation and dynamically inserted players.
+        // WebView cannot mute cross-origin iframes; those require native audio policy.
+        view.evaluateJavascript("""(()=>{
+          if(window.__quangMuteInstalled)return;
+          window.__quangMuteInstalled=true;
+          const mute=()=>{
+            document.querySelectorAll('video,audio').forEach(m=>{
+              if(m.__quangUserAudio)return;
+              if(!m.muted)m.muted=true;
+              if(m.volume!==0)m.volume=0;
+              m.setAttribute('muted','');
+              m.defaultMuted=true;
+            });
+          };
+          document.addEventListener('play',mute,true);
+          document.addEventListener('playing',mute,true);
+          new MutationObserver(mute).observe(document.documentElement,{childList:true,subtree:true});
+          setInterval(mute,150);
+          mute();
+        })()""", null)
+    }
+    private fun installAdGuard(view: WebView) {
+        if (!blockAds) return
+        view.evaluateJavascript("""(()=>{
+          if(window.__quangAdGuard)return;
+          window.__quangAdGuard=true;
+          const blocked=['doubleclick.net','googlesyndication.com','exoclick.com','trafficjunky.net','popads.net','popcash.net','adsterra.com','propellerads.com','juicyads.com','tsyndicate.com'];
+          const adUrl=value=>{try{const h=new URL(value,location.href).hostname;return blocked.some(d=>h===d||h.endsWith('.'+d))}catch{return false}};
+          window.open=()=>null;
+          document.addEventListener('click',e=>{
+            const a=e.target?.closest?.('a[href]');
+            if(a&&(adUrl(a.href)||a.target==='_blank')){e.preventDefault();e.stopImmediatePropagation();}
+          },true);
+        })()""", null)
+    }
     private fun applyAdStyle(view: WebView) {
         if (!blockAds) { view.evaluateJavascript("document.getElementById('quang-ad-style')?.remove()", null); return }
         view.evaluateJavascript("""(()=>{if(document.getElementById('quang-ad-style'))return;const s=document.createElement('style');s.id='quang-ad-style';s.textContent='.adsbygoogle,.advertisement,.ad-container,[data-ad-slot],iframe[src*="doubleclick.net"],iframe[src*="exoclick.com"],iframe[src*="juicyads.com"],iframe[src*="popads.net"]{display:none!important}';(document.head||document.documentElement).appendChild(s)})()""", null)
@@ -538,12 +581,36 @@ class QuangBrowserActivity : Activity() {
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(root.windowToken, 0)
         if (config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
             web.evaluateJavascript("""(()=>{const v=Array.from(document.querySelectorAll('video')).find(v=>!v.paused&&!v.ended&&!v.mediaKeys);if(!v)return false;const parents=[];for(let p=v.parentElement;p;p=p.parentElement){parents.push([p,p.getAttribute('style')]);p.style.setProperty('transform','none','important');p.style.setProperty('position','static','important');p.style.setProperty('overflow','visible','important');}window.__quangFull={v,s:v.getAttribute('style'),parents};v.style.cssText+=';position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:black!important;object-fit:contain!important';return true})()""") { result ->
-                if (result == "true") { address.clearFocus(); root.requestFocus(); (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(address.windowToken, 0); orientationFullscreen = true; addressBar.visibility = View.GONE; toolbar.visibility = View.GONE; progress.visibility = View.GONE; WindowCompat.getInsetsController(window, root).hide(WindowInsetsCompat.Type.systemBars()); ViewCompat.requestApplyInsets(root) }
+                if (result == "true") { installLandscapeControls(); address.clearFocus(); root.requestFocus(); (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(address.windowToken, 0); orientationFullscreen = true; addressBar.visibility = View.GONE; toolbar.visibility = View.GONE; progress.visibility = View.GONE; WindowCompat.getInsetsController(window, root).hide(WindowInsetsCompat.Type.systemBars()); ViewCompat.requestApplyInsets(root) }
             }
         } else exitOrientationFullscreen()
     }
+    private fun installLandscapeControls() {
+        web.evaluateJavascript("""(()=>{
+          const v=window.__quangFull?.v;
+          if(!v || document.getElementById('quang-landscape-controls'))return;
+          const bar=document.createElement('div');
+          bar.id='quang-landscape-controls';
+          bar.style.cssText='position:fixed!important;bottom:0!important;left:0!important;right:0!important;z-index:2147483647!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:12px!important;padding:14px!important;background:rgba(0,0,0,.8)!important;color:white!important';
+          const btn=(label,action)=>{const b=document.createElement('button');b.textContent=label;b.style.cssText='font-size:18px;padding:9px;color:white;background:#333;border:1px solid #888;border-radius:8px';b.onclick=e=>{e.preventDefault();e.stopPropagation();action()};bar.appendChild(b)};
+          const seek=delta=>{if(Number.isFinite(v.duration)&&v.duration>0)v.currentTime=Math.max(0,Math.min(v.duration,v.currentTime+delta));};
+          btn('−10s',()=>seek(-10));
+          btn('▶ / ❚❚',()=>v.paused?v.play():v.pause());
+          btn('+10s',()=>seek(10));
+          btn('Âm thanh',()=>{v.__quangUserAudio=true;v.muted=!v.muted;v.volume=v.muted?0:1;});
+          const volume=document.createElement('input');volume.type='range';volume.min='0';volume.max='1';volume.step='0.05';volume.value=String(v.muted?0:v.volume);
+          volume.style.cssText='width:95px;max-width:20vw';volume.setAttribute('aria-label','Âm lượng');
+          volume.oninput=()=>{v.__quangUserAudio=true;v.volume=Number(volume.value);v.muted=v.volume===0;};
+          bar.appendChild(volume);
+          const reveal=()=>{bar.style.opacity='1';bar.style.pointerEvents='auto';clearTimeout(window.__quangHideControls);window.__quangHideControls=setTimeout(()=>{bar.style.opacity='0';bar.style.pointerEvents='none'},4000)};
+          v.addEventListener('click',reveal);
+          v.addEventListener('dblclick',e=>{seek(e.clientX<innerWidth/2?-10:10);reveal()});
+          document.documentElement.appendChild(bar);reveal();
+        })()""", null)
+    }
     private fun exitOrientationFullscreen() {
         orientationFullscreen = false
+        web.evaluateJavascript("document.getElementById('quang-landscape-controls')?.remove()", null)
         web.evaluateJavascript("""(()=>{const x=window.__quangFull;if(x){if(x.s===null)x.v.removeAttribute('style');else x.v.setAttribute('style',x.s);for(const [p,s]of x.parents||[]){if(s===null)p.removeAttribute('style');else p.setAttribute('style',s)}delete window.__quangFull}})()""", null)
         addressBar.visibility = View.VISIBLE; toolbar.visibility = View.VISIBLE
         WindowCompat.getInsetsController(window, root).show(WindowInsetsCompat.Type.systemBars()); ViewCompat.requestApplyInsets(root)
@@ -552,6 +619,38 @@ class QuangBrowserActivity : Activity() {
         AlertDialog.Builder(this).setTitle("Trình duyệt")
             .setMultiChoiceItems(arrayOf("Chặn quảng cáo phổ biến"), booleanArrayOf(blockAds)) { _, _, checked ->
                 blockAds = checked; settings.edit().putBoolean("blockAds", checked).apply(); tabs.forEach { applyAdStyle(it) }
+            }
+            .setNegativeButton("Mây Việt (trang công khai)") { _, _ ->
+                val currentUrl = web.url ?: ""
+                if (!httpUrl(currentUrl) || currentUrl.contains("workers.dev")) {
+                    Toast.makeText(this, "Hãy mở trang cần đọc trước khi thử Mây Việt.", Toast.LENGTH_LONG).show()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("Đọc trang công khai qua Cloudflare")
+                        .setMessage("Chỉ thử nội dung công khai. Không đăng nhập, gửi mật khẩu hoặc thông tin doanh nghiệp riêng tư qua Worker. Worker phải cho phép tên miền đích và có thể yêu cầu Cloudflare Access.")
+                        .setNegativeButton("Hủy", null)
+                        .setPositiveButton("Thử") { _, _ ->
+                            val entry = EditText(this).apply {
+                                setSingleLine(true)
+                                setText(settings.getString("mayVietWorker", "https://may-viet-web-proxy.daquang.workers.dev"))
+                                selectAll()
+                            }
+                            AlertDialog.Builder(this).setTitle("Địa chỉ Worker của bạn")
+                                .setMessage("Nhập đúng hostname ASCII đã triển khai trên Cloudflare. Tên hiển thị có dấu không nhất thiết là URL thật.")
+                                .setView(entry)
+                                .setNegativeButton("Hủy", null)
+                                .setPositiveButton("Mở") { _, _ ->
+                                    val worker = Uri.parse(entry.text.toString().trim().trimEnd('/'))
+                                    if (worker.scheme != "https" || worker.host?.endsWith(".workers.dev") != true) {
+                                        Toast.makeText(this, "Cần URL https của Cloudflare Worker.", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        settings.edit().putString("mayVietWorker", worker.toString()).apply()
+                                        val url = worker.buildUpon().appendPath("proxy").appendQueryParameter("url", currentUrl).build().toString()
+                                        web.loadUrl(url)
+                                    }
+                                }.show()
+                        }.show()
+                }
             }
             .setNeutralButton("Kiểm tra IP") { _, _ -> QuangProxy.test(this) { value -> Toast.makeText(this, if (value == null) "Proxy chưa kết nối được hoặc đang tắt" else "IP: ${value["ip"]} · ${value["ms"]} ms", Toast.LENGTH_LONG).show() } }
             .setPositiveButton("Đóng", null).show()

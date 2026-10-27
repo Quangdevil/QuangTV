@@ -12,15 +12,26 @@ p=Path("upstream/flutter_app/lib/screens/home_screen.dart")
 s=p.read_text()
 anchor="import 'package:flutter/material.dart';"
 assert anchor in s
-s=s.replace(anchor,anchor+"\nimport 'package:url_launcher/url_launcher.dart';\nimport 'quang_discover_screen.dart';\nimport 'quang_update_screen.dart';\nimport 'quang_proxy_screen.dart';",1)
+s=s.replace(anchor,anchor+"\nimport 'package:flutter/services.dart';\nimport 'package:url_launcher/url_launcher.dart';\nimport 'quang_discover_screen.dart';\nimport 'quang_update_screen.dart';\nimport 'quang_proxy_screen.dart';",1)
 anchor="        actions: ["
 assert anchor in s
 s=s.replace(anchor,"""        actions: [
           IconButton(tooltip: 'Cập nhật QuangTV', icon: const Icon(Icons.system_update), onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangUpdateScreen())); }),
+          IconButton(
+            tooltip: 'YouTube',
+            icon: const Icon(Icons.smart_display, color: Colors.red),
+            onPressed: () async {
+              try {
+                await const MethodChannel('quangtv/youtube').invokeMethod<bool>('open', {'url': 'https://m.youtube.com/'});
+              } on PlatformException {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không mở được YouTube. Hãy thử lại.')));
+              }
+            },
+          ),
           // QuangTV navigation: one discover screen, no overlay stacks.
           IconButton(
-            tooltip: 'YouTube & Podcasts',
-            icon: const Icon(Icons.smart_display, color: Colors.red),
+            tooltip: 'Khám phá',
+            icon: const Icon(Icons.explore_outlined),
             onPressed: () async {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangDiscoverScreen()));
             },
@@ -398,6 +409,16 @@ g += '\ndependencies { coreLibraryDesugaring "com.android.tools:desugar_jdk_libs
 gradle.write_text(g)
 proguard = Path('upstream/flutter_app/android/app/proguard-rules.pro')
 proguard.write_text(proguard.read_text() + '\n-keep class org.mozilla.javascript.** { *; }\n-keep class org.mozilla.classfile.ClassFileWriter\n-dontwarn org.mozilla.javascript.tools.**\n-dontwarn org.mozilla.javascript.JavaToJSONConverters\n-dontwarn javax.script.**\n-dontwarn jdk.dynalink.**\n')
+
+# LibVLC's JNI_OnLoad resolves these classes by their original names. The
+# default native-method rule does not preserve Java classes called FROM JNI.
+# Keep only this bridge package; leave R8/resource shrinking enabled.
+proguard.write_text(proguard.read_text()
+    .replace('-keep class androidx.** { *; }', '')
+    .replace('-keep interface androidx.** { *; }', '')
+    + '\n# LibVLC JNI bridge (including IMedia$Track and callbacks)\n'
+    + '-keep class org.videolan.libvlc.** { *; }\n'
+    + '-keep interface org.videolan.libvlc.** { *; }\n')
 
 # AGP 8.8+ fixes D8 issue 362339872 with core-library desugaring directory inputs.
 settings_gradle = Path('upstream/flutter_app/android/settings.gradle')

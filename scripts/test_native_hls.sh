@@ -20,7 +20,7 @@ tap_pid=$!
 trap 'kill "$log_pid" "$frame_pid" "$tap_pid" 2>/dev/null || true' EXIT
 cd upstream/flutter_app
 set +e
-flutter test integration_test/native_hls_test.dart -d emulator-5554 --dart-define=HLS_TEST_URL=http://10.0.2.2:8765/index.m3u8 2>&1 | tee "$repo_root/playback-evidence/test-result.txt"
+flutter test integration_test/native_hls_test.dart --release -d emulator-5554 --dart-define=HLS_TEST_URL=http://10.0.2.2:8765/index.m3u8 2>&1 | tee "$repo_root/playback-evidence/test-result.txt"
 hls_status=${PIPESTATUS[0]}
 printf 'QUANGTV_HLS_TEST_EXIT=%s\n' "$hls_status" >> "$repo_root/playback-evidence/test-result.txt"
 

@@ -11,8 +11,10 @@ with ZipFile(apk) as archive:
         raise SystemExit(f'Unexpected release ABIs: {sorted(abis)}')
     if any(entry.compress_type != ZIP_DEFLATED for entry in libraries):
         raise SystemExit('Release native libraries must be compressed')
-    if apk.stat().st_size > 45_000_000:
-        raise SystemExit(f'APK size exceeds 45 MB: {apk.stat().st_size} bytes')
+    if apk.stat().st_size > 34_500_000:
+        raise SystemExit(f'APK size exceeds 34.5 MB: {apk.stat().st_size} bytes')
+    from verify_vlc_dex import verify_vlc_dex
+    verify_vlc_dex(archive)
     print(f'QUANGTV_APK_SIZE_PASS bytes={apk.stat().st_size} abis=arm64-v8a compressed=true')
     for entry in sorted(libraries, key=lambda item: item.compress_size, reverse=True)[:4]:
         print(f'{entry.filename}: {entry.compress_size} bytes in APK')
