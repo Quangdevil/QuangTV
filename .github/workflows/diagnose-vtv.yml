@@ -15,6 +15,9 @@ jobs:
           python3 - <<'PY'
           import urllib.request, urllib.parse, urllib.error
           sources = [
+              ('VTV1 playlist current', 'https://vips-livecdn.fptplay.net/live/media/vtv1/live247-hls-avc/index.m3u8'),
+              ('VTV2 playlist current', 'https://vips-livecdn.fptplay.net/live/media/vtv2/live247-hls-avc/index.m3u8'),
+              ('VTV3 playlist current', 'https://vips-livecdn.fptplay.net/live/media/vtv3/live247-hls-avc/index.m3u8'),
               ('VTV1 FPT', 'https://live.fptplay53.net/live/media/vtv1/live247-hls-avc/index.m3u8'),
               ('VTV1 VTVgo', 'https://vtvgolive-failover.vtvdigital.vn/vtvgo/vtv1-manifest.m3u8'),
               ('VTV1 NetHub', 'https://ott1.nethubtv.vn/live/vtv1/playlist.m3u8'),
