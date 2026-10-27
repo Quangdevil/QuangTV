@@ -1,0 +1,33 @@
+name: Compare original and rebuilt APK
+on:
+  push:
+    branches: [diagnose/compare-120-176]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download released files and compare APK contents
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p old new
+          gh release download quangtv-v1.3.0-build120 --pattern '*-arm64.apk' --dir old
+          gh release download quangtv-v1.3.0-build176-restored120 --pattern '*-arm64.apk' --dir new
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import hashlib
+          a=next(Path('old').glob('*.apk')); b=next(Path('new').glob('*.apk'))
+          with ZipFile(a) as x, ZipFile(b) as y:
+              xa=set(x.namelist()); ya=set(y.namelist())
+              added=sorted(ya-xa); removed=sorted(xa-ya)
+              diff=[name for name in sorted(xa&ya) if hashlib.sha256(x.read(name)).digest()!=hashlib.sha256(y.read(name)).digest()]
+              print('APK_COMPARE old=',a.name,'new=',b.name,'added=',len(added),'removed=',len(removed),'different=',len(diff))
+              print('ADDED', added[:30]); print('REMOVED', removed[:30]); print('DIFFERENT',diff[:60])
+              for name in ['lib/arm64-v8a/libapp.so','lib/arm64-v8a/libvlc.so','classes.dex','AndroidManifest.xml']:
+                  print('ENTRY',name,'same=', name in xa and name in ya and hashlib.sha256(x.read(name)).digest()==hashlib.sha256(y.read(name)).digest())
+          PY
