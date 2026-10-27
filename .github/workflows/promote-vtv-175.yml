@@ -1,0 +1,32 @@
+name: Promote verified VTV test APK to OTA
+on:
+  push:
+    branches: [publish/vtv-build175]
+permissions:
+  contents: write
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify APK bytes and promote release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG=quangtv-v1.3.0-vtv-test-build175
+          APK=QuangTV-v1.3.0-build175-arm64.apk
+          EXPECTED=1125b0cea765051f8efbc5930cea2430a7bcc7abcc3103fb0d5f33ad0b9ed598
+          gh release download "$TAG" --pattern "$APK" --dir "$RUNNER_TEMP/verified"
+          printf '%s  %s\n' "$EXPECTED" "$RUNNER_TEMP/verified/$APK" | sha256sum -c -
+          gh release edit "$TAG" --prerelease=false --latest
+          gh api "repos/$GH_REPO/releases/latest" > "$RUNNER_TEMP/latest.json"
+          python3 - "$RUNNER_TEMP/latest.json" "$TAG" "$APK" "$EXPECTED" <<'PY'
+          import json, sys
+          with open(sys.argv[1]) as f: r = json.load(f)
+          assert r['tag_name'] == sys.argv[2] and not r['draft'] and not r['prerelease']
+          a = [a for a in r['assets'] if a['name'] == sys.argv[3]]
+          assert len(a) == 1 and a[0]['digest'] == 'sha256:' + sys.argv[4]
+          assert a[0]['browser_download_url'].endswith('/' + sys.argv[2] + '/' + sys.argv[3])
+          print('QUANGTV_OTA_PROMOTION_PASS tag=' + r['tag_name'] + ' sha256=' + sys.argv[4])
+          PY
