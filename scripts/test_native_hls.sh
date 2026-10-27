@@ -36,7 +36,7 @@ if (( hls_status != 0 || ota_status != 0 || visual_status != 0 )); then
 fi
 
 set -e
-for marker in 'QUANGTV_PLAYBACK_PASS engine=Media3' 'QUANGTV_PLAYBACK_PASS engine=VLC' 'QUANGTV_CONTROLS_PASS engine=Media3' 'QUANGTV_CONTROLS_PASS engine=VLC' 'QUANGTV_UI_PASS engine=Media3' 'QUANGTV_UI_PASS engine=VLC'; do
+for marker in 'QUANGTV_VTV_FAILOVER_PASS media3Rejected=true vlcAdvanced=true' 'QUANGTV_PLAYBACK_PASS engine=Media3' 'QUANGTV_PLAYBACK_PASS engine=VLC' 'QUANGTV_CONTROLS_PASS engine=Media3' 'QUANGTV_CONTROLS_PASS engine=VLC' 'QUANGTV_UI_PASS engine=Media3' 'QUANGTV_UI_PASS engine=VLC'; do
   grep -q "$marker" "$repo_root/playback-evidence/test-result.txt"
 done
 grep -q QUANGTV_OTA_PASS "$repo_root/playback-evidence/ota-test-result.txt"

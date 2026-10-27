@@ -18,6 +18,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         global requests
+        if self.path.startswith('/vtv-fixture/'):
+            if 'Android Media3' in self.headers.get('User-Agent', ''):
+                self.send_error(403, 'Media3 failure fixture'); return
+            self.path = self.path[len('/vtv-fixture'):]
         if self.path.startswith('/proxy-only/'):
             if self.headers.get('X-QuangTV-Test-Proxy') != 'authenticated-fixture':
                 self.send_error(403, 'Authenticated proxy required'); return

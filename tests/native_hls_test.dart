@@ -12,6 +12,33 @@ void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   const url = String.fromEnvironment('HLS_TEST_URL');
+  testWidgets('VTV falls back to VLC after Media3 errors', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 1));
+    });
+    await tester.pumpWidget(MaterialApp(home: QuangNativePlayer(
+      channel: Channel(name: 'VTV1 fixture', url: 'http://10.0.2.2:8765/vtv-fixture/index.m3u8'),
+      fallbackOverride: const [],
+      startMuted: true,
+    )));
+    Duration? first;
+    final deadline = DateTime.now().add(const Duration(seconds: 90));
+    while (DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 500));
+      final players = tester.widgetList<VlcPlayer>(find.byType(VlcPlayer));
+      if (players.isNotEmpty && players.first.controller.value.isPlaying) {
+        final position = players.first.controller.value.position;
+        first ??= position;
+        if (position - first >= const Duration(seconds: 5)) {
+          debugPrint('QUANGTV_VTV_FAILOVER_PASS media3Rejected=true vlcAdvanced=true');
+          return;
+        }
+      }
+    }
+    fail('VTV must switch to VLC and advance after Media3 fails');
+  }, timeout: const Timeout(Duration(minutes: 2)));
   for (final engine in ['Media3', 'VLC']) {
     testWidgets(
       '$engine decodes HLS video and advances playback',

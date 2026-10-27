@@ -12,11 +12,14 @@ class QuangNativePlayer extends StatefulWidget {
   final Channel channel;
   final bool startWithVlc;
   final bool startMuted;
+  @visibleForTesting
+  final List<String>? fallbackOverride;
   const QuangNativePlayer({
     super.key,
     required this.channel,
     this.startWithVlc = false,
     this.startMuted = false,
+    this.fallbackOverride,
   });
   @override
   State<QuangNativePlayer> createState() => _QuangNativePlayerState();
@@ -105,7 +108,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   List<String> get sources {
     final urls = <String>[widget.channel.url];
     final key = vtvKey;
-    if (key != null) urls.addAll(fallback[key]!);
+    if (key != null) urls.addAll(widget.fallbackOverride ?? fallback[key]!);
     return urls
         .where(
           (u) =>
@@ -293,9 +296,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     lastFailure = reason;
     engineStage = 'Media3 lỗi, đang chuyển nguồn';
     // Retry the same stream once before trying a different source.
-    // A failing live VTV endpoint should not consume another 12-second
-    // initialization cycle before trying an alternative CDN.
-    if (vtvKey == null && retriedSources.add(sourceIndex)) {
+    // Retry the original VTV stream once; avoid delaying every backup CDN.
+    if ((vtvKey == null || sourceIndex == 0) && retriedSources.add(sourceIndex)) {
       await _open(sourceIndex);
       return;
     }
@@ -306,18 +308,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       (i) => (sourceIndex + i + 1) % all.length,
     ).where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
-      if (vtvKey != null) {
-        // Keep live VTV on Media3: a failing native VLC fallback can
-        // crash the process, and repeated retries obscure the real error.
-        if (mounted) {
-          setState(() {
-            loading = false;
-            switching = false;
-            error = 'Không phát được VTV bằng Media3. Kiểm tra nguồn mạng hoặc thử lại.';
-          });
-        }
-        return;
-      }
+      // Try the original URL with VLC once; its own startup timer and error
+      // handling stop the retry loop if it cannot play this stream either.
       sourceIndex = 0;
       await _openVlc();
       return;
