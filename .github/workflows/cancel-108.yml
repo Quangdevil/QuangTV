@@ -1,4 +1,4 @@
-name: Cancel superseded rollback
+name: Cancel obsolete restoration attempts
 on:
   push:
     branches: [control/cancel-build108]
@@ -9,8 +9,11 @@ jobs:
   cancel:
     runs-on: ubuntu-latest
     steps:
-      - name: Cancel build 108 per corrected user request
+      - name: Cancel superseded attempts
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh api --method POST "repos/$GH_REPO/actions/runs/40468173506/cancel"
+        run: |
+          for id in 40476369392 40476449263; do
+            gh api --method POST "repos/$GH_REPO/actions/runs/$id/cancel" || echo "Run $id already ended"
+          done
