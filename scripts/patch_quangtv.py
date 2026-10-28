@@ -12,20 +12,14 @@ p=Path("upstream/flutter_app/lib/screens/home_screen.dart")
 s=p.read_text()
 anchor="import 'package:flutter/material.dart';"
 assert anchor in s
-s=s.replace(anchor,anchor+"\nimport 'package:flutter/services.dart';\nimport 'package:url_launcher/url_launcher.dart';\nimport 'quang_discover_screen.dart';\nimport 'quang_update_screen.dart';\nimport 'quang_proxy_screen.dart';",1)
+s=s.replace(anchor,anchor+"\nimport 'package:url_launcher/url_launcher.dart';\nimport 'quang_discover_screen.dart';\nimport 'quang_update_screen.dart';\nimport 'quang_proxy_screen.dart';",1)
 anchor="        actions: ["
 assert anchor in s
 s=s.replace(anchor,"""        actions: [
           IconButton(
-            tooltip: 'YouTube',
-            icon: const Icon(Icons.smart_display, color: Colors.red),
-            onPressed: () async {
-              try {
-                await const MethodChannel('quangtv/youtube').invokeMethod<bool>('open', {'url': 'https://m.youtube.com/'});
-              } on PlatformException {
-                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không mở được YouTube. Hãy thử lại.')));
-              }
-            },
+            tooltip: 'QuangTV',
+            icon: const Icon(Icons.live_tv, color: Colors.green),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangDiscoverScreen())),
           ),
 
 """,1)
@@ -35,11 +29,11 @@ end=s.index('          // Settings gear button', start)
 s=s[:start]+'          QuangProxyToggle(compact: compactAppBar),\n'+s[end:]
 legacy=s.index('  /// Legacy sort options bottom sheet (#145)')
 s=s[:legacy]+s[s.rfind('\n}'): ]
-s=s.replace("'📺 TV Viewer'","'QuangTV'",1)
-# Keep YouTube and proxy visible on narrow cover screens; secondary destinations
+s=s.replace("'📺 TV Viewer'","'IPTV'",1)
+# Keep QuangTV and proxy visible on narrow cover screens; secondary destinations
 # remain in the existing overflow instead of consuming additional toolbar slots.
 s=s.replace("if (value == 'help') {", "if (value == 'discover') { Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangDiscoverScreen())); } else if (value == 'update') { Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangUpdateScreen())); } else if (value == 'help') {", 1)
-s=s.replace('            itemBuilder: (context) => [', "            itemBuilder: (context) => [\n              const PopupMenuItem(value: 'discover', child: Text('Khám phá · Podcast · Radio')),\n              const PopupMenuItem(value: 'update', child: Text('Cập nhật QuangTV')),", 1)
+s=s.replace('            itemBuilder: (context) => [', "            itemBuilder: (context) => [\n              const PopupMenuItem(value: 'discover', child: Text('QuangTV · TV · Podcast · Radio')),\n              const PopupMenuItem(value: 'update', child: Text('Cập nhật QuangTV')),", 1)
 
 p.write_text(s)
 
