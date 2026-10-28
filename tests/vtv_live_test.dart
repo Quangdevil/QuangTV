@@ -20,7 +20,10 @@ void main() {
         channel: Channel(name: name, url: 'https://example.org/expired-vtv-source.m3u8'),
         startMuted: true,
       )));
-      Duration? first;
+      Duration? previous;
+      Duration progressed = Duration.zero;
+      int? firstVideoMs;
+      var lastLog = DateTime.fromMillisecondsSinceEpoch(0);
       final deadline = DateTime.now().add(const Duration(seconds: 70));
       while (DateTime.now().isBefore(deadline)) {
         await tester.pump(const Duration(milliseconds: 500));
@@ -28,12 +31,23 @@ void main() {
         if (players.isEmpty) continue;
         final player = players.first.controller;
         final value = player.value;
+        if (DateTime.now().difference(lastLog).inSeconds >= 5) {
+          debugPrint('QUANGTV_VTV_STATE channel=$name host=${Uri.parse(player.dataSource).host} playing=${value.isPlaying} buffering=${value.isBuffering} positionMs=${value.position.inMilliseconds} width=${value.size.width} height=${value.size.height}');
+          lastLog = DateTime.now();
+        }
         if (!value.isPlaying || value.size.width <= 0 || value.size.height <= 0) continue;
         expect(player.dataSource, isNot(contains('example.org')));
         expect(value.volume, 0);
-        first ??= value.position;
-        if (value.position - first >= const Duration(seconds: 5)) {
-          debugPrint('QUANGTV_VTV_LIVE_PASS channel=$name freshOfficialSource=true realVideo=true width=${value.size.width} height=${value.size.height} advancedMs=${(value.position-first).inMilliseconds}');
+        firstVideoMs ??= DateTime.now().millisecondsSinceEpoch;
+        // Live windows can slide backwards; count forward playback across
+        // those timeline resets and independently verify changing video pixels.
+        final delta = previous == null ? Duration.zero : value.position - previous;
+        if (delta > Duration.zero && delta < const Duration(seconds: 2)) progressed += delta;
+        previous = value.position;
+        if (progressed >= const Duration(seconds: 5)) {
+          await tester.pump(const Duration(seconds: 6));
+          debugPrint('QUANGTV_VTV_VISUAL channel=$name startMs=$firstVideoMs endMs=${DateTime.now().millisecondsSinceEpoch}');
+          debugPrint('QUANGTV_VTV_LIVE_PASS channel=$name freshOfficialSource=true realVideo=true width=${value.size.width} height=${value.size.height} advancedMs=${progressed.inMilliseconds}');
           return;
         }
       }

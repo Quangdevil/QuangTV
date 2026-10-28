@@ -67,6 +67,11 @@ class QuangVtvSource {
       }
     }
     if (urls.isEmpty) throw StateError('VTVgo chưa cung cấp nguồn miễn phí phù hợp');
-    return urls.toList();
+    // Prefer the official Akamai delivery path verified with real H.264/AAC.
+    // Keep other API-provided CDNs as fallbacks; never persist signed URLs.
+    final ordered = urls.toList();
+    int rank(String url) => Uri.parse(url).host.endsWith('.akamaized.net') ? 0 : 1;
+    ordered.sort((a, b) => rank(a).compareTo(rank(b)));
+    return ordered;
   }
 }
