@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import '../models/channel.dart';
 import 'quang_web_screen.dart';
+import 'quang_vtv_source.dart';
 
 /// Public, anonymous HLS fallbacks. No credentials or signed URLs.
 class QuangNativePlayer extends StatefulWidget {
@@ -58,58 +59,14 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   static const _castChannel = MethodChannel('quangtv/cast');
   static const _externalChannel = MethodChannel('quangtv/external_player');
 
-  static const Map<String, List<String>> fallback = {
-    'VTV1': [
-      'https://live.fptplay53.net/live/media/vtv1/live247-hls-avc/index.m3u8',
-      'https://vtvgolive-failover.vtvdigital.vn/vtvgo/vtv1-manifest.m3u8',
-      'https://ott1.nethubtv.vn/live/vtv1/playlist.m3u8',
-    ],
-    'VTV2': [
-      'https://live.fptplay53.net/live/media/vtv2/live247-hls-avc/index.m3u8',
-      'https://vtvgolive-failover.vtvdigital.vn/vtvgo/vtv2-manifest.m3u8',
-    ],
-    'VTV3': [
-      'https://live.fptplay53.net/live/media/vtv3/live247-hls-avc/index.m3u8',
-      'https://vtvgolive-failover.vtvdigital.vn/vtvgo/vtv3-manifest.m3u8',
-    ],
-    'VTV4': [
-      'https://live.fptplay53.net/live/media/vtv4/live247-hls-avc/index.m3u8',
-    ],
-    'VTV5': [
-      'https://live.fptplay53.net/live/media/vtv5/live247-hls-avc/index.m3u8',
-    ],
-    'VTV7': [
-      'https://live.fptplay53.net/live/media/vtv7/live247-hls-avc/index.m3u8',
-    ],
-    'VTV8': [
-      'https://live.fptplay53.net/live/media/vtv8/live-hls-avc/index.m3u8',
-    ],
-    'VTV9': [
-      'https://live.fptplay53.net/live/media/vtv9/live247-hls-avc/index.m3u8',
-    ],
-  };
-
-  String? get vtvKey {
-    final name = widget.channel.name.toUpperCase().replaceAll(
-      RegExp(r'[^A-Z0-9]'),
-      '',
-    );
-    for (final key in fallback.keys) {
-      if (name.startsWith(key) &&
-          (name.length == key.length ||
-              !RegExp(
-                r'[0-9]',
-              ).hasMatch(name.substring(key.length, key.length + 1)))) {
-        return key;
-      }
-    }
-    return null;
-  }
+  List<String> resolvedVtvSources = [];
+  String? get vtvKey => QuangVtvSource.channelId(widget.channel.name);
 
   List<String> get sources {
-    final urls = <String>[widget.channel.url];
-    final key = vtvKey;
-    if (key != null) urls.addAll(widget.fallbackOverride ?? fallback[key]!);
+    final urls = resolvedVtvSources.isNotEmpty
+        ? List<String>.of(resolvedVtvSources)
+        : <String>[widget.channel.url];
+    if (widget.fallbackOverride != null) urls.addAll(widget.fallbackOverride!);
     return urls
         .where(
           (u) =>
@@ -242,6 +199,22 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         streamHeaders = decoded.map((k, v) => MapEntry(k, v.toString()));
       } catch (_) {}
     }
+    if (vtvKey != null && widget.fallbackOverride == null) {
+      if (mounted) setState(() => engineStage = 'Đang lấy nguồn VTVgo mới');
+      try {
+        resolvedVtvSources = await QuangVtvSource.resolve(widget.channel.name);
+        // Never forward saved cookies/auth for an old IPTV CDN to VTVgo.
+        streamHeaders = Map<String, String>.of(QuangVtvSource.headers);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          loading = false;
+          error = 'Không lấy được nguồn VTVgo mới. Thử lại hoặc mở VTVgo chính thức.';
+          lastFailure = 'VTVgo chưa trả nguồn phát; không thử các link CDN cũ.';
+        });
+        return;
+      }
+    }
     if (mounted) {
       if (widget.startWithVlc) {
         await _openVlc();
@@ -298,7 +271,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     engineStage = 'Media3 lỗi, đang chuyển nguồn';
     // A forbidden source will not recover by immediately repeating the request.
     final forbidden = RegExp(r'\b403\b').hasMatch(reason);
-    if (!forbidden && (vtvKey == null || sourceIndex == 0) && retriedSources.add(sourceIndex)) {
+    if (!forbidden && vtvKey == null && retriedSources.add(sourceIndex)) {
       await _open(sourceIndex);
       return;
     }
@@ -409,12 +382,12 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           });
         }
       });
-      vlcStartup = Timer(const Duration(seconds: 25), () {
+      vlcStartup = Timer(Duration(seconds: vtvKey != null ? 10 : 25), () {
         if (mounted && token == vlcToken && loading) {
           setState(() {
             loading = false;
             error =
-                'VLC không khởi tạo được nguồn sau 25 giây. Kiểm tra URL/HTTP hoặc lỗi native VLC.';
+                'VLC không khởi tạo được nguồn. Kiểm tra URL hoặc mở VTVgo chính thức.';
           });
         }
       });
@@ -476,7 +449,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       },
     );
     try {
-      await player.initialize().timeout(const Duration(seconds: 12));
+      await player.initialize().timeout(Duration(seconds: vtvKey != null ? 6 : 12));
       if (!mounted || token != generation) {
         await player.dispose();
         return;
@@ -504,7 +477,16 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   void _retry() {
     failedSources.clear();
     retriedSources.clear();
-    _open(0);
+    if (vtvKey != null && widget.fallbackOverride == null) {
+      setState(() { error = null; loading = true; });
+      resolvedVtvSources = [];
+      vlcStartup?.cancel();
+      vlcToken++;
+      generation++;
+      _initializePlayback();
+    } else {
+      _open(0);
+    }
   }
 
   Future<void> _openExternal() async {
@@ -690,7 +672,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                               icon: const Icon(Icons.live_tv),
                               label: const Text('Mở VTVgo chính thức'),
                               onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
-                                builder: (_) => QuangWebScreen(title: 'VTVgo', initialUrl: Uri.parse('https://vtvgo.vn/')),
+                                builder: (_) => QuangWebScreen(title: 'VTVgo', initialUrl: Uri.parse('https://vtvgo.vn/channel/${vtvKey ?? '1'}')),
                               )),
                             ),
                           if (RegExp(r'\b403\b').hasMatch(lastFailure))

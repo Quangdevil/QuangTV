@@ -3,6 +3,7 @@ import shutil
 shutil.copyfile('overrides/quang_discover_screen.dart', 'upstream/flutter_app/lib/screens/quang_discover_screen.dart')
 shutil.copyfile('overrides/quang_private_screen.dart', 'upstream/flutter_app/lib/screens/quang_private_screen.dart')
 shutil.copyfile('overrides/quang_web_screen.dart', 'upstream/flutter_app/lib/screens/quang_web_screen.dart')
+shutil.copyfile('overrides/quang_vtv_source.dart', 'upstream/flutter_app/lib/screens/quang_vtv_source.dart')
 shutil.copyfile('overrides/quang_native_player.dart', 'upstream/flutter_app/lib/screens/quang_native_player.dart')
 shutil.copyfile('overrides/quang_audio_screen.dart', 'upstream/flutter_app/lib/screens/quang_audio_screen.dart')
 shutil.copyfile('overrides/quang_update_screen.dart', 'upstream/flutter_app/lib/screens/quang_update_screen.dart')
@@ -206,6 +207,7 @@ paths.write_text('<?xml version="1.0" encoding="utf-8"?><paths xmlns:android="ht
 tests = Path('upstream/flutter_app/integration_test')
 tests.mkdir(exist_ok=True)
 shutil.copyfile('tests/native_hls_test.dart', tests / 'native_hls_test.dart')
+shutil.copyfile('tests/vtv_live_test.dart', tests / 'vtv_live_test.dart')
 pubspec.write_text(pubspec.read_text().replace('dev_dependencies:', 'dev_dependencies:\n  integration_test:\n    sdk: flutter', 1))
 
 # Android API 24+ prioritizes this XML over usesCleartextTraffic in the manifest.
@@ -435,3 +437,5 @@ import re
 minified_test_rules = re.sub(r'-assumenosideeffects class android\.util\.Log \{.*?\}', '', proguard.read_text(), flags=re.S)
 (proguard.parent / 'proguard-debug-rules.pro').write_text(minified_test_rules)
 gradle.write_text(gradle.read_text() + '\nandroid { buildTypes { debug { minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-debug-rules.pro" } } }\n')
+
+shutil.copyfile('tests/quang_vtv_source_test.dart', 'upstream/flutter_app/test/quang_vtv_source_test.dart')
