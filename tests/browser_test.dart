@@ -68,11 +68,11 @@ void main() {
     });
     await tester.pumpWidget(MaterialApp(home: Scaffold(appBar: AppBar(actions: const [QuangProxyToggle()]))));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byTooltip('Tắt VPN ứng dụng'), findsOneWidget);
+    expect(find.byTooltip('Tắt proxy'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('quangtv-home-vpn')));
     await tester.runAsync(() async { await Future<void>.delayed(const Duration(milliseconds: 500)); });
     await tester.pump();
-    expect(find.byTooltip('Bật VPN ứng dụng'), findsOneWidget);
+    expect(find.byTooltip('Bật proxy'), findsOneWidget);
     await tester.runAsync(() async {
       final client = HttpClient();
       try {
@@ -86,7 +86,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('quangtv-home-vpn')));
     await tester.runAsync(() async { await Future<void>.delayed(const Duration(milliseconds: 500)); });
     await tester.pump();
-    expect(find.byTooltip('Tắt VPN ứng dụng'), findsOneWidget);
+    expect(find.byTooltip('Tắt proxy'), findsOneWidget);
     await tester.runAsync(() async {
       final client = HttpClient();
       try {
