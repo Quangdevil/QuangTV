@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Prioritize changed browser behavior; never publish when required suites fail.
 set -uo pipefail
+# The disposable Google APIs emulator's Pixel Launcher can ANR during boot and
+# leave a system error dialog above every app. It is not part of QuangTV QA.
+# Keep QuangTV error dialogs enabled; stop only the unrelated launcher.
+adb shell am force-stop com.google.android.apps.nexuslauncher
+adb shell pm disable-user --user 0 com.google.android.apps.nexuslauncher
 bash scripts/test_browser.sh
 browser_status=$?
 bash scripts/test_native_hls.sh

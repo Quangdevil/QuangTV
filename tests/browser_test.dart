@@ -173,6 +173,7 @@ void main() {
     // Flutter frame that Android cannot deliver until the browser closes.
     // Poll the actual native state instead; keep every UI/playback assertion.
     await tester.runAsync(() async {
+      try {
       Future<Map<dynamic, dynamic>> state() async => await browser.invokeMapMethod<dynamic, dynamic>('inspect').timeout(const Duration(seconds: 10)) ?? {};
       Map<dynamic, dynamic> current = {};
       final deadline = DateTime.now().add(const Duration(seconds: 40));
@@ -233,6 +234,9 @@ void main() {
       expect((await state())['rotationPassed'], isTrue);
       expect((await state())['fullscreen'], isFalse);
       debugPrint('QUANGTV_BROWSER_UI_PASS tabs=true downloadedFilePlayback=true quickProxy=true landscapeFullscreen=true adsBlocked=true');
+      } finally {
+        await browser.invokeMethod<void>('close');
+      }
     });
     final deadline = DateTime.now().add(const Duration(seconds: 40));
     var played = false;
