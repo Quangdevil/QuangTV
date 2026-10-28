@@ -25,7 +25,9 @@ class QuangVtvSource {
     for (final entry in ids.entries) {
       if (compact.startsWith(entry.key) &&
           (compact.length == entry.key.length ||
-           !RegExp(r'[0-9]').hasMatch(compact[entry.key.length]))) return entry.value;
+           !RegExp(r'[0-9]').hasMatch(compact[entry.key.length]))) {
+        return entry.value;
+      }
     }
     return null;
   }
@@ -40,7 +42,7 @@ class QuangVtvSource {
         Uri.parse('https://api.vtvdigital.org/live-channel/v21.0/playback/source'),
         headers: {...headers, 'Content-Type': 'application/json', 'Accept': 'application/json'},
         body: jsonEncode({'channelId': id, 'platform': 'webAndroid'}),
-      ).timeout(const Duration(seconds: 6));
+      ).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) throw StateError('VTVgo HTTP ${response.statusCode}');
       return parse(jsonDecode(response.body));
     } finally {

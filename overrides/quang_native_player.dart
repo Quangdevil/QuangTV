@@ -61,6 +61,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
 
   List<String> resolvedVtvSources = [];
   String? get vtvKey => QuangVtvSource.channelId(widget.channel.name);
+  bool get useVtvResolver => vtvKey != null && widget.fallbackOverride == null && widget.channel.country != 'Private';
 
   List<String> get sources {
     final urls = resolvedVtvSources.isNotEmpty
@@ -199,7 +200,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         streamHeaders = decoded.map((k, v) => MapEntry(k, v.toString()));
       } catch (_) {}
     }
-    if (vtvKey != null && widget.fallbackOverride == null) {
+    if (useVtvResolver) {
       if (mounted) setState(() => engineStage = 'Đang lấy nguồn VTVgo mới');
       try {
         resolvedVtvSources = await QuangVtvSource.resolve(widget.channel.name);
@@ -477,7 +478,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   void _retry() {
     failedSources.clear();
     retriedSources.clear();
-    if (vtvKey != null && widget.fallbackOverride == null) {
+    if (useVtvResolver) {
       setState(() { error = null; loading = true; });
       resolvedVtvSources = [];
       vlcStartup?.cancel();
