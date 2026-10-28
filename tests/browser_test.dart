@@ -67,10 +67,12 @@ void main() {
         snapshot=await state('seek',.4);
         final duration=(snapshot['duration'] as num).toDouble();
         expect((snapshot['position'] as num).toDouble(),closeTo(duration*.4,duration*.15));
+        final before=(snapshot['position'] as num).toDouble();
         snapshot=await state('forward10');
-        expect((snapshot['position'] as num).toDouble(),closeTo(duration,.7));
+        expect((snapshot['position'] as num).toDouble(),closeTo((before+10).clamp(0,duration),.7));
+        final forward=(snapshot['position'] as num).toDouble();
         snapshot=await state('back10');
-        expect((snapshot['position'] as num).toDouble(),closeTo(0,.7));
+        expect((snapshot['position'] as num).toDouble(),closeTo((forward-10).clamp(0,duration),.7));
         await Future<void>.delayed(const Duration(seconds:4));
         expect((await state())['hidden'],true);
         expect((await state('tapVideo'))['hidden'],false);

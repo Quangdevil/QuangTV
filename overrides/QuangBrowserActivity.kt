@@ -60,7 +60,7 @@ class QuangBrowserActivity : Activity() {
                 android.util.Log.i("QuangBrowserTest", "action=$action begin")
                 when (action) {
                     "mayExample" -> it.openMayTarget("https://example.org/")
-                    "mayDemo" -> { it.mayMode = true; it.applyBrowserTransport({it.web.loadUrl(MAY_HOME + "demo")}, {}) }
+                    "mayDemo" -> { it.testMayFixture = true; it.mayMode = true; it.applyBrowserTransport({it.web.loadUrl(MAY_HOME + "demo")}, {}) }
                     "focus" -> { it.address.requestFocus(); it.address.postDelayed({ (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(it.address, InputMethodManager.SHOW_IMPLICIT) }, 300) }
                     "select" -> it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
                     "download" -> it.found.performClick()
@@ -75,8 +75,13 @@ class QuangBrowserActivity : Activity() {
                     "playPage" -> it.web.evaluateJavascript("(()=>{const v=document.querySelector('video');v.muted=true;v.play().catch(console.error)})()", null)
                     "previewAndRotate" -> {
                         it.previewPassed = false
-                        it.downloadsButton.performClick()
-                        it.handler.postDelayed({
+                        var downloadChecks = 0
+                        val awaitDownload = object : Runnable {
+                          override fun run() {
+                            val ready = it.downloads.query(DownloadManager.Query().setFilterByStatus(DownloadManager.STATUS_SUCCESSFUL)).use { cursor -> cursor.moveToFirst() }
+                            if (!ready && ++downloadChecks < 80) { it.handler.postDelayed(this, 250); return }
+                            it.downloadsButton.performClick()
+                            it.handler.postDelayed({
                             it.openCompletedButton?.performClick()
                             var checks = 0
                             val verify = object : Runnable {
@@ -96,7 +101,10 @@ class QuangBrowserActivity : Activity() {
                                 }
                             }
                             it.handler.postDelayed(verify, 250)
-                        }, 400)
+                            }, 400)
+                          }
+                        }
+                        it.handler.post(awaitDownload)
                     }
                     "rotatePlayback" -> {
                         // Drive both OS rotations natively: the hidden Flutter test surface
@@ -146,6 +154,8 @@ class QuangBrowserActivity : Activity() {
     }
     private lateinit var root: LinearLayout
     private var mayMode = false
+    // Enabled only by the debuggable integration-test command above.
+    private var testMayFixture = false
     private var pendingMayTarget: String? = null
     private fun isMayUrl(url: String?) = try { Uri.parse(url ?: "").host == Uri.parse(MAY_HOME).host } catch (_: Exception) { false }
     private lateinit var web: WebView
@@ -304,6 +314,13 @@ class QuangBrowserActivity : Activity() {
             }
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val uri = request.url
+                if (testMayFixture && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 && isMayUrl(uri.toString()) && uri.path == "/proxy" && uri.getQueryParameter("url")?.endsWith("/flower.mp4") == true) {
+                    val connection = java.net.URL("http://10.0.2.2:8765/fixture.mp4").openConnection(java.net.Proxy.NO_PROXY) as java.net.HttpURLConnection
+                    connection.connectTimeout = 10000; connection.readTimeout = 10000
+                    request.requestHeaders.entries.firstOrNull { it.key.equals("Range", true) }?.let { connection.setRequestProperty("Range", it.value) }
+                    val headers = connection.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(", ") }
+                    return WebResourceResponse("video/mp4", null, connection.responseCode, connection.responseMessage, headers, connection.inputStream)
+                }
                 if (blockAds && !request.isForMainFrame && adHost(uri.host)) {
                     blockedAds.incrementAndGet()
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
