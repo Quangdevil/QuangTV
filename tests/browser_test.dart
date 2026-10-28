@@ -18,6 +18,74 @@ import 'package:video_player/video_player.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  testWidgets('Embedded May opens proxied pages and has real landscape video controls', (tester) async {
+    const browser = MethodChannel('quangtv/browser');
+    await browser.invokeMethod<void>('proxySave', {'enabled': true, 'type': 'http', 'host': '10.0.2.2', 'port': 8766, 'user': 'fixture-user', 'password': 'fixture-password'});
+    await tester.pumpWidget(const MaterialApp(home: QuangBrowserScreen()));
+    await tester.runAsync(() async {
+      Future<Map<dynamic,dynamic>> state([String command='state', double value=.5]) async =>
+        await browser.invokeMapMethod<dynamic,dynamic>('mayTest', {'command':command,'value':value}) ?? {};
+      Future<Map<dynamic,dynamic>> until(bool Function(Map<dynamic,dynamic>) matches) async {
+        final deadline=DateTime.now().add(const Duration(seconds:45));
+        Map<dynamic,dynamic> latest={};
+        while(DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds:300));
+          latest=await state();
+          if(matches(latest)) return latest;
+        }
+        fail('May state did not become ready: $latest');
+      }
+      try {
+        final deadline=DateTime.now().add(const Duration(seconds:20));
+        Map<dynamic,dynamic> info={};
+        while(DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds:300));
+          info=await browser.invokeMapMethod<dynamic,dynamic>('inspect') ?? {};
+          if(info['mayMode']==true && (info['pageUrl']?.toString() ?? '').contains('may-viet-web-proxy.daquang.workers.dev')) break;
+        }
+        expect(info['mayMode'],true);
+        expect(info['pageUrl'],contains('may-viet-web-proxy.daquang.workers.dev'));
+        await browser.invokeMethod<void>('mayExample');
+        await until((s)=>s['frameReady']==true);
+        debugPrint('QUANGTV_MAY_EMBED_PASS remoteShell=true serverBrowse=true sandboxReady=true');
+        await browser.invokeMethod<void>('mayDemo');
+        var snapshot=await until((s)=>s['ready']==true && s['hasControls']==true);
+        expect(snapshot['muted'],true);
+        expect(snapshot['hasSeek'],true);
+        if (snapshot['paused']==true) { await state('tapVideo'); await state('play'); }
+        await browser.invokeMethod<void>('landscape');
+        await until((s)=>s['stage']==true);
+        await state('tapVideo');
+        snapshot=await state();
+        expect(snapshot['hidden'],false);
+        if(snapshot['paused']==false) snapshot=await state('play');
+        expect(snapshot['paused'],true);
+        snapshot=await state('volume',.35);
+        expect(snapshot['muted'],false);
+        expect((snapshot['volume'] as num).toDouble(),closeTo(.35,.12));
+        snapshot=await state('seek',.4);
+        final duration=(snapshot['duration'] as num).toDouble();
+        expect((snapshot['position'] as num).toDouble(),closeTo(duration*.4,duration*.15));
+        snapshot=await state('forward10');
+        expect((snapshot['position'] as num).toDouble(),closeTo(duration,.7));
+        snapshot=await state('back10');
+        expect((snapshot['position'] as num).toDouble(),closeTo(0,.7));
+        await Future<void>.delayed(const Duration(seconds:4));
+        expect((await state())['hidden'],true);
+        expect((await state('tapVideo'))['hidden'],false);
+        final proxy=await browser.invokeMapMethod<dynamic,dynamic>('proxyGet');
+        expect(proxy?['enabled'],true,reason:'May must not change the IPTV proxy configuration');
+        debugPrint('QUANGTV_MAY_CONTROLS_PASS landscape=true tapReveal=true playPause=true volume=true seek=true doubleTap10s=true autoHide=true iptvProxyPreserved=true');
+      } finally {
+        await browser.invokeMethod<void>('portrait');
+        await browser.invokeMethod<void>('close');
+        await Future<void>.delayed(const Duration(milliseconds:500));
+        await browser.invokeMethod<void>('proxySave', {'enabled':false,'type':'http','host':'10.0.2.2','port':8766,'user':'fixture-user','password':'fixture-password'});
+      }
+    });
+    await tester.pump(const Duration(seconds:1));
+    await tester.pumpWidget(const SizedBox.shrink());
+  },timeout:const Timeout(Duration(minutes:4)));
   testWidgets('Private actions stay in one row and the last channel is deletable', (tester) async {
     SharedPreferences.setMockInitialValues({'quangtv_private_channels': List.generate(30, (i) => jsonEncode({'name': 'Channel $i', 'url': 'https://example.org/$i.m3u8'}))});
     await tester.pumpWidget(const MaterialApp(home: QuangPrivateScreen()));

@@ -187,6 +187,10 @@ jobs:
           grep -q 'QUANGTV_VTV_LIVE_PASS channel=VTV3' playback-evidence/vtv-live-result.txt
           grep -q 'QUANGTV_VTV_RENDER_PASS channel=VTV1' playback-evidence/vtv-live-visual.txt
           grep -q 'QUANGTV_VTV_RENDER_PASS channel=VTV3' playback-evidence/vtv-live-visual.txt
+          grep -q 'QUANGTV_YOUTUBE_DIRECT_PASS' playback-evidence/ota-test-result.txt
+          grep -q 'QUANGTV_YOUTUBE_HISTORY_PASS' playback-evidence/ota-test-result.txt
+          grep -q 'QUANGTV_MAY_EMBED_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_MAY_CONTROLS_PASS' playback-evidence/browser-test-result.txt
           APK="QuangTV-v1.3.0-build${{ env.BUILD_NUMBER }}-arm64.apk"
           TAG="quangtv-v1.3.0-vtv-test-build${{ env.BUILD_NUMBER }}"
           gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --prerelease --latest=false --title "QuangTV VTV thử nghiệm (build ${{ env.BUILD_NUMBER }})" --notes "Bản thử nghiệm ký bằng khóa chính thức: Media3/VLC và chuyển nguồn VTV đã kiểm tra bằng luồng HLS mẫu trên giả lập. VTV1 và VTV3 thực tế đã giải mã và phát tiến hơn 5 giây trên giả lập bằng nguồn mới từ API VTVgo miễn phí. Kiểm thử YouTube sẽ xử lý sau. Bản này không phải OTA chính thức."

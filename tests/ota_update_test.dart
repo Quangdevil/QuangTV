@@ -103,13 +103,41 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: QuangDiscoverScreen()));
       await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.byTooltip('YouTube'));
-      await tester.pump(const Duration(milliseconds: 500));
-      final search = find.byType(TextField).first;
-      await tester.enterText(
-        search,
-        'https://m.youtube.com/watch?v=aqz-KE-bpKQ&autoplay=1',
-      );
-      await tester.testTextInput.receiveAction(TextInputAction.search);
+      // The native QuangTube Activity pauses Flutter; wait through the bridge.
+      await tester.runAsync(() async {
+        final deadline = DateTime.now().add(const Duration(seconds: 15));
+        Map<dynamic,dynamic> status = {};
+        while (DateTime.now().isBefore(deadline)) {
+          status = await youtube.invokeMapMethod<dynamic,dynamic>('status') ?? {};
+          if ((status['url']?.toString() ?? '').contains('youtube.com')) break;
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        expect(Uri.parse(status['requestedUrl'] as String).path, anyOf('/', ''));
+        debugPrint('QUANGTV_YOUTUBE_DIRECT_PASS opensHome=true noIntermediateSearch=true');
+        for (final action in ['searchOne','searchTwo']) {
+          await youtube.invokeMethod<void>('historyAction', {'action':action});
+          await Future<void>.delayed(const Duration(seconds: 2));
+        }
+        var history = await youtube.invokeMapMethod<dynamic,dynamic>('historyState') ?? {};
+        expect(history['searches'], containsAll(['quangtv-history-one','quangtv-history-two']));
+        await youtube.invokeMethod<void>('historyAction', {'action':'showSearchHistory'});
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await youtube.invokeMethod<void>('historyAction', {'action':'deleteFirst'});
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        history = await youtube.invokeMapMethod<dynamic,dynamic>('historyState') ?? {};
+        expect(history['searches'], isNot(contains('quangtv-history-two')));
+        expect(history['searches'], contains('quangtv-history-one'));
+        await youtube.invokeMethod<void>('historyAction', {'action':'clearAll'});
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await youtube.invokeMethod<void>('historyAction', {'action':'confirmClear'});
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        history = await youtube.invokeMapMethod<dynamic,dynamic>('historyState') ?? {};
+        expect(history['searches'], isEmpty);
+        debugPrint('QUANGTV_YOUTUBE_HISTORY_PASS capturedSearches=true deleteOne=true clearAll=true');
+        await youtube.invokeMethod<void>('close');
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await youtube.invokeMethod<bool>('open', {'url':'https://m.youtube.com/watch?v=aqz-KE-bpKQ&autoplay=1'});
+      });
       bool passed = false;
       String blockedReason = '';
       await tester.runAsync(() async {

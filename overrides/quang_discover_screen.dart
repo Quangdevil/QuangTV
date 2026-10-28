@@ -25,7 +25,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   List<Channel> channels = [];
   int section = 0;
   List<String> youtubeHistory = [];
-  final youtubeSearch = TextEditingController();
   final podcastFeed = TextEditingController();
   final radioStream = TextEditingController();
   Set<String> favorites = {};
@@ -332,16 +331,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: title, streamUrl: url)));
   }
 
-  Future<void> _searchYoutube(String query) async {
-    query = query.trim();
-    if (query.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-    youtubeHistory = [query, ...youtubeHistory.where((x) => x != query)].take(30).toList();
-    await prefs.setStringList('quangtv_youtube_search_history', youtubeHistory);
-    if (mounted) setState(() {});
-    await _openYoutube(query);
-  }
-
   Future<void> _openYoutube([String query = '']) async {
     final parsed = Uri.tryParse(query);
     final isYoutubeLink = parsed != null && parsed.scheme == 'https' &&
@@ -351,7 +340,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       : Uri.https('m.youtube.com', '/results', {'search_query': query});
     FocusScope.of(context).unfocus();
     try {
-      await const MethodChannel('quangtv/youtube').invokeMethod<bool>('open', {'url': target.toString()});
+      await const MethodChannel('quangtv/youtube').invokeMethod<bool>('open', {'url': target.toString(), 'searchHistory': youtubeHistory});
     } on PlatformException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không mở được QuangTube: ${e.message}')));
     }
@@ -361,7 +350,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   void dispose() {
     urlController.dispose();
     searchController.dispose();
-    youtubeSearch.dispose();
     podcastFeed.dispose();
     radioStream.dispose();
     super.dispose();
@@ -383,7 +371,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         SizedBox(width: double.infinity, child: SegmentedButton<int>(
           segments: const [ButtonSegment(value: 0, icon: Icon(Icons.live_tv), tooltip: 'TV'), ButtonSegment(value: 1, icon: Icon(Icons.smart_display), tooltip: 'YouTube'), ButtonSegment(value: 2, icon: Icon(Icons.podcasts), tooltip: 'Podcast'), ButtonSegment(value: 3, icon: Icon(Icons.radio), tooltip: 'Radio'), ButtonSegment(value: 4, icon: Icon(Icons.favorite), tooltip: 'Ưa thích')],
           selected: {section},
-          onSelectionChanged: (values) => setState(() => section = values.first),
+          onSelectionChanged: (values) { if (values.first == 1) { _openYoutube(); } else { setState(() => section = values.first); } },
         )),
         const SizedBox(height: 12),
         if (section == 0) ...[
@@ -448,16 +436,6 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
               child: ListTile(leading: const Icon(Icons.favorite), title: Text(c.name), onTap: () => _playChannel(c), trailing: IconButton(tooltip: 'Bỏ yêu thích', icon: const Icon(Icons.favorite), onPressed: () => _toggleFavorite(c))),
             ),
 
-        ],
-        if (section == 1) ...[
-          const Text('YouTube', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const Text('Không cần đăng nhập để tìm và xem video công khai. Lịch sử tìm kiếm lưu trên máy.'),
-          TextField(controller: youtubeSearch, textInputAction: TextInputAction.search, onSubmitted: _searchYoutube,
-            decoration: InputDecoration(hintText: 'Tìm video YouTube', prefixIcon: const Icon(Icons.search), suffixIcon: IconButton(icon: const Icon(Icons.arrow_forward), onPressed: () => _searchYoutube(youtubeSearch.text)))),
-          const SizedBox(height: 8),
-          const Text('Lịch sử tìm kiếm'),
-          for (final query in youtubeHistory) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(query), onTap: () => _searchYoutube(query)),
-          ListTile(leading: const Icon(Icons.play_circle_outline), title: const Text('QuangTube · YouTube'), subtitle: const Text('Tìm và xem video ngay trong QuangTV'), onTap: () => _openYoutube()),
         ],
         if (section == 2) ...[
           const Text('Podcast · Phát trong QuangTV', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),

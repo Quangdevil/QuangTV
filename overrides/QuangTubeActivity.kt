@@ -24,19 +24,38 @@ class QuangTubeActivity : Activity() {
     companion object {
         private var current: java.lang.ref.WeakReference<QuangTubeActivity>? = null
         fun status(): Map<String, Any> = current?.get()?.let {
-            mapOf("url" to (it.web.url ?: ""), "position" to it.position,
+            mapOf("requestedUrl" to (it.intent.getStringExtra("url") ?: "https://m.youtube.com/"), "url" to (it.web.url ?: ""), "position" to it.position,
                 "playing" to it.playing, "error" to it.pageError)
         } ?: mapOf("url" to "", "position" to 0.0, "playing" to false, "error" to "closed")
         fun close() { current?.get()?.finish() }
+        fun historyState(): Map<String, Any> = current?.get()?.let { activity ->
+            mapOf("searches" to activity.historyItems("searches").map { it.optString("query") }, "videos" to activity.historyItems("videos").size)
+        } ?: emptyMap()
+        fun testAction(action: String) { current?.get()?.let { activity ->
+            when (action) {
+                "searchOne" -> activity.web.loadUrl("https://m.youtube.com/results?search_query=quangtv-history-one")
+                "searchTwo" -> activity.web.loadUrl("https://m.youtube.com/results?search_query=quangtv-history-two")
+                "showSearchHistory" -> activity.showRecords("searches")
+                "deleteFirst" -> activity.firstHistoryDelete?.performClick()
+                "clearAll" -> activity.historyDialog?.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.performClick()
+                "confirmClear" -> activity.historyConfirm?.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.performClick()
+            }
+        } }
+
     }
     private var pageReady = false
     private var position = 0.0
     private var playing = false
     private var pageError = ""
     private var lastRecordedVideo = ""
+    private var lastRecordedSearch = ""
+    private var historyDialog: android.app.AlertDialog? = null
+    private var historyConfirm: android.app.AlertDialog? = null
+    private var firstHistoryDelete: android.widget.Button? = null
     private val probeHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val probe = object : Runnable {
         override fun run() {
+            recordSearch(web.url)
             if (pageReady) recordPlayingVideo()
             if (pageReady && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 web.evaluateJavascript("""JSON.stringify((()=>{const v=document.querySelector('video');const e=document.querySelector('.ytp-error-content-wrap,ytm-player-error-message-renderer');const status=window.ytInitialPlayerResponse?.playabilityStatus;const body=(document.body?.innerText||'').replace(/\s+/g,' ');const blocked=/sign in to confirm.*not a bot/i.test(body);const reason=blocked?'YouTube requires sign-in to confirm this network is not a bot':(e?.innerText||((status&&status.status!=='OK')?status.reason:'')||'');return {position:v?v.currentTime:0,playing:v?!v.paused:false,error:reason.slice(0,256)};})())""") { value ->
@@ -61,6 +80,13 @@ class QuangTubeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         current = java.lang.ref.WeakReference(this)
+        val legacy = intent.getStringArrayListExtra("searchHistory").orEmpty()
+        val prefs = getSharedPreferences("quangtube_history", MODE_PRIVATE)
+        if (!prefs.getBoolean("legacySearchImported", false) && legacy.isNotEmpty()) {
+            val old = historyItems("searches").map { it.optString("query") }
+            saveHistory("searches", (old + legacy).distinct().take(100).map { org.json.JSONObject().put("query", it) })
+            prefs.edit().putBoolean("legacySearchImported", true).apply()
+        }
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS or WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
         window.statusBarColor = Color.WHITE
@@ -80,7 +106,7 @@ class QuangTubeActivity : Activity() {
         web = WebView(this)
         root.addView(web, FrameLayout.LayoutParams(-1, -1).apply { bottomMargin = (48 * resources.displayMetrics.density).toInt() })
         val actions = android.widget.LinearLayout(this)
-        actions.addView(android.widget.Button(this).apply { text = "Đã xem"; setAllCaps(false); setOnClickListener { showHistory() } }, android.widget.LinearLayout.LayoutParams(0, -1, 1f))
+        actions.addView(android.widget.Button(this).apply { text = "Lịch sử"; setAllCaps(false); setOnClickListener { showHistory() } }, android.widget.LinearLayout.LayoutParams(0, -1, 1f))
         actions.addView(android.widget.Button(this).apply { text = "Tải video YouTube"; setAllCaps(false); setOnClickListener { QuangYouTube.showChoices(this@QuangTubeActivity, web.url ?: "") } }, android.widget.LinearLayout.LayoutParams(0, -1, 1f))
         root.addView(actions, FrameLayout.LayoutParams(-1, (48 * resources.displayMetrics.density).toInt(), android.view.Gravity.BOTTOM))
         setContentView(root)
@@ -94,9 +120,15 @@ class QuangTubeActivity : Activity() {
         web.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 pageReady = false
+                recordSearch(url)
             }
             override fun onPageFinished(view: WebView?, url: String?) {
                 pageReady = true
+                recordSearch(url)
+            }
+            override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                super.doUpdateVisitedHistory(view, url, isReload)
+                recordSearch(url)
             }
             override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
                 val url = request?.url ?: return true
@@ -137,7 +169,7 @@ class QuangTubeActivity : Activity() {
     }
 
     private fun recordPlayingVideo() {
-        web.evaluateJavascript("""JSON.stringify((()=>{const v=document.querySelector('video');const id=new URL(location.href).searchParams.get('v');return v&&!v.paused&&v.currentTime>1&&id?{id:id,title:document.title.replace(/\s*-\s*YouTube\s*$/i,'').trim()}:null})())""") { value ->
+        web.evaluateJavascript("""JSON.stringify((()=>{const v=document.querySelector('video');const id=new URL(location.href).searchParams.get('v')||location.pathname.match(/^\/(?:shorts|live)\/([A-Za-z0-9_-]{11})/)?.[1];return v&&!v.paused&&v.currentTime>1&&id?{id:id,title:document.title.replace(/\s*-\s*YouTube\s*$/i,'').trim()}:null})())""") { value ->
             try {
                 val raw = org.json.JSONTokener(value).nextValue() as? String ?: return@evaluateJavascript
                 val item = org.json.JSONObject(raw)
@@ -149,7 +181,7 @@ class QuangTubeActivity : Activity() {
                 val updated = org.json.JSONArray().put(org.json.JSONObject().put("id", id).put("title", title.take(200)))
                 for (i in 0 until old.length()) {
                     val entry = old.optJSONObject(i) ?: continue
-                    if (entry.optString("id") != id && updated.length() < 30) updated.put(entry)
+                    if (entry.optString("id") != id && updated.length() < 100) updated.put(entry)
                 }
                 prefs.edit().putString("videos", updated.toString()).apply()
                 lastRecordedVideo = id
@@ -157,23 +189,80 @@ class QuangTubeActivity : Activity() {
         }
     }
 
+    private fun historyItems(key: String): List<org.json.JSONObject> {
+        val prefs = getSharedPreferences("quangtube_history", MODE_PRIVATE)
+        val array = try { org.json.JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { org.json.JSONArray() }
+        return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+    }
+    private fun saveHistory(key: String, items: List<org.json.JSONObject>) {
+        val array = org.json.JSONArray()
+        items.take(100).forEach { array.put(it) }
+        getSharedPreferences("quangtube_history", MODE_PRIVATE).edit().putString(key, array.toString()).apply()
+    }
+    private fun recordSearch(url: String?) {
+        val uri = try { android.net.Uri.parse(url ?: "") } catch (_: Exception) { return }
+        val host = uri.host?.lowercase() ?: return
+        if (host != "youtube.com" && !host.endsWith(".youtube.com")) return
+        val query = if (uri.path == "/results") uri.getQueryParameter("search_query")?.trim()?.take(300).orEmpty() else ""
+        if (query.isEmpty()) { lastRecordedSearch = ""; return }
+        if (query == lastRecordedSearch) return
+        lastRecordedSearch = query
+        val items = historyItems("searches").filter { it.optString("query") != query }
+        saveHistory("searches", listOf(org.json.JSONObject().put("query", query)) + items)
+    }
     private fun showHistory() {
-        val items = try { org.json.JSONArray(getSharedPreferences("quangtube_history", MODE_PRIVATE).getString("videos", "[]")) } catch (_: Exception) { org.json.JSONArray() }
-        if (items.length() == 0) {
-            android.widget.Toast.makeText(this, "Chưa có video đã xem", android.widget.Toast.LENGTH_SHORT).show()
-            return
+        android.app.AlertDialog.Builder(this).setTitle("Lịch sử QuangTube")
+            .setItems(arrayOf("Lịch sử tìm kiếm", "Video đã xem")) { _, index -> showRecords(if (index == 0) "searches" else "videos") }
+            .setNegativeButton("Đóng", null).show()
+    }
+    private fun showRecords(key: String) {
+        val items = historyItems(key)
+        val isSearch = key == "searches"
+        val title = if (isSearch) "Lịch sử tìm kiếm" else "Video đã xem"
+        val rows = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        firstHistoryDelete = null
+        val dialog = android.app.AlertDialog.Builder(this).setTitle(title)
+            .setView(android.widget.ScrollView(this).apply { addView(rows) })
+            .setNegativeButton("Đóng", null)
+            .setPositiveButton("Xóa tất cả", null).create()
+        if (items.isEmpty()) rows.addView(android.widget.TextView(this).apply { text = "Chưa có lịch sử"; setPadding(24, 24, 24, 24) })
+        for (item in items) {
+            val label = if (isSearch) item.optString("query") else item.optString("title")
+            val row = android.widget.LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+            row.addView(android.widget.TextView(this).apply {
+                text = label; textSize = 15f; setPadding(24, 18, 12, 18); maxLines = 2
+                setOnClickListener {
+                    val target = android.net.Uri.parse(if (isSearch) "https://m.youtube.com/results" else "https://m.youtube.com/watch").buildUpon()
+                        .appendQueryParameter(if (isSearch) "search_query" else "v", if (isSearch) label else item.optString("id")).build()
+                    dialog.dismiss(); web.loadUrl(target.toString())
+                }
+            }, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+            val remove = android.widget.Button(this).apply {
+                text = "×"; contentDescription = "Xóa $label"
+                setOnClickListener {
+                    val identity = if (isSearch) "query" else "id"
+                    saveHistory(key, historyItems(key).filter { it.optString(identity) != item.optString(identity) })
+                    dialog.dismiss(); showRecords(key)
+                }
+            }
+            if (firstHistoryDelete == null) firstHistoryDelete = remove
+            row.addView(remove, android.widget.LinearLayout.LayoutParams((52 * resources.displayMetrics.density).toInt(), -2))
+            rows.addView(row)
         }
-        val entries = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
-        android.app.AlertDialog.Builder(this).setTitle("Video đã xem")
-            .setItems(entries.map { it.optString("title") }.toTypedArray()) { _, which ->
-                val item = entries[which]
-                android.app.AlertDialog.Builder(this).setTitle(item.optString("title"))
-                    .setItems(arrayOf("Xem lại", "Tìm video tương tự")) { _, action ->
-                        val url = if (action == 0) android.net.Uri.parse("https://m.youtube.com/watch").buildUpon().appendQueryParameter("v", item.optString("id")).build()
-                            else android.net.Uri.parse("https://m.youtube.com/results").buildUpon().appendQueryParameter("search_query", item.optString("title")).build()
-                        web.loadUrl(url.toString())
+        historyDialog = dialog
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = items.isNotEmpty()
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                historyConfirm = android.app.AlertDialog.Builder(this).setTitle("Xóa toàn bộ $title?")
+                    .setNegativeButton("Hủy", null).setPositiveButton("Xóa tất cả") { _, _ ->
+                        saveHistory(key, emptyList())
+                        if (isSearch) getSharedPreferences("quangtube_history", MODE_PRIVATE).edit().putBoolean("legacySearchImported", true).apply()
+                        dialog.dismiss()
                     }.show()
-            }.setNegativeButton("Đóng", null).show()
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, minOf(resources.displayMetrics.heightPixels * 3 / 4, resources.displayMetrics.heightPixels - 120))
     }
 
     private fun exitFullscreen() {

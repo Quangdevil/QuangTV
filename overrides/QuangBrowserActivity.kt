@@ -27,6 +27,9 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.*
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import androidx.webkit.ProxyController
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -39,19 +42,25 @@ import org.json.JSONArray
 class QuangBrowserActivity : Activity() {
     data class Media(val url: String, val kind: String)
     companion object {
+        const val MAY_HOME = "https://may-viet-web-proxy.daquang.workers.dev/"
         private var current: WeakReference<QuangBrowserActivity>? = null
         private var lastRotation: Map<String, Any> = emptyMap()
         fun inspect(): Map<String, Any> = current?.get()?.let {
             val point = IntArray(2); it.root.getLocationOnScreen(point)
             val insets = ViewCompat.getRootWindowInsets(it.root)
-            mapOf("rotationPassed" to it.rotationPassed, "blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
+            mapOf("mayMode" to it.mayMode, "pageUrl" to (it.web.url ?: ""), "rotationPassed" to it.rotationPassed, "blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
                 "statusBar" to (insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0),
                 "downloaded" to it.downloadedBytes(), "height" to it.web.height, "ime" to (insets?.isVisible(WindowInsetsCompat.Type.ime()) ?: false))
         } ?: lastRotation
+        fun mayTest(command: String, value: Double, done: (Map<String, Any>) -> Unit) {
+            current?.get()?.let { QuangBrowserTestHooks.run(it.web, it.window.decorView, command, value, done) } ?: done(mapOf("error" to "browser closed"))
+        }
         fun testAction(action: String) {
             current?.get()?.let {
                 android.util.Log.i("QuangBrowserTest", "action=$action begin")
                 when (action) {
+                    "mayExample" -> it.openMayTarget("https://example.org/")
+                    "mayDemo" -> { it.mayMode = true; it.applyBrowserTransport({it.web.loadUrl(MAY_HOME + "demo")}, {}) }
                     "focus" -> { it.address.requestFocus(); (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(it.address, InputMethodManager.SHOW_IMPLICIT) }
                     "select" -> it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
                     "download" -> it.found.performClick()
@@ -136,6 +145,9 @@ class QuangBrowserActivity : Activity() {
         }
     }
     private lateinit var root: LinearLayout
+    private var mayMode = false
+    private var pendingMayTarget: String? = null
+    private fun isMayUrl(url: String?) = try { Uri.parse(url ?: "").host == Uri.parse(MAY_HOME).host } catch (_: Exception) { false }
     private lateinit var web: WebView
     private lateinit var address: EditText
     private lateinit var found: Button
@@ -230,13 +242,37 @@ class QuangBrowserActivity : Activity() {
         configureWeb(web)
         current = WeakReference(this)
         val initial = intent.getStringExtra("url") ?: ""
-        QuangProxy.applyWeb(this, {
+        mayMode = isMayUrl(initial)
+        applyBrowserTransport({
         if (state != null) web.restoreState(state)
         else if (httpUrl(initial)) web.loadUrl(initial)
         else web.loadData("<meta name='viewport' content='width=device-width'><h2>QuangTV · Trình duyệt</h2><p><a href='https://m.facebook.com/'>Facebook</a> · <a href='https://web.telegram.org/k/'>Telegram Web</a> · <a href='https://m.youtube.com/'>YouTube</a></p><p>Nhập địa chỉ hoặc từ khóa ở trên. Nhấn Tải video để chọn nguồn rồi nhấn Tải xuống. Đã tải mở tiến trình và tệp đã tải.</p><p>Hỗ trợ nguồn MP4/WebM và HLS trực tiếp. Không giải mã DRM, không gỡ watermark. Chỉ tải nội dung bạn có quyền lưu.</p>", "text/html", "UTF-8")
         }, { Toast.makeText(this, "Không áp dụng được proxy. Hãy kiểm tra Cài đặt hoặc cập nhật Android System WebView.", Toast.LENGTH_LONG).show(); finish() })
     }
+    private fun applyBrowserTransport(done: () -> Unit, failed: () -> Unit) {
+        if (!mayMode) { QuangProxy.applyWeb(this, done, failed); return }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            val executor = java.util.concurrent.Executor { handler.post(it) }
+            ProxyController.getInstance().clearProxyOverride(executor) { updateProxyButton(); done() }
+        } else { updateProxyButton(); done() }
+    }
+    private fun openMayTarget(target: String? = null) {
+        mayMode = true
+        pendingMayTarget = target?.takeIf { httpUrl(it) && !isMayUrl(it) }
+        applyBrowserTransport({ web.loadUrl(MAY_HOME) }, { Toast.makeText(this, "Không mở được Mây", Toast.LENGTH_LONG).show() })
+    }
+    private fun openPendingMayPage(view: WebView) {
+        if (!mayMode || view !== web || !isMayUrl(view.url)) return
+        val target = pendingMayTarget ?: return
+        pendingMayTarget = null
+        val quoted = org.json.JSONObject.quote(target)
+        view.evaluateJavascript("(()=>{const input=document.querySelector('#target'),form=document.querySelector('#visit');if(!input||!form)return false;input.value=$quoted;form.requestSubmit();return true})()", null)
+    }
     private fun configureWeb(view: WebView) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            val script = assets.open("quang_may_gestures.js").bufferedReader().use { it.readText() }
+            WebViewCompat.addDocumentStartJavaScript(view, script, setOf("*"))
+        }
         view.settings.apply {
             javaScriptEnabled = true; domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = true
@@ -251,9 +287,10 @@ class QuangBrowserActivity : Activity() {
                 if (view === web) { found.text = "Tải video"; activeUrls = emptySet(); address.setText(url?.takeIf { httpUrl(it) } ?: "") }
             }
             override fun onPageCommitVisible(view: WebView, url: String?) { installMediaMute(view); applyAdStyle(view); installAdGuard(view) }
-            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); installAdGuard(view); installMediaMute(view); if (view === web) scanMedia() }
+            override fun onPageFinished(view: WebView, url: String?) { applyAdStyle(view); installAdGuard(view); installMediaMute(view); if (view === web) scanMedia(); openPendingMayPage(view) }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
+                if (mayMode && request.isForMainFrame && httpUrl(uri.toString()) && !isMayUrl(uri.toString())) { openMayTarget(uri.toString()); return true }
                 if (uri.scheme == "intent") {
                     val fallback = try { Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME).getStringExtra("browser_fallback_url") } catch (_: Exception) { null }
                     if (fallback != null && httpUrl(fallback) && !(blockAds && adHost(Uri.parse(fallback).host))) view.loadUrl(fallback)
@@ -348,7 +385,7 @@ class QuangBrowserActivity : Activity() {
         }
         address.clearFocus()
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(address.windowToken, 0)
-        web.loadUrl(url)
+        if (mayMode && !isMayUrl(url)) openMayTarget(url) else web.loadUrl(url)
     }
     private fun detect(url: String, direct: Boolean = false, owner: WebView = web) {
         if (!httpUrl(url)) return
@@ -548,9 +585,13 @@ class QuangBrowserActivity : Activity() {
         view.evaluateJavascript("""(()=>{if(document.getElementById('quang-ad-style'))return;const s=document.createElement('style');s.id='quang-ad-style';s.textContent='.adsbygoogle,.advertisement,.ad-container,[data-ad-slot],iframe[src*="doubleclick.net"],iframe[src*="exoclick.com"],iframe[src*="juicyads.com"],iframe[src*="popads.net"]{display:none!important}';(document.head||document.documentElement).appendChild(s)})()""", null)
     }
     private fun updateProxyButton() {
+        proxyButton.text = if (mayMode) "Mây" else "P"
+        proxyButton.contentDescription = if (mayMode) "Đang duyệt riêng qua Mây" else "Bật/tắt proxy"
+        if (mayMode) { proxyButton.setTextColor(Color.rgb(0, 140, 140)); return }
         try { proxyButton.setTextColor(if (QuangProxy.state(this)["enabled"] == true) Color.rgb(0, 140, 70) else Color.DKGRAY) } catch (_: Exception) { proxyButton.setTextColor(Color.RED) }
     }
     private fun toggleProxy() {
+        if (mayMode) { showOptions(); return }
         try {
             val enabled = QuangProxy.state(this)["enabled"] == true
             QuangProxy.toggle(this, !enabled)
@@ -580,7 +621,18 @@ class QuangBrowserActivity : Activity() {
         address.clearFocus(); root.requestFocus()
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(root.windowToken, 0)
         if (config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
-            web.evaluateJavascript("""(()=>{const v=Array.from(document.querySelectorAll('video')).find(v=>!v.paused&&!v.ended&&!v.mediaKeys);if(!v)return false;const parents=[];for(let p=v.parentElement;p;p=p.parentElement){parents.push([p,p.getAttribute('style')]);p.style.setProperty('transform','none','important');p.style.setProperty('position','static','important');p.style.setProperty('overflow','visible','important');}window.__quangFull={v,s:v.getAttribute('style'),parents};v.style.cssText+=';position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:black!important;object-fit:contain!important';return true})()""") { result ->
+            if (mayMode) {
+                web.evaluateJavascript("(()=>!!document.querySelector('video')||document.querySelector('#browser')?.hidden===false)()") { result ->
+                    if (result == "true") {
+                        orientationFullscreen = true
+                        addressBar.visibility = View.GONE; toolbar.visibility = View.GONE; progress.visibility = View.GONE
+                        WindowCompat.getInsetsController(window, root).hide(WindowInsetsCompat.Type.systemBars())
+                        ViewCompat.requestApplyInsets(root)
+                    }
+                }
+                return
+            }
+            web.evaluateJavascript("""(()=>{const v=Array.from(document.querySelectorAll('video')).find(v=>!v.paused&&!v.ended&&!v.mediaKeys);if(!v)return false;const parents=[];for(let p=v.parentElement;p;p=p.parentElement){parents.push([p,p.getAttribute('style')]);p.style.setProperty('transform','none','important');p.style.setProperty('position','static','important');p.style.setProperty('overflow','visible','important');}window.__quangFull={v,s:v.getAttribute('style'),parents};v.style.cssText+=';position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483645!important;background:black!important;object-fit:contain!important';return true})()""") { result ->
                 if (result == "true") { installLandscapeControls(); address.clearFocus(); root.requestFocus(); (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(address.windowToken, 0); orientationFullscreen = true; addressBar.visibility = View.GONE; toolbar.visibility = View.GONE; progress.visibility = View.GONE; WindowCompat.getInsetsController(window, root).hide(WindowInsetsCompat.Type.systemBars()); ViewCompat.requestApplyInsets(root) }
             }
         } else exitOrientationFullscreen()
@@ -591,7 +643,7 @@ class QuangBrowserActivity : Activity() {
           if(!v || document.getElementById('quang-landscape-controls'))return;
           const bar=document.createElement('div');
           bar.id='quang-landscape-controls';
-          bar.style.cssText='position:fixed!important;bottom:0!important;left:0!important;right:0!important;z-index:2147483647!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:12px!important;padding:14px!important;background:rgba(0,0,0,.8)!important;color:white!important';
+          bar.style.cssText='position:fixed!important;bottom:0!important;left:0!important;right:0!important;z-index:2147483647!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;justify-content:center!important;gap:12px!important;padding:14px!important;background:rgba(0,0,0,.55)!important;color:white!important';
           const btn=(label,action)=>{const b=document.createElement('button');b.textContent=label;b.style.cssText='font-size:18px;padding:9px;color:white;background:#333;border:1px solid #888;border-radius:8px';b.onclick=e=>{e.preventDefault();e.stopPropagation();action()};bar.appendChild(b)};
           const seek=delta=>{if(Number.isFinite(v.duration)&&v.duration>0)v.currentTime=Math.max(0,Math.min(v.duration,v.currentTime+delta));};
           btn('−10s',()=>seek(-10));
@@ -602,9 +654,14 @@ class QuangBrowserActivity : Activity() {
           volume.style.cssText='width:95px;max-width:20vw';volume.setAttribute('aria-label','Âm lượng');
           volume.oninput=()=>{v.__quangUserAudio=true;v.volume=Number(volume.value);v.muted=v.volume===0;};
           bar.appendChild(volume);
+          const timeline=document.createElement('input');timeline.type='range';timeline.min='0';timeline.max='1000';timeline.value='0';timeline.setAttribute('aria-label','Tua video');timeline.style.cssText='width:90%;flex-basis:90%';
+          timeline.oninput=()=>{if(Number.isFinite(v.duration)&&v.duration>0)v.currentTime=Number(timeline.value)/1000*v.duration;};
+          const updateTime=()=>{timeline.disabled=!Number.isFinite(v.duration)||v.duration<=0;if(!timeline.disabled)timeline.value=String(v.currentTime/v.duration*1000);};
+          v.addEventListener('timeupdate',updateTime);updateTime();bar.appendChild(timeline);
           const reveal=()=>{bar.style.opacity='1';bar.style.pointerEvents='auto';clearTimeout(window.__quangHideControls);window.__quangHideControls=setTimeout(()=>{bar.style.opacity='0';bar.style.pointerEvents='none'},4000)};
           v.addEventListener('click',reveal);
-          v.addEventListener('dblclick',e=>{seek(e.clientX<innerWidth/2?-10:10);reveal()});
+          let lastTap=null;
+          v.addEventListener('pointerup',e=>{const now=performance.now(),side=e.clientX<innerWidth/2?-1:1;if(lastTap&&lastTap.side===side&&now-lastTap.time<350&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<48){e.preventDefault();seek(side*10);lastTap=null;}else lastTap={side,time:now,x:e.clientX,y:e.clientY};reveal();},{passive:false});
           document.documentElement.appendChild(bar);reveal();
         })()""", null)
     }
@@ -620,37 +677,11 @@ class QuangBrowserActivity : Activity() {
             .setMultiChoiceItems(arrayOf("Chặn quảng cáo phổ biến"), booleanArrayOf(blockAds)) { _, _, checked ->
                 blockAds = checked; settings.edit().putBoolean("blockAds", checked).apply(); tabs.forEach { applyAdStyle(it) }
             }
-            .setNegativeButton("Mây Việt (trang công khai)") { _, _ ->
-                val currentUrl = web.url ?: ""
-                if (!httpUrl(currentUrl) || currentUrl.contains("workers.dev")) {
-                    Toast.makeText(this, "Hãy mở trang cần đọc trước khi thử Mây Việt.", Toast.LENGTH_LONG).show()
-                } else {
-                    AlertDialog.Builder(this)
-                        .setTitle("Đọc trang công khai qua Cloudflare")
-                        .setMessage("Chỉ thử nội dung công khai. Không đăng nhập, gửi mật khẩu hoặc thông tin doanh nghiệp riêng tư qua Worker. Worker phải cho phép tên miền đích và có thể yêu cầu Cloudflare Access.")
-                        .setNegativeButton("Hủy", null)
-                        .setPositiveButton("Thử") { _, _ ->
-                            val entry = EditText(this).apply {
-                                setSingleLine(true)
-                                setText(settings.getString("mayVietWorker", "https://may-viet-web-proxy.daquang.workers.dev"))
-                                selectAll()
-                            }
-                            AlertDialog.Builder(this).setTitle("Địa chỉ Worker của bạn")
-                                .setMessage("Nhập đúng hostname ASCII đã triển khai trên Cloudflare. Tên hiển thị có dấu không nhất thiết là URL thật.")
-                                .setView(entry)
-                                .setNegativeButton("Hủy", null)
-                                .setPositiveButton("Mở") { _, _ ->
-                                    val worker = Uri.parse(entry.text.toString().trim().trimEnd('/'))
-                                    if (worker.scheme != "https" || worker.host?.endsWith(".workers.dev") != true) {
-                                        Toast.makeText(this, "Cần URL https của Cloudflare Worker.", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        settings.edit().putString("mayVietWorker", worker.toString()).apply()
-                                        val url = worker.buildUpon().appendPath("proxy").appendQueryParameter("url", currentUrl).build().toString()
-                                        web.loadUrl(url)
-                                    }
-                                }.show()
-                        }.show()
-                }
+            .setNegativeButton(if (mayMode) "Trình duyệt gốc" else "Mở qua Mây") { _, _ ->
+                if (mayMode) {
+                    mayMode = false; pendingMayTarget = null
+                    applyBrowserTransport({ updateProxyButton(); web.loadUrl("about:blank") }, { Toast.makeText(this, "Không đổi được đường duyệt", Toast.LENGTH_LONG).show() })
+                } else openMayTarget(web.url)
             }
             .setNeutralButton("Kiểm tra IP") { _, _ -> QuangProxy.test(this) { value -> Toast.makeText(this, if (value == null) "Proxy chưa kết nối được hoặc đang tắt" else "IP: ${value["ip"]} · ${value["ms"]} ms", Toast.LENGTH_LONG).show() } }
             .setPositiveButton("Đóng", null).show()
@@ -671,6 +702,7 @@ class QuangBrowserActivity : Activity() {
     override fun onPause() { downloadsDialog?.dismiss(); previewDialog?.dismiss(); tabsDialog?.dismiss(); android.webkit.CookieManager.getInstance().flush(); web.onPause(); super.onPause() }
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null); exitFullscreen(); current = null
+        if (mayMode) QuangProxy.applyWeb(this, {}, {})
         root.removeView(web); for (view in tabs) view.destroy(); tabs.clear(); tabMedia.clear(); super.onDestroy()
     }
 }

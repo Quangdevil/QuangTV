@@ -22,7 +22,7 @@ class _QuangBrowserScreenState extends State<QuangBrowserScreen> {
   }
 
   Future<void> _browse() async {
-    var page = widget.initialUrl;
+    var page = widget.initialUrl.isEmpty ? 'https://may-viet-web-proxy.daquang.workers.dev/' : widget.initialUrl;
     try {
       while (mounted) {
         final media = await browser.invokeMapMethod<String, dynamic>('open', {'url': page});

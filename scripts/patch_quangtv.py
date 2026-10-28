@@ -241,10 +241,12 @@ youtube = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
                     if (uri.scheme != "https" || !(host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtu.be")) {
                         result.error("URL", "Liên kết YouTube không hợp lệ", null)
                     } else {
-                        startActivity(Intent(this, QuangTubeActivity::class.java).putExtra("url", url))
+                        startActivity(Intent(this, QuangTubeActivity::class.java).putExtra("url", url).putStringArrayListExtra("searchHistory", ArrayList(call.argument<List<String>>("searchHistory") ?: emptyList())))
                         result.success(true)
                     }
                 }
+                "historyState" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) result.success(QuangTubeActivity.historyState()) else result.notImplemented()
+                "historyAction" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) { QuangTubeActivity.testAction(call.argument<String>("action") ?: ""); result.success(null) } else result.notImplemented()
                 "requestTestTap" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) { android.util.Log.i("QuangTube", "QUANGTV_YOUTUBE_TAP"); result.success(null) } else result.notImplemented()
                 "status" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) result.success(QuangTubeActivity.status()) else result.notImplemented()
                 "close" -> if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) { QuangTubeActivity.close(); result.success(null) } else result.notImplemented()
@@ -317,7 +319,8 @@ browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
             } else if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 when (call.method) {
                     "inspect" -> result.success(QuangBrowserActivity.inspect())
-                    "focus", "select", "download", "confirmDownload", "toggleProxy", "showTabs", "newTab", "firstTab", "openDownloads", "openCompleted", "closePreview", "playPage", "previewAndRotate", "rotatePlayback", "landscape", "portrait", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
+                    "mayTest" -> QuangBrowserActivity.mayTest(call.argument<String>("command") ?: "state", call.argument<Number>("value")?.toDouble() ?: 0.5) { result.success(it) }
+                    "mayExample", "mayDemo", "focus", "select", "download", "confirmDownload", "toggleProxy", "showTabs", "newTab", "firstTab", "openDownloads", "openCompleted", "closePreview", "playPage", "previewAndRotate", "rotatePlayback", "landscape", "portrait", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
                     else -> result.notImplemented()
                 }
             } else result.notImplemented()
@@ -439,3 +442,10 @@ minified_test_rules = re.sub(r'-assumenosideeffects class android\.util\.Log \{.
 gradle.write_text(gradle.read_text() + '\nandroid { buildTypes { debug { minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-debug-rules.pro" } } }\n')
 
 shutil.copyfile('tests/quang_vtv_source_test.dart', 'upstream/flutter_app/test/quang_vtv_source_test.dart')
+
+# Mây remains a separately hosted browser; add only the trusted video gesture helper.
+may_assets = Path('upstream/flutter_app/android/app/src/main/assets')
+may_assets.mkdir(parents=True, exist_ok=True)
+shutil.copyfile('overrides/quang_may_gestures.js', may_assets / 'quang_may_gestures.js')
+
+shutil.copyfile('overrides/QuangBrowserTestHooks.kt', activity.parent / 'QuangBrowserTestHooks.kt')
