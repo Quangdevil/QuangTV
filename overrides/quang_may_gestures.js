@@ -2,6 +2,13 @@
 (() => {
   if (window.__quangMayGestures) return;
   window.__quangMayGestures = true;
+  // Keep Mây's video AND shadow controls on the same HTML surface. Android's
+  // separate custom fullscreen surface can receive touches instead of that UI.
+  const requestFullscreen = Element.prototype.requestFullscreen;
+  if (requestFullscreen) Element.prototype.requestFullscreen = function(...args) {
+    if (this.id === 'may-video-stage' && window.__mayMediaInstalled) return Promise.resolve();
+    return requestFullscreen.apply(this, args);
+  };
   let previous = null;
   document.addEventListener('pointerup', event => {
     if (!event.isTrusted || !window.__mayMediaInstalled) return;

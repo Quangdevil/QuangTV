@@ -57,6 +57,7 @@ void main() {
         await until((s)=>s['stage']==true);
         await state('tapVideo');
         snapshot=await state();
+        expect(snapshot['nativeFullscreen'],false,reason:'May controls must remain on the HTML viewport');
         expect(snapshot['hidden'],false);
         if(snapshot['paused']==false) snapshot=await state('play');
         expect(snapshot['paused'],true);
