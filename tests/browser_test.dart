@@ -49,7 +49,9 @@ void main() {
         await until((s)=>s['frameReady']==true);
         debugPrint('QUANGTV_MAY_EMBED_PASS remoteShell=true serverBrowse=true sandboxReady=true');
         await browser.invokeMethod<void>('mayDemo');
-        var snapshot=await until((s)=>s['ready']==true && s['hasControls']==true);
+        var snapshot=await until((s)=>s['hasControls']==true);
+        if (snapshot['paused']==true) { await state('tapVideo'); await state('play'); }
+        snapshot=await until((s)=>s['ready']==true);
         expect(snapshot['muted'],true);
         expect(snapshot['hasSeek'],true);
         if (snapshot['paused']==true) { await state('tapVideo'); await state('play'); }
