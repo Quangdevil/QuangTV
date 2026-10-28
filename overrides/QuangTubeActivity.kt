@@ -311,7 +311,7 @@ class QuangTubeActivity : Activity() {
     override fun onDestroy() {
         exitFullscreen()
         probeHandler.removeCallbacks(probe)
-        current = null
+        if (current?.get() === this) current = null
         web.destroy()
         super.onDestroy()
     }

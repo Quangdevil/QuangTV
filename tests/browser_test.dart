@@ -41,7 +41,7 @@ void main() {
         while(DateTime.now().isBefore(deadline)) {
           await Future<void>.delayed(const Duration(milliseconds:300));
           info=await browser.invokeMapMethod<dynamic,dynamic>('inspect') ?? {};
-          if(info['mayMode']==true && (info['pageUrl']?.toString() ?? '').contains('may-viet-web-proxy.daquang.workers.dev')) break;
+          if(info['mayMode']==true && info['progress']==100 && (info['pageUrl']?.toString() ?? '').contains('may-viet-web-proxy.daquang.workers.dev')) break;
         }
         expect(info['mayMode'],true);
         expect(info['pageUrl'],contains('may-viet-web-proxy.daquang.workers.dev'));

@@ -48,7 +48,7 @@ class QuangBrowserActivity : Activity() {
         fun inspect(): Map<String, Any> = current?.get()?.let {
             val point = IntArray(2); it.root.getLocationOnScreen(point)
             val insets = ViewCompat.getRootWindowInsets(it.root)
-            mapOf("mayMode" to it.mayMode, "pageUrl" to (it.web.url ?: ""), "rotationPassed" to it.rotationPassed, "blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
+            mapOf("progress" to it.web.progress, "mayMode" to it.mayMode, "pageUrl" to (it.web.url ?: ""), "rotationPassed" to it.rotationPassed, "blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
                 "statusBar" to (insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0),
                 "downloaded" to it.downloadedBytes(), "height" to it.web.height, "ime" to (insets?.isVisible(WindowInsetsCompat.Type.ime()) ?: false))
         } ?: lastRotation
