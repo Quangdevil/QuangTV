@@ -3,7 +3,6 @@
 set -uo pipefail
 bash scripts/test_browser.sh
 browser_status=$?
-if (( browser_status != 0 )); then exit "$browser_status"; fi
 bash scripts/test_native_hls.sh
 native_status=$?
 bash scripts/test_vtv_live.sh

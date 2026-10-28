@@ -208,6 +208,7 @@ void main() {
         current = await state();
         if (current['ime'] == true) break;
       }
+      debugPrint('CHECKPOINT_BROWSER_KEYBOARD ime=${current['ime']}');
       expect(current['ime'], isTrue);
       expect(current['top'], top);
       expect(current['height'], lessThan(height));

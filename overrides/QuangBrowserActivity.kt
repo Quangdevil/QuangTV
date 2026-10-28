@@ -61,7 +61,7 @@ class QuangBrowserActivity : Activity() {
                 when (action) {
                     "mayExample" -> it.openMayTarget("https://example.org/")
                     "mayDemo" -> { it.mayMode = true; it.applyBrowserTransport({it.web.loadUrl(MAY_HOME + "demo")}, {}) }
-                    "focus" -> { it.address.requestFocus(); (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(it.address, InputMethodManager.SHOW_IMPLICIT) }
+                    "focus" -> { it.address.requestFocus(); it.address.postDelayed({ (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(it.address, InputMethodManager.SHOW_IMPLICIT) }, 300) }
                     "select" -> it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
                     "download" -> it.found.performClick()
                     "confirmDownload" -> it.downloadButton?.performClick()
@@ -711,7 +711,7 @@ class QuangBrowserActivity : Activity() {
     override fun onResume() { super.onResume(); web.onResume() }
     override fun onPause() { downloadsDialog?.dismiss(); previewDialog?.dismiss(); tabsDialog?.dismiss(); android.webkit.CookieManager.getInstance().flush(); web.onPause(); super.onPause() }
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null); exitFullscreen(); current = null
+        handler.removeCallbacksAndMessages(null); exitFullscreen(); if (current?.get() === this) current = null
         if (mayMode) QuangProxy.applyWeb(this, {}, {})
         root.removeView(web); for (view in tabs) view.destroy(); tabs.clear(); tabMedia.clear(); super.onDestroy()
     }
