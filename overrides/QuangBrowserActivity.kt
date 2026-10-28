@@ -264,9 +264,8 @@ class QuangBrowserActivity : Activity() {
     private fun openPendingMayPage(view: WebView) {
         if (!mayMode || view !== web || !isMayUrl(view.url)) return
         val target = pendingMayTarget ?: return
-        pendingMayTarget = null
         val quoted = org.json.JSONObject.quote(target)
-        view.evaluateJavascript("(()=>{const input=document.querySelector('#target'),form=document.querySelector('#visit');if(!input||!form)return false;input.value=$quoted;form.requestSubmit();return true})()", null)
+        view.evaluateJavascript("(()=>{const input=document.querySelector('#target'),form=document.querySelector('#visit');if(!input||!form)return false;input.value=$quoted;form.requestSubmit();return true})()") { result -> if (result == "true" && pendingMayTarget == target) pendingMayTarget = null }
     }
     private fun configureWeb(view: WebView) {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -343,7 +342,7 @@ class QuangBrowserActivity : Activity() {
     private fun newTab(url: String = "about:blank") {
         if (tabs.size >= 8) { Toast.makeText(this, "Đóng bớt tab trước khi mở thêm (tối đa 8)", Toast.LENGTH_SHORT).show(); return }
         val view = WebView(this); tabs.add(view); tabMedia[view] = LinkedHashMap(); configureWeb(view)
-        switchTab(view); view.loadUrl(url)
+        switchTab(view); view.loadUrl(if (mayMode && url == "about:blank") MAY_HOME else url)
     }
     private fun switchTab(view: WebView) {
         if (view === web) return
@@ -466,6 +465,11 @@ class QuangBrowserActivity : Activity() {
         dialog.show()
     }
     private fun choose(item: Media) {
+        if (mayMode) {
+            val target = if (isMayUrl(item.url)) Uri.parse(item.url).getQueryParameter("url") else item.url
+            if (target != null) openMayTarget(target) else web.loadUrl(item.url)
+            return
+        }
         val data = Intent().putExtra("url", item.url).putExtra("title", web.title ?: "Video trình duyệt")
             .putExtra("page", web.url ?: "").putExtra("headers", org.json.JSONObject(headers(item.url)).toString())
         setResult(RESULT_OK, data); finish()
@@ -478,10 +482,13 @@ class QuangBrowserActivity : Activity() {
         try {
             val extension = if (Uri.parse(item.url).path?.endsWith(".webm") == true) "webm" else "mp4"
             val filename = "QuangTV-${System.currentTimeMillis()}.$extension"
-            val request = DownloadManager.Request(Uri.parse(QuangProxy.downloadUrl(this, item.url))).setTitle(filename)
+            val downloadUrl = if (mayMode) {
+                if (isMayUrl(item.url)) item.url else Uri.parse(MAY_HOME).buildUpon().appendPath("proxy").appendQueryParameter("url", item.url).build().toString()
+            } else QuangProxy.downloadUrl(this, item.url)
+            val request = DownloadManager.Request(Uri.parse(downloadUrl)).setTitle(filename)
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
-            for ((key, value) in headers(item.url)) request.addRequestHeader(key, value)
+            for ((key, value) in headers(if (mayMode) downloadUrl else item.url)) request.addRequestHeader(key, value)
             val id = downloads.enqueue(request)
             val ids = settings.getStringSet("downloads", emptySet())!!.toMutableSet(); ids.add(id.toString())
             settings.edit().putStringSet("downloads", ids).apply()
@@ -545,6 +552,7 @@ class QuangBrowserActivity : Activity() {
         dialog.show(); refresh.run()
     }
     private fun installMediaMute(view: WebView) {
+        if (mayMode || isMayUrl(view.url)) return // Mây owns its own mute/volume policy.
         // A persistent DOM observer covers SPA navigation and dynamically inserted players.
         // WebView cannot mute cross-origin iframes; those require native audio policy.
         view.evaluateJavascript("""(()=>{
@@ -567,6 +575,7 @@ class QuangBrowserActivity : Activity() {
         })()""", null)
     }
     private fun installAdGuard(view: WebView) {
+        if (mayMode || isMayUrl(view.url)) return
         if (!blockAds) return
         view.evaluateJavascript("""(()=>{
           if(window.__quangAdGuard)return;
@@ -581,6 +590,7 @@ class QuangBrowserActivity : Activity() {
         })()""", null)
     }
     private fun applyAdStyle(view: WebView) {
+        if (mayMode || isMayUrl(view.url)) return
         if (!blockAds) { view.evaluateJavascript("document.getElementById('quang-ad-style')?.remove()", null); return }
         view.evaluateJavascript("""(()=>{if(document.getElementById('quang-ad-style'))return;const s=document.createElement('style');s.id='quang-ad-style';s.textContent='.adsbygoogle,.advertisement,.ad-container,[data-ad-slot],iframe[src*="doubleclick.net"],iframe[src*="exoclick.com"],iframe[src*="juicyads.com"],iframe[src*="popads.net"]{display:none!important}';(document.head||document.documentElement).appendChild(s)})()""", null)
     }
