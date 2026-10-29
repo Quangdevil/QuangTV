@@ -322,8 +322,20 @@ class QuangBrowserActivity : Activity() {
                     val connection = java.net.URL("http://10.0.2.2:8765/fixture.mp4").openConnection(java.net.Proxy.NO_PROXY) as java.net.HttpURLConnection
                     connection.connectTimeout = 10000; connection.readTimeout = 10000
                     request.requestHeaders.entries.firstOrNull { it.key.equals("Range", true) }?.let { connection.setRequestProperty("Range", it.value) }
-                    val headers = connection.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(", ") }
-                    return WebResourceResponse("video/mp4", null, connection.responseCode, connection.responseMessage, headers, connection.inputStream)
+                    val code = connection.responseCode
+                    val reason = connection.responseMessage
+                    val headers = connection.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(", ") }.toMutableMap()
+                    // Match Mây's CORS-enabled media response, including its
+                    // crossorigin=anonymous videos and WebAudio volume controls.
+                    val bytes = connection.inputStream.use { it.readBytes() }
+                    connection.disconnect()
+                    headers.keys.filter { it.equals("Content-Length", true) || it.equals("Content-Encoding", true) || it.equals("Transfer-Encoding", true) }.toList().forEach { headers.remove(it) }
+                    headers["Content-Length"] = bytes.size.toString()
+                    headers["Access-Control-Allow-Origin"] = "*"
+                    headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Range, Accept-Ranges"
+                    headers["Cache-Control"] = "no-store"
+                    android.util.Log.i("QuangBrowserTest", "mayFixture code=$code bytes=${bytes.size} range=${request.requestHeaders.entries.firstOrNull { it.key.equals("Range", true) }?.value}")
+                    return WebResourceResponse("video/mp4", null, code, reason, headers, ByteArrayInputStream(bytes))
                 }
                 if (blockAds && !request.isForMainFrame && adHost(uri.host)) {
                     blockedAds.incrementAndGet()
