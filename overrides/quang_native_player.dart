@@ -100,8 +100,9 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     final next = MediaQuery.orientationOf(context) == Orientation.landscape;
     if (next != fullscreen) {
       fullscreen = next;
-      controlsVisible = true;
-      _scheduleControlsHide();
+      // Rotation changes the viewport, not the user's request for controls.
+      controlsTimer?.cancel();
+      controlsVisible = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           SystemChrome.setEnabledSystemUIMode(

@@ -50,8 +50,11 @@ void main() {
         debugPrint('QUANGTV_MAY_EMBED_PASS remoteShell=true serverBrowse=true sandboxReady=true');
         await browser.invokeMethod<void>('mayDemo');
         var snapshot=await until((s)=>s['hasControls']==true);
-        if (snapshot['paused']==true) { await state('tapVideo'); await state('play'); }
-        snapshot=await until((s)=>s['ready']==true);
+        // A light tap must suffice; never cover a production regression by
+        // pressing the separate Play button for the demo's initial start.
+        if (snapshot['paused']==true) await state('tapVideo');
+        snapshot=await until((s)=>s['ready']==true && s['paused']==false);
+        debugPrint('QUANGTV_MAY_DEMO_START_PASS noPlayButton=true mutedAutoplayOrSingleTap=true');
         expect(snapshot['muted'],true);
         expect(snapshot['hasSeek'],true);
         if (snapshot['paused']==true) { await state('tapVideo'); await state('play'); }
@@ -91,6 +94,23 @@ void main() {
     await tester.pump(const Duration(seconds:1));
     await tester.pumpWidget(const SizedBox.shrink());
   },timeout:const Timeout(Duration(minutes:4)));
+  testWidgets('VTV channels lead the TV list in numeric order', (tester) async {
+    SharedPreferences.setMockInitialValues({'quangtv_cached_channels': jsonEncode([
+      {'name':'HTV7','url':'https://example.org/htv.m3u8'},
+      {'name':'VTV3 HD','url':'https://example.org/vtv3.m3u8'},
+      {'name':'VTV1 HD','url':'https://example.org/vtv1.m3u8'},
+      {'name':'VTV2','url':'https://example.org/vtv2.m3u8'},
+      {'name':'VOV TV','url':'https://example.org/vov.m3u8'},
+    ])});
+    await tester.pumpWidget(const MaterialApp(home: QuangDiscoverScreen()));
+    await tester.pump(const Duration(seconds:1));
+    final titles=tester.widgetList<ListTile>(find.byType(ListTile))
+      .map((tile)=>tile.title).whereType<Text>().map((text)=>text.data)
+      .where((name)=>['HTV7','VTV3 HD','VTV1 HD','VTV2','VOV TV'].contains(name)).toList();
+    expect(titles.take(3),['VTV1 HD','VTV2','VTV3 HD']);
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugPrint('QUANGTV_VTV_ORDER_PASS numeric=true cachedList=true');
+  });
   testWidgets('Private actions stay in one row and the last channel is deletable', (tester) async {
     SharedPreferences.setMockInitialValues({'quangtv_private_channels': List.generate(30, (i) => jsonEncode({'name': 'Channel $i', 'url': 'https://example.org/$i.m3u8'}))});
     await tester.pumpWidget(const MaterialApp(home: QuangPrivateScreen()));

@@ -10,6 +10,7 @@ import 'quang_web_screen.dart';
 import '../models/channel.dart';
 import 'quang_native_player.dart';
 import 'quang_private_screen.dart';
+import 'quang_vtv_source.dart';
 
 class QuangDiscoverScreen extends StatefulWidget {
   const QuangDiscoverScreen({super.key});
@@ -358,7 +359,17 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final filter = searchController.text.toLowerCase();
-    final shown = [...personalChannels, ...channels].where((c) => c.name.toLowerCase().contains(filter) && !deletedChannels.contains(c.url) && !privateChannels.any((p) => p.url == c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
+    final matching = [...personalChannels, ...channels].where((c) => c.name.toLowerCase().contains(filter) && !deletedChannels.contains(c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
+    int priority(Channel channel) {
+      if (QuangVtvSource.channelId(channel.name) == null) return 1000;
+      final compact = channel.name.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      return int.parse(RegExp(r'^VTV(\d+)').firstMatch(compact)!.group(1)!);
+    }
+    final ordered = matching.indexed.toList()..sort((a, b) {
+      final difference = priority(a.$2).compareTo(priority(b.$2));
+      return difference != 0 ? difference : a.$1.compareTo(b.$1);
+    });
+    final shown = ordered.map((row) => row.$2).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('QuangTV'), actions: [
         IconButton(tooltip: 'Private', icon: const Icon(Icons.lock_outline), onPressed: () async {

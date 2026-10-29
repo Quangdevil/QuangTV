@@ -1,7 +1,25 @@
-// Only a trusted double tap on a Mây video changes playback. No native bridge.
+// Trusted Mây gestures only. No native bridge.
 (() => {
   if (window.__quangMayGestures) return;
   window.__quangMayGestures = true;
+  // The demo may be paused by an Android/WebView media policy. Let the first
+  // light tap start its muted autoplay video, without resuming a user pause.
+  const demo = location.hostname === 'may-viet-web-proxy.daquang.workers.dev' && /^\/demo\/?$/.test(location.pathname);
+  let demoStarted = false, demoDown = null;
+  if (demo) {
+    document.addEventListener('playing', e => { if (e.target instanceof HTMLVideoElement) demoStarted = true; }, true);
+    document.addEventListener('pointerdown', e => {
+      if (e.isTrusted && e.isPrimary !== false) demoDown = {id:e.pointerId,x:e.clientX,y:e.clientY,time:e.timeStamp};
+    }, {capture:true,passive:true});
+    document.addEventListener('pointercancel', () => { demoDown = null; }, true);
+    document.addEventListener('pointerup', e => {
+      const down = demoDown; demoDown = null;
+      if (!e.isTrusted || demoStarted || !down || down.id !== e.pointerId || e.timeStamp-down.time > 500 || Math.hypot(e.clientX-down.x,e.clientY-down.y) > 12) return;
+      if (e.composedPath().some(n => n.matches?.('button,input,a,select,textarea'))) return;
+      const video = document.querySelector('video[autoplay]');
+      if (video?.paused && video.muted) video.play().then(() => { demoStarted = true; }).catch(() => {});
+    }, {capture:true,passive:true});
+  }
   // Keep Mây's video AND shadow controls on the same HTML surface. Android's
   // separate custom fullscreen surface can receive touches instead of that UI.
   const requestFullscreen = Element.prototype.requestFullscreen;

@@ -213,6 +213,14 @@ void main() {
             DeviceOrientation.landscapeLeft,
           ]);
           await waitOrientation(Orientation.landscape);
+          expect(tester.widget<IgnorePointer>(panel).ignoring,isTrue,
+            reason:'Rotation alone must not reveal controls');
+          await tester.tapAt(tester.getCenter(surface));
+          await tester.pump(const Duration(milliseconds:300));
+          expect(tester.widget<IgnorePointer>(panel).ignoring,isFalse);
+          await tester.pump(const Duration(milliseconds:3300));
+          expect(tester.widget<IgnorePointer>(panel).ignoring,isTrue);
+          debugPrint('QUANGTV_ROTATION_TAP_ONLY_PASS engine=$engine hiddenOnRotate=true revealOnTap=true autoHide=true');
           expect(
             find.byType(AppBar),
             findsNothing,

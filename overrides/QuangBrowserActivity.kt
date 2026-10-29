@@ -253,6 +253,7 @@ class QuangBrowserActivity : Activity() {
         current = WeakReference(this)
         val initial = intent.getStringExtra("url") ?: ""
         mayMode = isMayUrl(initial)
+        web.settings.mediaPlaybackRequiresUserGesture = !mayMode
         applyBrowserTransport({
         if (state != null) web.restoreState(state)
         else if (httpUrl(initial)) web.loadUrl(initial)
@@ -260,6 +261,7 @@ class QuangBrowserActivity : Activity() {
         }, { Toast.makeText(this, "Không áp dụng được proxy. Hãy kiểm tra Cài đặt hoặc cập nhật Android System WebView.", Toast.LENGTH_LONG).show(); finish() })
     }
     private fun applyBrowserTransport(done: () -> Unit, failed: () -> Unit) {
+        for (view in tabs) view.settings.mediaPlaybackRequiresUserGesture = !mayMode
         if (!mayMode) { QuangProxy.applyWeb(this, done, failed); return }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
             val executor = java.util.concurrent.Executor { handler.post(it) }
@@ -292,6 +294,8 @@ class QuangBrowserActivity : Activity() {
         }
         view.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                // Mây owns mute/consent and muted previews, just as in Chrome.
+                view.settings.mediaPlaybackRequiresUserGesture = !isMayUrl(url)
                 tabMedia[view]?.clear()
                 if (view === web) { found.text = "Tải video"; activeUrls = emptySet(); address.setText(url?.takeIf { httpUrl(it) } ?: "") }
             }
