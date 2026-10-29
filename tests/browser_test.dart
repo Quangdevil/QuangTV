@@ -44,6 +44,7 @@ void main() {
           if(info['mayMode']==true && info['progress']==100 && (info['pageUrl']?.toString() ?? '').contains('may-viet-web-proxy.daquang.workers.dev')) break;
         }
         expect(info['mayMode'],true);
+        expect(info['gestureRequired'],false,reason:'May previews must use the web autoplay policy');
         expect(info['pageUrl'],contains('may-viet-web-proxy.daquang.workers.dev'));
         await browser.invokeMethod<void>('mayExample');
         await until((s)=>s['frameReady']==true);

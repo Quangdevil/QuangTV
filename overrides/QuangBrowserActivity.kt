@@ -48,7 +48,7 @@ class QuangBrowserActivity : Activity() {
         fun inspect(): Map<String, Any> = current?.get()?.let {
             val point = IntArray(2); it.root.getLocationOnScreen(point)
             val insets = ViewCompat.getRootWindowInsets(it.root)
-            mapOf("progress" to it.web.progress, "mayMode" to it.mayMode, "pageUrl" to (it.web.url ?: ""), "rotationPassed" to it.rotationPassed, "blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
+            mapOf("gestureRequired" to it.web.settings.mediaPlaybackRequiresUserGesture, "progress" to it.web.progress, "mayMode" to it.mayMode, "pageUrl" to (it.web.url ?: ""), "rotationPassed" to it.rotationPassed, "blockedAds" to it.blockedAds.get(), "selectedUrl" to (it.activeUrls.firstOrNull() ?: ""), "proxyOn" to (QuangProxy.state(it)["enabled"] == true), "tabs" to it.tabs.size, "selected" to it.activeUrls.size, "fullscreen" to it.orientationFullscreen, "previewPlaying" to (it.previewPlayer?.isPlaying == true), "count" to it.media.size, "top" to point[1] + it.root.paddingTop,
                 "statusBar" to (insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0),
                 "downloaded" to it.downloadedBytes(), "height" to it.web.height, "ime" to (insets?.isVisible(WindowInsetsCompat.Type.ime()) ?: false))
         } ?: lastRotation
@@ -60,7 +60,7 @@ class QuangBrowserActivity : Activity() {
                 android.util.Log.i("QuangBrowserTest", "action=$action begin")
                 when (action) {
                     "mayExample" -> it.openMayTarget("https://example.org/")
-                    "mayDemo" -> { it.testMayFixture = true; it.mayMode = true; it.applyBrowserTransport({it.web.loadUrl(MAY_HOME + "demo")}, {}) }
+                    "mayDemo" -> { it.testMayFixture = true; it.prepareMayTestMedia(); it.mayMode = true; it.applyBrowserTransport({it.web.loadUrl(MAY_HOME + "demo")}, {}) }
                     "focus" -> { it.address.requestFocus(); it.address.postDelayed({ (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(it.address, InputMethodManager.SHOW_IMPLICIT) }, 300) }
                     "select" -> it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
                     "download" -> it.found.performClick()
@@ -156,6 +156,29 @@ class QuangBrowserActivity : Activity() {
     private var mayMode = false
     // Enabled only by the debuggable integration-test command above.
     private var testMayFixture = false
+    private fun prepareMayTestMedia() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+        // Keep the live Mây HTML and real controls. A Blob supplies deterministic
+        // random access without Android's synthetic HTTP Range response quirks.
+        WebViewCompat.addDocumentStartJavaScript(web, """(() => {
+          if(location.hostname!=='may-viet-web-proxy.daquang.workers.dev'||!/^\/demo\/?$/.test(location.pathname)||window.__quangDemoFixture)return;
+          window.__quangDemoFixture=true;
+          let swapped=false;
+          const prepare=()=>{
+            const video=document.querySelector('video[autoplay]');
+            const source=video?.getAttribute('src');
+            if(swapped||!source)return;
+            swapped=true;observer.disconnect();video.pause();video.removeAttribute('src');video.load();
+            fetch(new URL(source,location.href).href,{cache:'no-store',credentials:'omit'})
+              .then(response=>{if(!response.ok)throw new Error('Fixture HTTP '+response.status);return response.blob();})
+              .then(blob=>{video.src=URL.createObjectURL(blob);video.load();})
+              .catch(error=>{window.__quangFixtureError=String(error);});
+          };
+          const observer=new MutationObserver(prepare);
+          observer.observe(document,{childList:true,subtree:true});
+          document.addEventListener('DOMContentLoaded',prepare,{once:true});
+        })()""", setOf("*"))
+    }
     private var pendingMayTarget: String? = null
     private fun isMayUrl(url: String?) = try { Uri.parse(url ?: "").host == Uri.parse(MAY_HOME).host } catch (_: Exception) { false }
     private lateinit var web: WebView
