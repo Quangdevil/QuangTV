@@ -7,9 +7,16 @@ set -euo pipefail
 adb root
 adb wait-for-device
 test "$(adb shell id -u | tr -d '\r')" = 0
-adb shell am force-stop com.google.android.apps.nexuslauncher
-adb shell pm disable --user 0 com.google.android.gms/.fonts.provider.FontsProvider
-adb shell am force-stop com.google.android.gms
+android_boot_command() {
+  for attempt in {1..15}; do
+    if adb shell "$@"; then return 0; fi
+    sleep 2
+  done
+  return 1
+}
+android_boot_command am force-stop com.google.android.apps.nexuslauncher
+android_boot_command pm disable --user 0 com.google.android.gms/.fonts.provider.FontsProvider
+android_boot_command am force-stop com.google.android.gms
 set +e
 bash scripts/test_browser.sh
 browser_status=$?
