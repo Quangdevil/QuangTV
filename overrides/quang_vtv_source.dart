@@ -50,6 +50,78 @@ class QuangVtvSource {
     }
   }
 
+  // Shared default with Discover/Mây. Never fetch this on successful VTVgo startup.
+  static const fallbackPlaylist = 'https://iptv-org.github.io/iptv/countries/vn.m3u';
+  static String? _fallbackText;
+  static DateTime? _fallbackAt;
+  static Future<String>? _fallbackPending;
+
+  static List<String> parseFallbackPlaylist(String text, String name) {
+    final id = channelId(name);
+    if (id == null) return const [];
+    final urls = <String>{};
+    String? entryName;
+    var restricted = false;
+    for (final raw in const LineSplitter().convert(text.replaceFirst('\uFEFF', ''))) {
+      final line = raw.trim();
+      if (line.startsWith('#EXTINF:')) {
+        final comma = line.indexOf(RegExp(r',(?=(?:[^"]*"[^"]*")*[^"]*$)'));
+        entryName = comma < 0 ? null : line.substring(comma + 1).trim();
+        restricted = false;
+      } else if (line.startsWith('#EXTHTTP:') || line.startsWith('#EXTVLCOPT:') || line.startsWith('#KODIPROP:')) {
+        restricted = true;
+      } else if (line.isNotEmpty && !line.startsWith('#') && entryName != null) {
+        final uri = Uri.tryParse(line);
+        if (!restricted && channelId(entryName) == id && uri != null &&
+            uri.scheme == 'https' && uri.host.contains('.') && !uri.host.endsWith('.') &&
+            uri.userInfo.isEmpty && !uri.hasPort &&
+            !RegExp(r'^[0-9.]+$').hasMatch(uri.host) &&
+            !RegExp(r'(?:^|\.)(?:localhost|local|internal|lan|home|test|invalid)$').hasMatch(uri.host) &&
+            !RegExp(r'(?:^|\.)(?:vtvdigital\.vn|vtvdigital\.org|vtvgo\.vn)$').hasMatch(uri.host) &&
+            uri.path.toLowerCase().endsWith('.m3u8') &&
+            !uri.queryParameters.keys.any((key) => RegExp(r'^(?:token|access_token|auth|authorization|api_key|apikey|key|signature|sig|hdnts|hdnea|session|jwt|password|secret)$', caseSensitive: false).hasMatch(key))) {
+          urls.add(line);
+          if (urls.length == 4) break;
+        }
+        entryName = null;
+      }
+    }
+    return urls.toList();
+  }
+
+  static Future<List<String>> resolveFallback(String name, {http.Client? client}) async {
+    if (channelId(name) == null) return const [];
+    Future<String> load() async {
+      final owned = client == null;
+      final transport = client ?? http.Client();
+      try {
+        final request = http.Request('GET', Uri.parse(fallbackPlaylist))..followRedirects = false;
+        final response = await transport.send(request).timeout(const Duration(seconds: 8));
+        if (response.statusCode != 200) throw StateError('IPTV playlist HTTP ${response.statusCode}');
+        final bytes = <int>[];
+        await for (final chunk in response.stream.timeout(const Duration(seconds: 8))) {
+          if (bytes.length + chunk.length > 2000000) throw StateError('IPTV playlist too large');
+          bytes.addAll(chunk);
+        }
+        final text = utf8.decode(bytes, allowMalformed: true);
+        if (!text.trimLeft().startsWith('#EXTM3U')) throw StateError('Invalid IPTV playlist');
+        _fallbackText = text;
+        _fallbackAt = DateTime.now();
+        return text;
+      } finally {
+        if (owned) transport.close();
+      }
+    }
+    final warm = _fallbackText != null && _fallbackAt != null && DateTime.now().difference(_fallbackAt!).inMinutes < 10;
+    if (warm) return parseFallbackPlaylist(_fallbackText!, name);
+    final pending = _fallbackPending ??= load();
+    try {
+      return parseFallbackPlaylist(await pending, name);
+    } finally {
+      if (identical(_fallbackPending, pending)) _fallbackPending = null;
+    }
+  }
+
   static List<String> parse(dynamic response) {
     final data = response is Map ? response['data'] : null;
     final modes = data is Map ? data['sourceModes'] : null;
