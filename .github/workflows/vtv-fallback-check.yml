@@ -1,0 +1,36 @@
+name: Check lazy VTV fallback (no APK or OTA)
+on:
+  push:
+    branches: [fix/lazy-vtv-iptv-fallback]
+  pull_request:
+    paths:
+      - 'overrides/quang_vtv_source.dart'
+      - 'overrides/quang_native_player.dart'
+      - 'tests/quang_vtv_source_test.dart'
+      - '.github/workflows/vtv-fallback-check.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tv-viewer-app/tv_viewer
+          ref: 188df516a8acb4a2fda0d65fed8b6199c734603f
+          path: upstream
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+          cache: true
+      - run: python3 scripts/patch_quangtv.py
+      - run: flutter pub get
+        working-directory: upstream/flutter_app
+      - run: flutter analyze lib/screens/quang_vtv_source.dart lib/screens/quang_native_player.dart
+        working-directory: upstream/flutter_app
+      - run: flutter test test/quang_vtv_source_test.dart
+        working-directory: upstream/flutter_app
