@@ -1,0 +1,75 @@
+name: Publish verified QuangTV build 202
+on:
+  push:
+    branches: [publish/downloads-build202]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Signed candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: QuangTV-signed-candidate-build202
+          run-id: 41220356175
+          github-token: ${{ github.token }}
+          path: candidate
+      - name: TV and OTA evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: native-playback-evidence-202
+          run-id: 41220356175
+          github-token: ${{ github.token }}
+          path: evidence
+      - name: Verify evidence and publish exact APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          grep -q 'QUANGTV_MAY_EMBED_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_MAY_CONTROLS_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_MAY_DEMO_START_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_VTV_ORDER_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_BROWSER_UI_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_PROXY_ANDROID_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_OTA_PASS' evidence/ota-test-result.txt
+          grep -q 'QUANGTV_YOUTUBE_DIRECT_PASS' evidence/ota-test-result.txt
+          grep -q 'QUANGTV_YOUTUBE_HISTORY_PASS' evidence/ota-test-result.txt
+          grep -q 'QUANGTV_ROTATION_TAP_ONLY_PASS engine=Media3' evidence/test-result.txt
+          grep -q 'QUANGTV_ROTATION_TAP_ONLY_PASS engine=VLC' evidence/test-result.txt
+          grep -qx QUANGTV_HLS_TEST_EXIT=0 evidence/test-result.txt
+          grep -qx QUANGTV_VISUAL_VERIFICATION_EXIT=0 evidence/visual-result.txt
+          grep -q 'QUANGTV_VTV_RENDER_PASS channel=VTV1' evidence/vtv-live-visual.txt
+          grep -q 'QUANGTV_VTV_RENDER_PASS channel=VTV3' evidence/vtv-live-visual.txt
+          grep -q 'QUANGTV_DOWNLOAD_BACKGROUND_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_DOWNLOAD_FOLDER_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_YOUTUBE_BACKGROUND_SERVICE_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_YOUTUBE_MUX_PASS' evidence/browser-test-result.txt
+          TAG=quangtv-v1.3.0-build202
+          APK=QuangTV-v1.3.0-build202-arm64.apk
+          EXPECTED=ae8a86001d791079817621d23b95249c694cb7b2eea2b22499b90bdec28ec7a1
+          printf '%s  %s\n' "$EXPECTED" "candidate/$APK" | sha256sum -c -
+          test "$(stat -c %s "candidate/$APK")" = 31497585
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          Tải video tiếp tục khi đóng giao diện ứng dụng, gồm link trình duyệt qua proxy và tải/ghép YouTube.
+          Đã tải có thư mục Video đã tải và Đang tải / Lỗi; mở video ngay trong app. Gạt sang trái hiện Xóa để xóa cả tệp, hoặc Hủy lượt đang tải.
+          Giữ các lượt tải cũ, cấu trúc IPTV → QuangTV → QuangTube, Mây, nguồn VTV/Private và lịch sử.
+          Đã kiểm tra tải nền qua proxy, video cục bộ chạy, gạt xóa tệp, tải/ghép nền, Mây và các kiểm tra TV/OTA trên Android giả lập.
+          Cài đè bằng cùng chữ ký để giữ dữ liệu. Phát YouTube trực tiếp trên IP CI có thể vẫn bị yêu cầu xác minh bot.
+          NOTES
+          gh release create "$TAG" "candidate/$APK" --target 41128d7abc9292971acd4242bf07c9d23a85d941 --draft --title 'QuangTV 1.3.0 · Tải nền và thư mục video (build 202)' --notes-file "$RUNNER_TEMP/notes.md"
+          gh release download "$TAG" --pattern "$APK" --dir "$RUNNER_TEMP/verified"
+          printf '%s  %s\n' "$EXPECTED" "$RUNNER_TEMP/verified/$APK" | sha256sum -c -
+          gh release edit "$TAG" --draft=false --latest
+          gh api "repos/$GH_REPO/releases/latest" > "$RUNNER_TEMP/latest.json"
+          python3 - "$RUNNER_TEMP/latest.json" "$TAG" "$APK" "$EXPECTED" <<'PY'
+          import json,sys
+          with open(sys.argv[1]) as f: r=json.load(f)
+          assert r['tag_name']==sys.argv[2] and not r['draft'] and not r['prerelease']
+          a=[a for a in r['assets'] if a['name']==sys.argv[3]]
+          assert len(a)==1 and a[0]['digest']=='sha256:'+sys.argv[4] and a[0]['size']==31497585
+          print('QUANGTV_OTA_PROMOTION_PASS tag='+r['tag_name'])
+          PY
