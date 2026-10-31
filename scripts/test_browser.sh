@@ -11,6 +11,8 @@ grep -Ei 'Mesa|lavapipe|llvmpipe' "$repo_root/playback-evidence/emulator-rendere
 adb logcat -c
 adb logcat -v threadtime > "$repo_root/playback-evidence/browser-logcat.txt" &
 log_pid=$!
+python3 scripts/drive_background_download_test.py &
+background_driver_pid=$!
 (
   # Avoid screenshot readback while the emulator is initializing a decoder.
   # Capture the actual moving video after its clock advances and rotation settles.
@@ -22,7 +24,7 @@ log_pid=$!
 ) &
 frame_pid=$!
 cleanup() {
-  kill "$log_pid" "$frame_pid" 2>/dev/null || true
+  kill "$log_pid" "$frame_pid" "$background_driver_pid" 2>/dev/null || true
   python3 - <<'PYCRASH' || true
 import glob,pathlib,shutil
 out=pathlib.Path(__import__('os').environ['QUANGTV_EVIDENCE'])/'emulator-crashes';out.mkdir(parents=True,exist_ok=True)
@@ -35,6 +37,8 @@ PYCRASH
   sudo dmesg | grep -Ei 'out of memory|killed process' > "$repo_root/playback-evidence/runner-oom.txt" || true
 }
 trap cleanup EXIT
+adb install -r upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+adb shell pm grant com.quangduren.quangtv.debug android.permission.POST_NOTIFICATIONS
 cd upstream/flutter_app
 flutter test integration_test/browser_test.dart -d emulator-5554 2>&1 | tee "$repo_root/playback-evidence/browser-test-result.txt"
 

@@ -18,6 +18,56 @@ import 'package:video_player/video_player.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  testWidgets('Background download survives leaving the app and files open and swipe-delete', (tester) async {
+    const bridge=MethodChannel('quangtv/browser');
+    await tester.pumpWidget(const MaterialApp(home:Scaffold(body:Text('Background download test'))));
+    await tester.runAsync(() async {
+      Future<Map<String,dynamic>> status(String method) async => await bridge.invokeMapMethod<String,dynamic>(method) ?? {};
+      Future<Map<String,dynamic>> until(String method,bool Function(Map<String,dynamic>) ready) async {
+        final end=DateTime.now().add(const Duration(seconds:45));Map<String,dynamic> last={};
+        while(DateTime.now().isBefore(end)) { await Future<void>.delayed(const Duration(milliseconds:300));last=await status(method);if(ready(last))return last; }
+        fail('Downloads did not become ready: $method $last');
+      }
+      var background=false;
+      try {
+        await bridge.invokeMethod<void>('proxySave',{'enabled':true,'type':'http','host':'10.0.2.2','port':8766,'user':'fixture-user','password':'fixture-password'});
+        await bridge.invokeMethod<int>('downloadFixture');
+        final started=await until('downloadTasksStatus',(s)=>s['service']==true && (s['active'] as num? ?? 0)>0 && (s['bytes'] as num? ?? 0)>0);
+        await bridge.invokeMethod<void>('downloadsBackground');background=true;
+        await Future<void>.delayed(const Duration(seconds:2));
+        expect(await bridge.invokeMethod<bool>('downloadsWindowReady'),false);
+        final later=await until('downloadTasksStatus',(s)=>s['service']==true && (s['bytes'] as num? ?? 0)>(started['bytes'] as num));
+        expect(later['service'],true);
+        expect(later['bytes'],greaterThan(started['bytes']));
+        await until('downloadTasksStatus',(s)=>(s['files'] as num? ?? 0)>0 && s['active']==0);
+        debugPrint('QUANGTV_DOWNLOAD_BACKGROUND_PASS uiHidden=true proxyTransferAdvanced=true completed=true');
+        await bridge.invokeMethod<void>('downloadsForeground');
+        final end=DateTime.now().add(const Duration(seconds:20));
+        while(DateTime.now().isBefore(end)) { if(await bridge.invokeMethod<bool>('downloadsWindowReady')==true)break;await Future<void>.delayed(const Duration(milliseconds:200)); }
+        expect(await bridge.invokeMethod<bool>('downloadsWindowReady'),true);background=false;
+        await bridge.invokeMethod<void>('downloadsOpen');
+        await until('downloadsInspect',(s)=>s['folder']=='root');
+        await bridge.invokeMethod<void>('downloadsAction',{'action':'videos'});
+        await until('downloadsInspect',(s)=>s['folder']=='videos' && (s['files'] as num? ?? 0)>0);
+        await bridge.invokeMethod<void>('downloadsAction',{'action':'openFirst'});
+        await until('downloadsInspect',(s)=>s['previewPlaying']==true && (s['previewPosition'] as num? ?? 0)>=1000);
+        await bridge.invokeMethod<void>('downloadsAction',{'action':'closePreview'});
+        await bridge.invokeMethod<void>('downloadsAction',{'action':'swipeFirst'});
+        final revealed=await until('downloadsInspect',(s)=>s['deleteShown']==true);
+        expect(revealed['files'],1,reason:'Swiping reveals delete without erasing prematurely');
+        await bridge.invokeMethod<void>('downloadsAction',{'action':'deleteRevealed'});
+        final removed=await until('downloadsInspect',(s)=>s['files']==0);
+        expect(removed['deletedFileExists'],false);
+        debugPrint('QUANGTV_DOWNLOAD_FOLDER_PASS folders=true localVideoAdvanced=true swipeReveal=true physicalDelete=true');
+      } finally {
+        if(background){await bridge.invokeMethod<void>('downloadsForeground');await Future<void>.delayed(const Duration(seconds:2));}
+        await bridge.invokeMethod<void>('downloadsAction',{'action':'close'});
+        await bridge.invokeMethod<void>('proxySave',{'enabled':false});
+      }
+    });
+    await tester.pump(const Duration(seconds:1));
+    await tester.pumpWidget(const SizedBox.shrink());
+  },timeout:const Timeout(Duration(minutes:3)));
   testWidgets('Embedded May opens proxied pages and has real landscape video controls', (tester) async {
     const browser = MethodChannel('quangtv/browser');
     await browser.invokeMethod<void>('proxySave', {'enabled': true, 'type': 'http', 'host': '10.0.2.2', 'port': 8766, 'user': 'fixture-user', 'password': 'fixture-password'});
@@ -289,14 +339,24 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.runAsync(() async {
       await browser.invokeMethod<void>('youtubeFixture');
+      await browser.invokeMethod<void>('downloadsBackground');
       final deadline = DateTime.now().add(const Duration(seconds: 60));
       Map<String, dynamic> status = {};
-      while (DateTime.now().isBefore(deadline)) {
+      var foregroundWorker=false;
+      try { while (DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 500));
         status = await browser.invokeMapMethod<String, dynamic>('youtubeStatus') ?? {};
+        if(status['running']==true && status['service']==true)foregroundWorker=true;
         if (status['running'] == false) break;
+      } } finally {
+        await browser.invokeMethod<void>('downloadsForeground');
+        final end=DateTime.now().add(const Duration(seconds:20));
+        while(DateTime.now().isBefore(end)) { if(await browser.invokeMethod<bool>('downloadsWindowReady')==true)break;await Future<void>.delayed(const Duration(milliseconds:200)); }
+        expect(await browser.invokeMethod<bool>('downloadsWindowReady'),true);
       }
       expect(status['completed'], greaterThan(0), reason: '${status['status']}');
+      expect(foregroundWorker,true,reason:'Mux work must be owned by the download service');
+      debugPrint('QUANGTV_YOUTUBE_BACKGROUND_SERVICE_PASS uiHidden=true workerProtected=true completed=true');
       debugPrint('QUANGTV_YOUTUBE_MUX_PASS nativeAvcAacMerge=true');
       await browser.invokeMethod<void>('proxySave', {'enabled': false});
       try {

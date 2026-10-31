@@ -271,6 +271,8 @@ activity.write_text(kotlin.replace('class MainActivity: FlutterActivity()',
 # Replace both full-width and compact Map actions with the same browser route.
 shutil.copyfile('overrides/quang_browser_screen.dart', 'upstream/flutter_app/lib/screens/quang_browser_screen.dart')
 shutil.copyfile('overrides/QuangBrowserActivity.kt', activity.parent / 'QuangBrowserActivity.kt')
+for source in ['QuangDownloads.kt', 'QuangDownloadService.kt', 'QuangDownloadsActivity.kt']:
+    shutil.copyfile('overrides/' + source, activity.parent / source)
 s = home.read_text().replace("import 'map_screen.dart';", "import 'quang_browser_screen.dart';")
 s = s.replace('const MapScreen()', 'const QuangBrowserScreen()').replace('Icons.map', 'Icons.public')
 s = s.replace("'World Map'", "'Trình duyệt'").replace("value == 'map'", "value == 'browser'").replace("value: 'map'", "value: 'browser'")
@@ -280,6 +282,12 @@ marker = 'class MainActivity: com.ryanheise.audioservice.AudioServiceActivity() 
 assert marker in kotlin
 bridge = '''
     private var browserReply: MethodChannel.Result? = null
+    override fun onPostResume() {
+        super.onPostResume()
+        if (!QuangYouTube.running && QuangDownloads.prefs(this).contains("youtube_pending_choice")) {
+            try { QuangDownloadService.keepAlive(this) } catch (_: Exception) { }
+        }
+    }
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != 3101) return
@@ -319,6 +327,14 @@ browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
             } else if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 when (call.method) {
                     "inspect" -> result.success(QuangBrowserActivity.inspect())
+                    "downloadsInspect" -> result.success(QuangDownloadsActivity.inspect())
+                    "downloadsAction" -> { QuangDownloadsActivity.testAction(call.argument<String>("action") ?: ""); result.success(null) }
+                    "downloadsOpen" -> { startActivity(Intent(this, QuangDownloadsActivity::class.java)); result.success(null) }
+                    "downloadFixture" -> { result.success(QuangDownloads.enqueue(this,QuangProxy.downloadUrl(this,"http://10.0.2.2:8765/proxy-only/slow-video.mp4"),emptyMap(),"QuangTV-background-fixture.mp4")) }
+                    "downloadTasksStatus" -> { val entries=QuangDownloads.entries(this); result.success(mapOf("active" to entries.count { it.active },"files" to entries.count { it.complete },"bytes" to entries.sumOf { it.bytes.coerceAtLeast(0) },"service" to QuangDownloadService.running)) }
+                    "downloadsBackground" -> { moveTaskToBack(true); result.success(null) }
+                    "downloadsForeground" -> { android.util.Log.i("QuangDownloadTest","QUANGTV_DOWNLOADS_RESTORE_REQUEST"); result.success(null) }
+                    "downloadsWindowReady" -> result.success(hasWindowFocus())
                     "mayTest" -> QuangBrowserActivity.mayTest(call.argument<String>("command") ?: "state", call.argument<Number>("value")?.toDouble() ?: 0.5) { result.success(it) }
                     "mayExample", "mayDemo", "focus", "select", "download", "confirmDownload", "toggleProxy", "showTabs", "newTab", "firstTab", "openDownloads", "openCompleted", "closePreview", "playPage", "previewAndRotate", "rotatePlayback", "landscape", "portrait", "clearDownloads", "close" -> { QuangBrowserActivity.testAction(call.method); result.success(null) }
                     else -> result.notImplemented()
@@ -334,6 +350,14 @@ m = m.replace('<uses-permission android:name="android.permission.WRITE_EXTERNAL_
 manifest.write_text(m)
 
 shutil.copyfile('tests/browser_test.dart', 'upstream/flutter_app/integration_test/browser_test.dart')
+
+m = manifest.read_text()
+for permission in ['FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_DATA_SYNC', 'POST_NOTIFICATIONS', 'WAKE_LOCK']:
+    name = 'android.permission.' + permission
+    if 'android:name="' + name + '"' not in m:
+        m = m.replace('<application', '<uses-permission android:name="' + name + '"/>\n    <application', 1)
+m = m.replace('</application>', '<service android:name=".QuangDownloadService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false"/><activity android:name=".QuangDownloadsActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode"/></application>', 1)
+manifest.write_text(m)
 
 # Keep authenticated proxy credentials exclusively on the device.
 shutil.copyfile('overrides/QuangProxy.kt', activity.parent / 'QuangProxy.kt')
@@ -370,7 +394,7 @@ proxy_handler = '''            if (call.method == "networkCheck") {
                 result.success(null); return@setMethodCallHandler
             }
             if (call.method == "youtubeStatus" && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-                result.success(mapOf("running" to QuangYouTube.running, "status" to QuangYouTube.status, "completed" to QuangYouTube.completed(this).size)); return@setMethodCallHandler
+                result.success(mapOf("running" to QuangYouTube.running, "status" to QuangYouTube.status, "completed" to QuangYouTube.completed(this).size, "service" to QuangDownloadService.running)); return@setMethodCallHandler
             }
             if (call.method == "youtubeProbe" && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 QuangYouTube.extract(this, "https://www.youtube.com/watch?v=aqz-KE-bpKQ") { choices, error -> result.success(mapOf("count" to (choices?.size ?: 0), "error" to (error ?: ""))) }; return@setMethodCallHandler

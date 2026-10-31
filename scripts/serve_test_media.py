@@ -28,7 +28,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.path = self.path[len('/proxy-only'):]
         path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
         if path.endswith(('.mp4', '.m4a', '.ts')):
-            media = (root / path.lstrip('/')).resolve()
+            media = (root / ('fixture.mp4' if path == '/slow-video.mp4' else path.lstrip('/'))).resolve()
             if root.resolve() not in media.parents or not media.is_file():
                 self.send_error(404); return
             total = media.stat().st_size; start = 0; end = total - 1
@@ -53,6 +53,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         chunk = source.read(min(65536, remaining))
                         if not chunk: break
                         self.wfile.write(chunk); remaining -= len(chunk)
+                        if path == '/slow-video.mp4':
+                            self.wfile.flush()
+                            time.sleep(.06)
             except (BrokenPipeError, ConnectionResetError): pass
             return
         if self.path == '/ota-metrics.json':
