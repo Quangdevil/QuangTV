@@ -40,8 +40,17 @@ void main() {
     Future<void> menu(String task) async {
       tester.state<ScaffoldState>(find.byKey(const ValueKey('quangtv-may-home'))).openDrawer();
       await tester.pump(const Duration(milliseconds:400));
+      // A reopened drawer retains its previous scroll position. Return to its
+      // beginning before looking for a lazily built entry below the fold.
+      await tester.drag(find.descendant(of:find.byType(Drawer),matching:find.byType(ListView)),const Offset(0,1800));
+      await tester.pump(const Duration(milliseconds:300));
       final target=find.byKey(ValueKey('may-task-$task'));
-      await tester.ensureVisible(target);
+      final menuScroll=find.descendant(of:find.byType(Drawer),matching:find.byType(Scrollable));
+      if (target.evaluate().isEmpty) {
+        await tester.scrollUntilVisible(target, 120, scrollable: menuScroll);
+      } else {
+        await tester.ensureVisible(target);
+      }
       await tester.pump(const Duration(milliseconds:350));
       for (var i=0; i<8 && target.hitTestable().evaluate().isEmpty; i++) {
         await tester.drag(find.descendant(of:find.byType(Drawer),matching:find.byType(ListView)),const Offset(0,-160));
