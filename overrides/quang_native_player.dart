@@ -68,14 +68,20 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
   static const _externalChannel = MethodChannel('quangtv/external_player');
 
   List<String> resolvedVtvSources = [];
+  List<String> playlistVtvSources = [];
+  bool playlistFallbackRequested = false;
+  bool loadingPlaylistFallback = false;
+  int fallbackGeneration = 0;
+  Map<String, String> headersFor(String url) => playlistVtvSources.contains(url) ? const <String, String>{} : streamHeaders;
   String? get vtvKey => QuangVtvSource.channelId(widget.channel.name);
   bool get useVtvResolver => vtvKey != null && widget.fallbackOverride == null && widget.channel.country != 'Private';
 
   List<String> get sources {
     final urls = resolvedVtvSources.isNotEmpty
         ? List<String>.of(resolvedVtvSources)
-        : <String>[widget.channel.url];
+        : useVtvResolver ? <String>[] : <String>[widget.channel.url];
     if (widget.fallbackOverride != null) urls.addAll(widget.fallbackOverride!);
+    if (useVtvResolver) urls.addAll(playlistVtvSources);
     return urls
         .where(
           (u) =>
@@ -234,6 +240,7 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
   }
 
   Future<void> _initializePlayback() async {
+    final initToken = fallbackGeneration;
     try {
       final proxy = await const MethodChannel('quangtv/browser').invokeMapMethod<String, dynamic>('proxyGet');
       proxyEnabled = proxy?['enabled'] == true;
@@ -241,7 +248,9 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
       if (mounted) setState(() { loading = false; error = 'Không áp dụng được proxy. Hãy kiểm tra Cài đặt.'; });
       return;
     }
+    if (!mounted || initToken != fallbackGeneration) return;
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted || initToken != fallbackGeneration) return;
     final key =
         'quangtv_headers_${base64Url.encode(utf8.encode(widget.channel.url))}';
     final saved = prefs.getString(key);
@@ -254,15 +263,24 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
     if (useVtvResolver) {
       if (mounted) setState(() => engineStage = 'Đang lấy nguồn VTVgo mới');
       try {
-        resolvedVtvSources = await QuangVtvSource.resolve(widget.channel.name);
+        final resolved = await QuangVtvSource.resolve(widget.channel.name);
+        if (!mounted || initToken != fallbackGeneration) return;
+        resolvedVtvSources = resolved;
         // Never forward saved cookies/auth for an old IPTV CDN to VTVgo.
         streamHeaders = Map<String, String>.of(QuangVtvSource.headers);
       } catch (_) {
-        if (!mounted) return;
+        if (!mounted || initToken != fallbackGeneration) return;
+        resolvedVtvSources = [];
+        if (await _loadPlaylistFallback()) {
+          if (!mounted || initToken != fallbackGeneration) return;
+          await _open(0);
+          return;
+        }
+        if (!mounted || initToken != fallbackGeneration) return;
         setState(() {
           loading = false;
-          error = 'Không lấy được nguồn VTVgo mới. Thử lại hoặc mở VTVgo chính thức.';
-          lastFailure = 'VTVgo chưa trả nguồn phát; không thử các link CDN cũ.';
+          error = 'VTVgo và nguồn IPTV dự phòng chưa sẵn sàng. Thử lại sau.';
+          lastFailure = 'Không có nguồn phát phù hợp; không sửa token hoặc header.';
         });
         return;
       }
@@ -317,8 +335,26 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
     setState(() {});
   }
 
+  Future<bool> _loadPlaylistFallback() async {
+    if (!useVtvResolver || playlistFallbackRequested || !mounted) return false;
+    playlistFallbackRequested = true;
+    loadingPlaylistFallback = true;
+    final token = fallbackGeneration;
+    try {
+      final urls = await QuangVtvSource.resolveFallback(widget.channel.name);
+      if (!mounted || token != fallbackGeneration) return false;
+      playlistVtvSources = urls.where((url) => !resolvedVtvSources.contains(url)).toList();
+      return playlistVtvSources.isNotEmpty;
+    } catch (_) {
+      return false;
+    } finally {
+      if (token == fallbackGeneration) loadingPlaylistFallback = false;
+    }
+  }
+
   Future<void> _failover([String reason = 'Playback error']) async {
-    if (switching || !mounted || error != null) return;
+    if (switching || loadingPlaylistFallback || !mounted || error != null) return;
+    final fallbackToken = fallbackGeneration;
     diagnostic = reason;
     lastFailure = reason;
     engineStage = 'Media3 lỗi, đang chuyển nguồn';
@@ -335,6 +371,12 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
       (i) => (sourceIndex + i + 1) % all.length,
     ).where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
+      final firstPlaylist = all.length;
+      if (await _loadPlaylistFallback()) {
+        if (mounted && fallbackToken == fallbackGeneration) await _open(firstPlaylist);
+        return;
+      }
+      if (!mounted || fallbackToken != fallbackGeneration) return;
       // Try the original URL with VLC once; its own startup timer and error
       // handling stop the retry loop if it cannot play this stream either.
       sourceIndex = 0;
@@ -376,14 +418,14 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
         VlcHttpOptions.httpReconnect(true),
         VlcHttpOptions.httpForwardCookies(true),
         VlcHttpOptions.httpUserAgent(
-          streamHeaders['User-Agent'] ?? 'QuangTV/1.3',
+          headersFor(url)['User-Agent'] ?? 'QuangTV/1.3',
         ),
       ];
       var playbackUrl = url;
       if (proxyEnabled) {
         playbackUrl = await const MethodChannel('quangtv/browser').invokeMethod<String>('proxyMediaUrl', {'url': url}) ?? (throw StateError('Proxy chưa sẵn sàng'));
       }
-      final referrer = streamHeaders['Referer'] ?? streamHeaders['Referrer'];
+      final referrer = headersFor(url)['Referer'] ?? headersFor(url)['Referrer'];
       if (referrer != null && referrer.isNotEmpty) {
         vlcHttp.add(VlcHttpOptions.httpReferrer(referrer));
       }
@@ -498,7 +540,7 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
       httpHeaders: {
         'User-Agent': 'QuangTV/1.3 Android Media3',
         'Accept': '*/*',
-        ...streamHeaders,
+        ...headersFor(url),
       },
     );
     try {
@@ -528,6 +570,10 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
   }
 
   void _retry() {
+    fallbackGeneration++;
+    playlistFallbackRequested = false;
+    loadingPlaylistFallback = false;
+    playlistVtvSources = [];
     failedSources.clear();
     retriedSources.clear();
     if (useVtvResolver) {
@@ -595,6 +641,7 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    fallbackGeneration++;
     generation++;
     controlsTimer?.cancel();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
