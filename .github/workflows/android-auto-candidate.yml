@@ -1,0 +1,65 @@
+name: Compile QuangTV Android Auto candidate
+on:
+  push:
+    branches: [feat/android-auto-projection]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quangtv-auto-candidate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tv-viewer-app/tv_viewer
+          ref: 188df516a8acb4a2fda0d65fed8b6199c734603f
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+          cache: true
+      - name: Test and apply integration
+        run: |
+          python3 -m unittest discover -s tests -p test_android_auto_patch.py
+          python3 scripts/patch_quangtv.py
+          python3 scripts/patch_android_auto.py
+      - name: Resolve Flutter dependencies
+        working-directory: upstream/flutter_app
+        run: flutter pub get
+      - name: Apply existing VLC registration fix
+        run: |
+          python3 scripts/patch_vlc_engine.py
+          cd upstream/flutter_app
+          flutter pub get
+      - name: Build isolated preview APK
+        # Different package and debug key: does not overwrite the installed app,
+        # access production preferences or participate in production OTA.
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/flutter_app/android/app/build.gradle')
+          p.write_text(p.read_text().replace('applicationId "com.quangduren.quangtv"', 'applicationId "com.quangduren.quangtv.autopreview"'))
+          p = Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
+          p.write_text(p.read_text().replace('android:label="QuangTV"', 'android:label="QuangTV Auto Preview"'))
+          p = Path('upstream/flutter_app/android/app/src/main/kotlin/app/tvviewer/player/QuangUpdateManager.kt')
+          p.write_text(p.read_text().replace('private fun allowed(c: Context, url: String): Boolean {', 'private fun allowed(c: Context, url: String): Boolean {\n        if (c.packageName.endsWith(".autopreview")) return false'))
+          PY
+          cd upstream/flutter_app
+          flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0-auto-preview --build-number=${{ github.run_number }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuangTV-Auto-Preview-arm64
+          path: upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -18,4 +18,4 @@ For the complete emulator and moving-frame gate, follow .github/workflows/build-
 flutter test integration_test/native_hls_test.dart -d DEVICE_ID --dart-define=HLS_TEST_URL=http://HOST/index.m3u8
 ```
 
-Features including PiP depend on the upstream source, Android version, and stream. No promise of Android Auto compatibility. No new analytics, ads or credentials are added by this build workflow. Source and third-party dependencies have not yet undergone a full security audit.
+Features including PiP depend on the upstream source, Android version, and stream. An experimental native Android Auto projection host is described in [docs/android-auto.md](docs/android-auto.md); registration and Java compilation do not establish compatibility with a real head unit. No new analytics, ads or credentials are added by this build workflow. Source and third-party dependencies have not yet undergone a full security audit.
