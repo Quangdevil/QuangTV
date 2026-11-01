@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'quang_update_release.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -112,10 +113,11 @@ class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
       assetUrl = null;
     });
     try {
+      final info = await PackageInfo.fromPlatform();
       final response = await http
           .get(
             Uri.parse(
-              'https://api.github.com/repos/Quangdevil/QuangTV/releases/latest',
+              updateEndpoint(info.packageName),
             ),
             headers: {'Accept': 'application/vnd.github+json'},
           )
@@ -123,17 +125,10 @@ class _QuangUpdateScreenState extends State<QuangUpdateScreen> {
       if (response.statusCode != 200) {
         throw Exception('GitHub HTTP ${response.statusCode}');
       }
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final assets = data['assets'] as List<dynamic>? ?? [];
-      final apk = assets
-          .cast<Map<String, dynamic>>()
-          .where((a) => (a['name'] as String? ?? '').endsWith('-arm64.apk'))
-          .firstOrNull;
-      if (apk == null) throw Exception('Bản phát hành chưa có APK arm64');
-      final info = await PackageInfo.fromPlatform();
+      final data = selectUpdateRelease(jsonDecode(response.body), info.packageName);
+      final apk = selectUpdateApk(data, info.packageName);
       final tag = data['tag_name'] as String? ?? '';
-      final match = RegExp('build([0-9]+)').firstMatch(tag);
-      final remoteBuild = int.tryParse(match?.group(1) ?? '') ?? 0;
+      final remoteBuild = releaseBuild(data);
       final localBuild = int.tryParse(info.buildNumber) ?? 0;
       if (!mounted) return;
       setState(() {

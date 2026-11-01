@@ -4,7 +4,7 @@ on:
     branches: [feat/android-auto-projection]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: quangtv-auto-candidate-${{ github.ref }}
   cancel-in-progress: true
@@ -53,11 +53,10 @@ jobs:
       - name: Verify public channel export
         working-directory: upstream/flutter_app
         run: |
-          flutter analyze lib/screens/quang_auto_channels.dart
-          flutter test test/quang_auto_channels_test.dart
+          flutter analyze lib/screens/quang_auto_channels.dart lib/screens/quang_update_screen.dart lib/screens/quang_update_release.dart lib/services/quang_auto_media.dart lib/services/background_audio_service.dart
+          flutter test test/quang_auto_channels_test.dart test/quang_update_release_test.dart test/quang_auto_media_test.dart
       - name: Build isolated preview APK
-        # Different package and debug key: does not overwrite the installed app,
-        # access production preferences or participate in production OTA.
+        # Preview 2 retains its package and stable test signer for in-place updates.
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -65,8 +64,6 @@ jobs:
           p.write_text(p.read_text().replace('applicationId "com.quangduren.quangtv"', 'applicationId "com.quangduren.quangtv.autopreview2"') + '\nandroid { buildTypes { release { signingConfig signingConfigs.debug } } }\n')
           p = Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
           p.write_text(p.read_text().replace('android:label="QuangTV"', 'android:label="QuangTV Auto Preview 2"'))
-          p = Path('upstream/flutter_app/android/app/src/main/kotlin/app/tvviewer/player/QuangUpdateManager.kt')
-          p.write_text(p.read_text().replace('private fun allowed(c: Context, url: String): Boolean {', 'private fun allowed(c: Context, url: String): Boolean {\n        if (c.packageName.endsWith(".autopreview2")) return false'))
           p = Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
           p.write_text(p.read_text().replace('android:label="QuangTV Auto"', 'android:label="QuangTV Auto 2"'))
           PY
@@ -85,7 +82,7 @@ jobs:
           }
           GRADLE
           cd upstream/flutter_app
-          flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0-auto-preview --build-number=${{ github.run_number }}
+          flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0-auto-preview2 --build-number=${{ github.run_number }}
       - name: Verify packaged projection service and minified classes
         run: python3 scripts/verify_android_auto_apk.py upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
       - uses: actions/upload-artifact@v4
@@ -94,3 +91,12 @@ jobs:
           path: upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Publish isolated Preview 2 update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="auto-preview2-build${{ github.run_number }}"
+          APK="QuangTV-Auto-Preview2-build${{ github.run_number }}-arm64.apk"
+          cp upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$APK"
+          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --prerelease --latest=false --title "QuangTV Auto Preview 2 · build ${{ github.run_number }}" --notes "Preview 2 only. Fix Android Auto media-service binding permission and expose saved public channels. Add a separate Preview 2 OTA channel with package, signer and version checks. Signed with the existing Preview 2 test key; install over Preview 2. Phone/car runtime compatibility still requires testing on the user's head unit. Commit: $GITHUB_SHA"

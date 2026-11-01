@@ -8,6 +8,8 @@ shutil.copyfile('overrides/quang_web_screen.dart', 'upstream/flutter_app/lib/scr
 shutil.copyfile('overrides/quang_vtv_source.dart', 'upstream/flutter_app/lib/screens/quang_vtv_source.dart')
 shutil.copyfile('overrides/quang_native_player.dart', 'upstream/flutter_app/lib/screens/quang_native_player.dart')
 shutil.copyfile('overrides/quang_audio_screen.dart', 'upstream/flutter_app/lib/screens/quang_audio_screen.dart')
+shutil.copyfile('overrides/quang_update_release.dart', 'upstream/flutter_app/lib/screens/quang_update_release.dart')
+shutil.copyfile('tests/quang_update_release_test.dart', 'upstream/flutter_app/test/quang_update_release_test.dart')
 shutil.copyfile('overrides/quang_update_screen.dart', 'upstream/flutter_app/lib/screens/quang_update_screen.dart')
 pubspec=Path('upstream/flutter_app/pubspec.yaml')
 pubspec.write_text(pubspec.read_text().replace('  # UI', '  xml: ^6.5.0\n  webview_flutter: ^4.10.0\n  flutter_vlc_player: 7.4.3\n  flutter_vlc_player_platform_interface: 2.0.5\n  # UI', 1))

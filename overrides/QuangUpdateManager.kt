@@ -3,6 +3,7 @@ package app.tvviewer.player
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.core.content.FileProvider
 import java.io.File
@@ -43,7 +44,16 @@ object QuangUpdateManager {
     private fun allowed(c: Context, url: String): Boolean {
         val uri = Uri.parse(url)
         if (uri.scheme == "https" && uri.host == "github.com" &&
-            uri.path?.startsWith("/Quangdevil/QuangTV/releases/download/") == true) return true
+            uri.path?.startsWith("/Quangdevil/QuangTV/releases/download/") == true) {
+            val parts = uri.pathSegments
+            if (parts.size != 6) return false
+            val preview = c.packageName == "com.quangduren.quangtv.autopreview2"
+            val tag = parts[4]
+            val asset = parts[5]
+            return if (preview) tag.matches(Regex("auto-preview2-build[0-9]+")) &&
+                asset.matches(Regex("QuangTV-Auto-Preview2-build[0-9]+-arm64\\.apk"))
+            else tag.startsWith("quangtv-v") && asset.startsWith("QuangTV-v") && asset.endsWith("-arm64.apk")
+        }
         // Deterministic emulator fixture is never permitted in a release APK.
         return c.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0 &&
             uri.scheme == "http" && uri.host == "10.0.2.2" && uri.port == 8765 &&
@@ -163,12 +173,31 @@ object QuangUpdateManager {
             }
         }
         apk(c).delete()
+        // Reject a wrong package, signer, or downgrade before opening Android's
+        // installer. The emulator's synthetic byte fixture is the only bypass.
+        val fixture = c.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0 &&
+            prefs(c).getString("url", "") == "http://10.0.2.2:8765/ota-fixture.apk"
+        if (!fixture) verifyArchive(c, partial(c))
         check(partial(c).renameTo(apk(c))) { "Không lưu được APK" }
         synchronized(this) {
             active = false
             prefs(c).edit().putString("phase", "ready").putString("message", "")
                 .putLong("downloaded", downloaded).putLong("total", downloaded).apply()
+        }
     }
+    @Suppress("DEPRECATION")
+    private fun verifyArchive(c: Context, file: File) {
+        val pm = c.packageManager
+        val candidate = pm.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_SIGNATURES)
+            ?: error("Tệp cập nhật không phải APK hợp lệ")
+        check(candidate.packageName == c.packageName) { "APK không đúng ứng dụng đang dùng" }
+        val installed = pm.getPackageInfo(c.packageName, PackageManager.GET_SIGNATURES)
+        val oldSigners = installed.signatures?.toSet() ?: emptySet()
+        val newSigners = candidate.signatures?.toSet() ?: emptySet()
+        check(oldSigners.isNotEmpty() && oldSigners == newSigners) { "APK không cùng chữ ký cài đặt" }
+        val oldVersion = if (android.os.Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
+        val newVersion = if (android.os.Build.VERSION.SDK_INT >= 28) candidate.longVersionCode else candidate.versionCode.toLong()
+        check(newVersion > oldVersion) { "Bản cập nhật không mới hơn bản đang dùng" }
     }
     @Synchronized fun install(context: Context) {
         val c = context.applicationContext

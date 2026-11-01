@@ -50,3 +50,21 @@ redistribution notice; public release requires resolving it first.
 ## Preview 2 startup diagnosis
 
 Preview 2 opens a native channel/home screen first and creates WebView only after tapping YouTube. Optional host chrome/search setup errors are recorded without aborting the native screen. Startup stages and exception stacks are stored locally and available through the phone launcher entry **QuangTV Auto – Chẩn đoán**, which has a manual Share button. This does not establish the cause of the first real-car failure; the recorded stages are needed to distinguish host initialization and WebView failures. The package is `.autopreview2`, named QuangTV Auto 2 on the car, and uses an intentionally public stable test key so future Preview 2 updates retain their signature.
+
+## Bugreport binding repair and Preview 2 updates
+
+The 2026-11-01 phone bugreport records repeated Android Auto bind failures:
+`AudioService ... not exported` for both preview packages. The integration now
+exports that specific media browser service, preserves its mediaPlayback type,
+and supplies its public saved channel catalog. This is a confirmed binding
+failure; it does not by itself establish the cause of a projection launch failure.
+
+Preview 2 retains package `com.quangduren.quangtv.autopreview2` and the stable
+preview-only signer. Its updater reads only `auto-preview2-buildN` prereleases
+and `QuangTV-Auto-Preview2-...-arm64.apk` assets. Native download/install checks
+reject a different package, signer, and older or equal version. The regular app
+continues using production Releases/latest. The candidate workflow publishes
+only experimental Preview 2 prereleases and never changes production/latest.
+Existing Preview 2 builds block OTA: install this first update manually over
+Preview 2, without uninstalling. Later builds use the phone's Cập nhật QuangTV
+screen with existing percentage/MB progress. Real car validation remains pending.

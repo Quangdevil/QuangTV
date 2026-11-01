@@ -1,6 +1,7 @@
 """Add the native Android Auto projection host after patch_quangtv.py."""
 from pathlib import Path
 import hashlib
+import re
 import shutil
 import xml.etree.ElementTree as ET
 
@@ -23,6 +24,13 @@ def patch(app=APP):
 
     manifest = app / 'src/main/AndroidManifest.xml'
     text = manifest.read_text()
+    # The upstream media browser service was private. Android Auto is a separate
+    # UID, so discovery succeeded but every bind failed with Permission Denial.
+    text, count = re.subn(
+        r'(<service\b[^>]*android:name="com\.ryanheise\.audioservice\.AudioService"[^>]*android:exported=")false(")',
+        r'\g<1>true\2', text)
+    if count:
+        manifest.write_text(text)
     # Preserve Flutter's placeholders, comments and namespace prefixes.
     if 'app.tvviewer.player.QuangAutoService' not in text:
         text = text.replace('</application>', '''
@@ -49,6 +57,20 @@ def patch(app=APP):
     </application>''')
         ET.fromstring(text)
         manifest.write_text(text)
+    # AudioService's default BaseAudioHandler returns an empty browser tree.
+    # Supply the same public catalog used by the native projection screen.
+    flutter = app.parents[1]
+    handler = flutter / 'lib/services/background_audio_service.dart'
+    if handler.exists():
+        shutil.copyfile(ROOT / 'overrides/quang_auto_media.dart', handler.parent / 'quang_auto_media.dart')
+        tests = flutter / 'test'
+        tests.mkdir(exist_ok=True)
+        shutil.copyfile(ROOT / 'tests/quang_auto_media_test.dart', tests / 'quang_auto_media_test.dart')
+        content = handler.read_text()
+        if '// QuangTV Auto media browser' not in content:
+            content = "import 'dart:async';\nimport 'quang_auto_media.dart';\n" + content
+            content = content.replace('  VideoPlayerController? _videoController;', AUDIO_BROWSER + '\n  VideoPlayerController? _videoController;', 1)
+            handler.write_text(content)
     resources = app / 'src/main/res'
     (resources / 'xml').mkdir(parents=True, exist_ok=True)
     (resources / 'xml/quangtv_automotive_app.xml').write_text(
@@ -83,6 +105,41 @@ dependencies {
 -keep class app.tvviewer.player.QuangAutoService { *; }
 -keep class app.tvviewer.player.QuangAutoDiagnosticsActivity { *; }
 ''')
+
+
+AUDIO_BROWSER = '''  // QuangTV Auto media browser
+  @override
+  Future<List<MediaItem>> getChildren(String parentMediaId, [Map<String, dynamic>? options]) async {
+    if (parentMediaId != AudioService.browsableRootId) return [];
+    return quangAutoMediaItems();
+  }
+
+  @override
+  Future<void> playFromMediaId(String mediaId, [Map<String, dynamic>? extras]) async {
+    final items = await quangAutoMediaItems();
+    final selected = items.where((item) => item.id == mediaId).firstOrNull;
+    if (selected == null) return; // Never accept arbitrary external media URLs.
+    await stop();
+    _channelName = selected.title;
+    _currentUrl = selected.id;
+    mediaItem.add(selected);
+    try {
+      _updatePlaybackState(playing: false, state: AudioProcessingState.loading);
+      await _audioPlayer.setUrl(selected.id);
+      _isBackgroundActive = true;
+      unawaited(_audioPlayer.play().catchError((Object error) {
+        _isBackgroundActive = false;
+        _updatePlaybackState(playing: false, state: AudioProcessingState.idle);
+        logger.error('Android Auto audio playback failed', error);
+      }));
+      _updatePlaybackState(playing: true);
+    } catch (error) {
+      _isBackgroundActive = false;
+      _updatePlaybackState(playing: false, state: AudioProcessingState.idle);
+      logger.error('Android Auto audio source failed', error);
+    }
+  }
+'''
 
 
 if __name__ == '__main__':

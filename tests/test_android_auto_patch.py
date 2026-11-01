@@ -21,6 +21,10 @@ class AutoPatchTest(unittest.TestCase):
             manifest.write_text('''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application android:name="${applicationName}">
                 <activity android:name=".MainActivity" android:exported="true"/>
+                <service android:name="com.ryanheise.audioservice.AudioService"
+                    android:exported="false" android:foregroundServiceType="mediaPlayback">
+                  <intent-filter><action android:name="android.media.browse.MediaBrowserService"/></intent-filter>
+                </service>
               </application></manifest>''')
             (app / 'build.gradle').write_text('plugins {}\n')
             (app / 'proguard-rules.pro').write_text('')
@@ -32,7 +36,11 @@ class AutoPatchTest(unittest.TestCase):
             self.assertEqual('${applicationName}', application.get(A + 'name'))
             self.assertEqual('.MainActivity', application.find('activity').get(A + 'name'))
             self.assertEqual(2, len(application.findall('activity')))
-            service = application.find('service')
+            audio = application.find("service[@" + A + "name='com.ryanheise.audioservice.AudioService']")
+            self.assertEqual('true', audio.get(A + 'exported'))
+            self.assertEqual('mediaPlayback', audio.get(A + 'foregroundServiceType'))
+            self.assertEqual('android.media.browse.MediaBrowserService', audio.find('intent-filter/action').get(A + 'name'))
+            service = application.find("service[@" + A + "name='app.tvviewer.player.QuangAutoService']")
             self.assertEqual('true', service.get(A + 'exported'))
             self.assertEqual('com.google.android.gms.car.category.CATEGORY_PROJECTION',
                              service.find('intent-filter/category').get(A + 'name'))
