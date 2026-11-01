@@ -12,7 +12,7 @@ sdk = Path(os.environ.get('ANDROID_HOME') or os.environ['ANDROID_SDK_ROOT'])
 tools = sorted((sdk / 'build-tools').glob('*'), key=lambda p: [int(n) for n in re.findall(r'\d+', p.name)])[-1]
 subprocess.run([str(tools / 'apksigner'), 'verify', str(apk)], check=True)
 badging = subprocess.check_output([str(tools / 'aapt'), 'dump', 'badging', str(apk)], text=True)
-assert "package: name='com.quangduren.quangtv.autopreview'" in badging, badging
+assert "package: name='com.quangduren.quangtv.autopreview2'" in badging, badging
 manifest = subprocess.check_output([str(tools / 'aapt'), 'dump', 'xmltree', str(apk), 'AndroidManifest.xml'], text=True)
 assert 'app.tvviewer.player.QuangAutoService' in manifest
 assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION' in manifest
@@ -23,6 +23,7 @@ with ZipFile(apk) as archive:
         if re.fullmatch(r'classes\d*\.dex', name):
             defined.update(class_definitions(archive.read(name)))
     required = {
+        'Lapp/tvviewer/player/QuangAutoDiagnosticsActivity;',
         'Lapp/tvviewer/player/QuangAutoService;',
         'Lapp/tvviewer/player/QuangAutoActivity;',
         'Lcom/google/android/apps/auto/sdk/CarActivity;',

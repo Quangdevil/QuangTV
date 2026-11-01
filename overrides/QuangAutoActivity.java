@@ -35,10 +35,23 @@ public final class QuangAutoActivity extends CarActivity {
     private boolean stopped;
 
     @Override public void onCreate(Bundle state) {
+        QuangAutoDiagnostics.record(this, "activity.onCreate", null);
+        try { initialize(state); }
+        catch (RuntimeException | LinkageError error) {
+            QuangAutoDiagnostics.record(this, "activity.startup.failed", error);
+            throw error;
+        }
+    }
+
+    private void initialize(Bundle state) {
         super.onCreate(state);
+        QuangAutoDiagnostics.record(this, "activity.super.ready", null);
         setIgnoreConfigChanges(0xFFFFFFFF);
-        getCarUiController().getStatusBarController().hideAppHeader();
-        getCarUiController().getMenuController().hideMenuButton();
+        // Optional host chrome must not prevent the main screen from opening.
+        try {
+            getCarUiController().getStatusBarController().hideAppHeader();
+            getCarUiController().getMenuController().hideMenuButton();
+        } catch (RuntimeException error) { QuangAutoDiagnostics.record(this, "host.chrome.failed", error); }
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.BLACK);
@@ -58,6 +71,8 @@ public final class QuangAutoActivity extends CarActivity {
         content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
+        QuangAutoDiagnostics.record(this, "activity.view.attached", null);
+        try {
         getCarUiController().getSearchController().setSearchHint("Tìm YouTube hoặc nhập URL HTTPS");
         getCarUiController().getSearchController().setSearchCallback(new SearchCallback() {
             @Override public void onSearchItemSelected(SearchItem item) {}
@@ -74,7 +89,10 @@ public final class QuangAutoActivity extends CarActivity {
                 return true;
             }
         });
-        openWeb(state == null ? YOUTUBE : state.getString("quangtv.auto.url", YOUTUBE));
+        } catch (RuntimeException error) { QuangAutoDiagnostics.record(this, "host.search.failed", error); }
+        showChannels();
+        status.setText("QuangTV Auto đã kết nối · Chọn YouTube hoặc TV");
+        QuangAutoDiagnostics.record(this, "activity.native.ready", null);
     }
 
     private void addButton(LinearLayout row, String label, Runnable action) {
@@ -88,8 +106,18 @@ public final class QuangAutoActivity extends CarActivity {
     }
 
     private void openWeb(String url) {
+        QuangAutoDiagnostics.record(this, "webview.open", null);
+        try { createWeb(url); }
+        catch (RuntimeException | LinkageError error) {
+            QuangAutoDiagnostics.record(this, "webview.failed", error);
+            if (status != null) status.setText("Lỗi mở YouTube. Mở QuangTV Auto – Chẩn đoán trên điện thoại.");
+        }
+    }
+
+    private void createWeb(String url) {
         clearContent();
-        web = new WebView(this);
+        web = new WebView(new android.view.ContextThemeWrapper(
+                getApplicationContext(), android.R.style.Theme_Material_NoActionBar));
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -104,6 +132,7 @@ public final class QuangAutoActivity extends CarActivity {
             }
             @Override public void onPageFinished(WebView view, String loaded) {
                 status.setText("QuangTV Auto · " + Uri.parse(loaded).getHost());
+                QuangAutoDiagnostics.record(QuangAutoActivity.this, "webview.page.ready", null);
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -200,7 +229,8 @@ public final class QuangAutoActivity extends CarActivity {
     private void back() {
         if (fullScreen != null) leaveFullScreen();
         else if (web != null && web.canGoBack()) web.goBack();
-        else showChannels();
+        else if (web != null || video != null) showChannels();
+        else super.onBackPressed();
     }
 
     private void clearContent() {
@@ -209,11 +239,11 @@ public final class QuangAutoActivity extends CarActivity {
         if (web != null) {
             web.onPause();
             web.stopLoading();
-            ((ViewGroup) web.getParent()).removeView(web);
+            if (web.getParent() instanceof ViewGroup) ((ViewGroup) web.getParent()).removeView(web);
             web.destroy();
             web = null;
         }
-        content.removeAllViews();
+        if (content != null) content.removeAllViews();
     }
 
     @Override public void onBackPressed() { back(); }

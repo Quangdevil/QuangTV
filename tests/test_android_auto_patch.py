@@ -31,6 +31,7 @@ class AutoPatchTest(unittest.TestCase):
             application = ET.parse(manifest).getroot().find('application')
             self.assertEqual('${applicationName}', application.get(A + 'name'))
             self.assertEqual('.MainActivity', application.find('activity').get(A + 'name'))
+            self.assertEqual(2, len(application.findall('activity')))
             service = application.find('service')
             self.assertEqual('true', service.get(A + 'exported'))
             self.assertEqual('com.google.android.gms.car.category.CATEGORY_PROJECTION',

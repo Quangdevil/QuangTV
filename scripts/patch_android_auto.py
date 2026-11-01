@@ -18,7 +18,7 @@ def patch(app=APP):
     shutil.copyfile(sdk, app / 'libs/aauto.aar')
     source = app / 'src/main/java/app/tvviewer/player'
     source.mkdir(parents=True, exist_ok=True)
-    for name in ('QuangAutoActivity.java', 'QuangAutoService.java'):
+    for name in ('QuangAutoActivity.java', 'QuangAutoService.java', 'QuangAutoDiagnostics.java', 'QuangAutoDiagnosticsActivity.java'):
         shutil.copyfile(ROOT / 'overrides' / name, source / name)
 
     manifest = app / 'src/main/AndroidManifest.xml'
@@ -30,6 +30,14 @@ def patch(app=APP):
             android:resource="@xml/quangtv_automotive_app" />
         <meta-data android:name="com.google.android.gms.car.application.theme"
             android:resource="@style/QuangAutoTheme" />
+        <activity android:name="app.tvviewer.player.QuangAutoDiagnosticsActivity"
+            android:label="QuangTV Auto – Chẩn đoán" android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
         <service android:name="app.tvviewer.player.QuangAutoService"
             android:exported="true" android:label="QuangTV Auto">
             <intent-filter>
@@ -73,6 +81,7 @@ dependencies {
 -keep class com.google.android.gms.car.** { *; }
 -keep class app.tvviewer.player.QuangAutoActivity { *; }
 -keep class app.tvviewer.player.QuangAutoService { *; }
+-keep class app.tvviewer.player.QuangAutoDiagnosticsActivity { *; }
 ''')
 
 

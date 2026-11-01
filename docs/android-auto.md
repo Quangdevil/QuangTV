@@ -46,3 +46,7 @@ with a development key. It uploads an artifact, never changes production OTA,
 and does not claim runtime validation. The main build retains its existing
 runtime gates. See vendor/android-auto/README.md for the unresolved SDK
 redistribution notice; public release requires resolving it first.
+
+## Preview 2 startup diagnosis
+
+Preview 2 opens a native channel/home screen first and creates WebView only after tapping YouTube. Optional host chrome/search setup errors are recorded without aborting the native screen. Startup stages and exception stacks are stored locally and available through the phone launcher entry **QuangTV Auto – Chẩn đoán**, which has a manual Share button. This does not establish the cause of the first real-car failure; the recorded stages are needed to distinguish host initialization and WebView failures. The package is `.autopreview2`, named QuangTV Auto 2 on the car, and uses an intentionally public stable test key so future Preview 2 updates retain their signature.
