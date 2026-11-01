@@ -13,11 +13,75 @@ import 'package:tv_viewer/models/channel.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:tv_viewer/screens/quang_discover_screen.dart';
 import 'package:tv_viewer/screens/quang_private_screen.dart';
+import 'package:tv_viewer/screens/quang_update_screen.dart';
 import 'package:video_player/video_player.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  testWidgets('May home keeps native tasks and saved channels reachable', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'quangtv_cached_channels': jsonEncode([
+        {'name':'HTV7','url':'https://example.org/htv.m3u8'},
+        {'name':'VTV3 HD','url':'https://example.org/vtv3.m3u8'},
+        {'name':'VTV1 HD','url':'https://example.org/vtv1.m3u8'},
+      ]),
+      'quangtv_favorites': ['https://example.org/vtv1.m3u8'],
+    });
+    await tester.pumpWidget(const MaterialApp(home: QuangDiscoverScreen(mayHome:true)));
+    await tester.pump(const Duration(seconds:2));
+    expect(find.byKey(const ValueKey('quangtv-may-home')),findsOneWidget);
+    expect(find.text('3 kênh · VTV ở đầu'),findsOneWidget);
+    final rows=tester.widgetList<ListTile>(find.descendant(of:find.byKey(const ValueKey('may-channel-list')),matching:find.byType(ListTile))).toList();
+    expect((rows.first.title! as Text).data,'VTV1 HD');
+    debugPrint('QUANGTV_MAY_HOME_READY');
+    await const MethodChannel('quangtv/browser').invokeMethod<void>('homeSnapshot');
+    await tester.runAsync(() => Future<void>.delayed(const Duration(seconds:2)));
+    Future<void> menu(String task) async {
+      tester.state<ScaffoldState>(find.byKey(const ValueKey('quangtv-may-home'))).openDrawer();
+      await tester.pump(const Duration(milliseconds:400));
+      // A reopened drawer retains its previous scroll position. Return to its
+      // beginning before looking for a lazily built entry below the fold.
+      await tester.drag(find.descendant(of:find.byType(Drawer),matching:find.byType(ListView)),const Offset(0,1800));
+      await tester.pump(const Duration(milliseconds:300));
+      final target=find.byKey(ValueKey('may-task-$task'));
+      final menuScroll=find.descendant(of:find.byType(Drawer),matching:find.byType(Scrollable));
+      if (target.evaluate().isEmpty) {
+        await tester.scrollUntilVisible(target, 120, scrollable: menuScroll);
+      } else {
+        await tester.ensureVisible(target);
+      }
+      await tester.pump(const Duration(milliseconds:350));
+      for (var i=0; i<8 && target.hitTestable().evaluate().isEmpty; i++) {
+        await tester.drag(find.descendant(of:find.byType(Drawer),matching:find.byType(ListView)),const Offset(0,-160));
+        await tester.pump(const Duration(milliseconds:250));
+      }
+      expect(target.hitTestable(),findsOneWidget);
+      await tester.tap(target);
+      await tester.pump(const Duration(milliseconds:500));
+    }
+    await menu('podcast');expect(find.text('Podcast · Phát trong QuangTV'),findsOneWidget);
+    await menu('radio');expect(find.text('Radio · Nghe trong QuangTV'),findsOneWidget);
+    await menu('favorites');expect(find.text('Kênh yêu thích'),findsOneWidget);expect(find.text('VTV1 HD'),findsOneWidget);
+    await menu('settings');expect(find.text('Đổi PIN Private'),findsOneWidget);
+    Navigator.of(tester.element(find.text('Đổi PIN Private'))).pop();await tester.pump(const Duration(milliseconds:500));
+    await menu('update');expect(find.byType(QuangUpdateScreen),findsOneWidget);
+    Navigator.of(tester.element(find.byType(QuangUpdateScreen))).pop();await tester.pump(const Duration(milliseconds:500));
+    await menu('tv');
+    await menu('downloads');
+    await tester.runAsync(() async {
+      const bridge=MethodChannel('quangtv/browser');
+      Map<String,dynamic> state={};
+      for(var i=0;i<30;i++) { await Future<void>.delayed(const Duration(milliseconds:200));state=await bridge.invokeMapMethod<String,dynamic>('downloadsInspect') ?? {};if(state['folder']=='root')break; }
+      expect(state['folder'],'root');
+      await bridge.invokeMethod<void>('downloadsAction',{'action':'close'});
+    });
+    await tester.pump(const Duration(milliseconds:500));
+    expect(tester.takeException(),isNull);
+    debugPrint('QUANGTV_MAY_HOME_PASS nativeShell=true savedChannels=true vtvFirst=true podcast=true radio=true favorites=true settings=true ota=true downloads=true');
+    await tester.pumpWidget(const SizedBox.shrink());
+    SharedPreferences.setMockInitialValues({});
+  });
   testWidgets('Background download survives leaving the app and files open and swipe-delete', (tester) async {
     const bridge=MethodChannel('quangtv/browser');
     await tester.pumpWidget(const MaterialApp(home:Scaffold(body:Text('Background download test'))));

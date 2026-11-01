@@ -65,7 +65,7 @@ jobs:
           flutter pub get
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
-        run: flutter analyze lib/screens/quang_vtv_source.dart lib/screens/quang_network.dart lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
+        run: flutter analyze lib/screens/quang_may_shell.dart lib/screens/quang_vtv_source.dart lib/screens/quang_network.dart lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
       - name: Test fresh anonymous VTVgo sources
         working-directory: upstream/flutter_app
         run: flutter test test/quang_vtv_source_test.dart
@@ -200,6 +200,7 @@ jobs:
           grep -q 'QUANGTV_VTV_RENDER_PASS channel=VTV3' playback-evidence/vtv-live-visual.txt
           grep -q 'QUANGTV_YOUTUBE_DIRECT_PASS' playback-evidence/ota-test-result.txt
           grep -q 'QUANGTV_YOUTUBE_HISTORY_PASS' playback-evidence/ota-test-result.txt
+          grep -q 'QUANGTV_MAY_HOME_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_EMBED_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_CONTROLS_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_DEMO_START_PASS' playback-evidence/browser-test-result.txt

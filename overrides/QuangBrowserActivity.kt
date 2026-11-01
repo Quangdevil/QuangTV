@@ -42,7 +42,8 @@ import org.json.JSONArray
 class QuangBrowserActivity : Activity() {
     data class Media(val url: String, val kind: String)
     companion object {
-        const val MAY_HOME = "https://may-viet-web-proxy.daquang.workers.dev/"
+        const val MAY_ORIGIN = "https://may-viet-web-proxy.daquang.workers.dev/"
+        const val MAY_HOME = MAY_ORIGIN + "browser"
         private var current: WeakReference<QuangBrowserActivity>? = null
         private var lastRotation: Map<String, Any> = emptyMap()
         fun inspect(): Map<String, Any> = current?.get()?.let {
@@ -60,7 +61,7 @@ class QuangBrowserActivity : Activity() {
                 android.util.Log.i("QuangBrowserTest", "action=$action begin")
                 when (action) {
                     "mayExample" -> it.openMayTarget("https://example.org/")
-                    "mayDemo" -> { it.testMayFixture = true; it.prepareMayTestMedia(); it.mayMode = true; it.applyBrowserTransport({it.web.loadUrl(MAY_HOME + "demo")}, {}) }
+                    "mayDemo" -> { it.testMayFixture = true; it.prepareMayTestMedia(); it.mayMode = true; it.applyBrowserTransport({it.web.loadUrl(MAY_ORIGIN + "demo")}, {}) }
                     "focus" -> { it.address.requestFocus(); it.address.postDelayed({ (it.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(it.address, InputMethodManager.SHOW_IMPLICIT) }, 300) }
                     "select" -> it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
                     "download" -> it.found.performClick()
@@ -524,7 +525,7 @@ class QuangBrowserActivity : Activity() {
             val extension = if (Uri.parse(item.url).path?.endsWith(".webm") == true) "webm" else "mp4"
             val filename = "QuangTV-${System.currentTimeMillis()}.$extension"
             val downloadUrl = if (mayMode) {
-                if (isMayUrl(item.url)) item.url else Uri.parse(MAY_HOME).buildUpon().appendPath("proxy").appendQueryParameter("url", item.url).build().toString()
+                if (isMayUrl(item.url)) item.url else Uri.parse(MAY_ORIGIN).buildUpon().appendPath("proxy").appendQueryParameter("url", item.url).build().toString()
             } else QuangProxy.downloadUrl(this, item.url)
             QuangDownloads.enqueue(this,downloadUrl,headers(if(mayMode) downloadUrl else item.url),filename)
             Toast.makeText(this, "Đang tải nền vào Downloads / QuangTV", Toast.LENGTH_SHORT).show()
