@@ -16,6 +16,7 @@ assert "package: name='com.quangduren.quangtv.autopreview'" in badging, badging
 manifest = subprocess.check_output([str(tools / 'aapt'), 'dump', 'xmltree', str(apk), 'AndroidManifest.xml'], text=True)
 assert 'app.tvviewer.player.QuangAutoService' in manifest
 assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION' in manifest
+assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM' in manifest
 with ZipFile(apk) as archive:
     defined = set()
     for name in archive.namelist():

@@ -35,6 +35,8 @@ class AutoPatchTest(unittest.TestCase):
             self.assertEqual('true', service.get(A + 'exported'))
             self.assertEqual('com.google.android.gms.car.category.CATEGORY_PROJECTION',
                              service.find('intent-filter/category').get(A + 'name'))
+            self.assertIn('com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM',
+                          [c.get(A + 'name') for c in service.findall('intent-filter/category')])
             self.assertFalse(list(application.iter('uses-feature')))
             self.assertTrue((app / 'src/main/java/app/tvviewer/player/QuangAutoActivity.java').is_file())
 
