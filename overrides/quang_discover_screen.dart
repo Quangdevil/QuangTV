@@ -263,6 +263,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       setState(() {
         if (_inlineChannel?.url != c.url || _inlineChannel?.name != c.name) _inlineKey = GlobalKey<QuangNativePlayerState>();
         _inlineChannel = c;
+        section = 0;
       });
     }
     recentChannels = [c.url, ...recentChannels.where((url) => url != c.url)].take(30).toList();
