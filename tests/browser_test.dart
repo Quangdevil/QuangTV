@@ -33,7 +33,7 @@ void main() {
     await tester.pump(const Duration(seconds:2));
     expect(find.byKey(const ValueKey('quangtv-may-home')),findsOneWidget);
     expect(find.text('33 kênh · VTV ở đầu'),findsOneWidget);
-    final rows=tester.widgetList<ListTile>(find.descendant(of:find.byKey(const ValueKey('may-channel-list')),matching:find.byType(ListTile))).toList();
+    final rows=tester.widgetList<ListTile>(find.descendant(of:find.byKey(const ValueKey('may-channel-list')),matching:find.byType(ListTile))).where((tile) => tile.key is ValueKey<String> && (tile.key! as ValueKey<String>).value.startsWith('may-channel-')).toList();
     expect((rows.first.title! as Text).data,'VTV1 HD');
     expect(tester.widget<QuangNativePlayer>(find.byType(QuangNativePlayer)).channel.name,'VTV3 HD');
     Future<Object> advancing() async {
