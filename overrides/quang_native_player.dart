@@ -15,7 +15,8 @@ class QuangNativePlayer extends StatefulWidget {
   final bool startWithVlc;
   final bool startMuted;
   final bool embedded;
-  final VoidCallback? onFullscreen;
+  final bool active;
+  final ValueChanged<bool>? onFullscreenChanged;
   @visibleForTesting
   final List<String>? fallbackOverride;
   const QuangNativePlayer({
@@ -24,17 +25,20 @@ class QuangNativePlayer extends StatefulWidget {
     this.startWithVlc = false,
     this.startMuted = false,
     this.embedded = false,
-    this.onFullscreen,
+    this.active = true,
+    this.onFullscreenChanged,
     this.fallbackOverride,
   });
   @override
-  State<QuangNativePlayer> createState() => _QuangNativePlayerState();
+  State<QuangNativePlayer> createState() => QuangNativePlayerState();
 }
 
-class _QuangNativePlayerState extends State<QuangNativePlayer> {
+class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindingObserver {
   late double volume;
   double lastAudibleVolume = 1;
   bool fullscreen = false;
+  bool manualFullscreen = false;
+  bool resumed = true;
   bool controlsVisible = true;
   Timer? controlsTimer;
   VideoPlayerController? controller;
@@ -64,20 +68,14 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   static const _externalChannel = MethodChannel('quangtv/external_player');
 
   List<String> resolvedVtvSources = [];
-  List<String> playlistVtvSources = [];
-  bool playlistFallbackRequested = false;
-  bool loadingPlaylistFallback = false;
-  int fallbackGeneration = 0;
-  Map<String, String> headersFor(String url) => playlistVtvSources.contains(url) ? const <String, String>{} : streamHeaders;
   String? get vtvKey => QuangVtvSource.channelId(widget.channel.name);
   bool get useVtvResolver => vtvKey != null && widget.fallbackOverride == null && widget.channel.country != 'Private';
 
   List<String> get sources {
     final urls = resolvedVtvSources.isNotEmpty
         ? List<String>.of(resolvedVtvSources)
-        : useVtvResolver ? <String>[] : <String>[widget.channel.url];
+        : <String>[widget.channel.url];
     if (widget.fallbackOverride != null) urls.addAll(widget.fallbackOverride!);
-    if (useVtvResolver) urls.addAll(playlistVtvSources);
     return urls
         .where(
           (u) =>
@@ -98,6 +96,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     volume = widget.startMuted ? 0 : 1;
     _scheduleControlsHide();
     _initializePlayback();
@@ -107,7 +106,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final next = MediaQuery.orientationOf(context) == Orientation.landscape;
+    final next = manualFullscreen || MediaQuery.orientationOf(context) == Orientation.landscape;
     if (next != fullscreen) {
       fullscreen = next;
       // Rotation changes the viewport, not the user's request for controls.
@@ -115,11 +114,52 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       controlsVisible = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
+          widget.onFullscreenChanged?.call(fullscreen);
           SystemChrome.setEnabledSystemUIMode(
             fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
           );
         }
       });
+    }
+  }
+
+  bool get shouldPlay => widget.active && resumed && !userPaused;
+
+  @override
+  void didUpdateWidget(covariant QuangNativePlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active) _applyActivity();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!widget.embedded) return;
+    resumed = state == AppLifecycleState.resumed;
+    _applyActivity();
+  }
+
+  Future<void> _applyActivity() async {
+    try {
+      if (controller?.value.isInitialized == true) {
+        if (shouldPlay) { await controller?.play(); } else { await controller?.pause(); }
+      }
+      if (vlc?.value.isInitialized == true) {
+        if (shouldPlay) { await vlc?.play(); } else { await vlc?.pause(); }
+      }
+    } catch (_) { /* A channel switch can dispose the old controller. */ }
+  }
+
+  void toggleFullscreen() => _toggleFullscreen();
+
+  void _toggleFullscreen() {
+    final next = !fullscreen;
+    manualFullscreen = next;
+    setState(() => fullscreen = next);
+    widget.onFullscreenChanged?.call(next);
+    SystemChrome.setEnabledSystemUIMode(next ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
+    if (!next && MediaQuery.orientationOf(context) == Orientation.landscape) {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      Future<void>.delayed(const Duration(milliseconds:700), () => SystemChrome.setPreferredOrientations(DeviceOrientation.values));
     }
   }
 
@@ -194,7 +234,6 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   }
 
   Future<void> _initializePlayback() async {
-    final initToken = fallbackGeneration;
     try {
       final proxy = await const MethodChannel('quangtv/browser').invokeMapMethod<String, dynamic>('proxyGet');
       proxyEnabled = proxy?['enabled'] == true;
@@ -202,9 +241,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       if (mounted) setState(() { loading = false; error = 'Không áp dụng được proxy. Hãy kiểm tra Cài đặt.'; });
       return;
     }
-    if (!mounted || initToken != fallbackGeneration) return;
     final prefs = await SharedPreferences.getInstance();
-    if (!mounted || initToken != fallbackGeneration) return;
     final key =
         'quangtv_headers_${base64Url.encode(utf8.encode(widget.channel.url))}';
     final saved = prefs.getString(key);
@@ -217,24 +254,15 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     if (useVtvResolver) {
       if (mounted) setState(() => engineStage = 'Đang lấy nguồn VTVgo mới');
       try {
-        final resolved = await QuangVtvSource.resolve(widget.channel.name);
-        if (!mounted || initToken != fallbackGeneration) return;
-        resolvedVtvSources = resolved;
+        resolvedVtvSources = await QuangVtvSource.resolve(widget.channel.name);
         // Never forward saved cookies/auth for an old IPTV CDN to VTVgo.
         streamHeaders = Map<String, String>.of(QuangVtvSource.headers);
       } catch (_) {
-        if (!mounted || initToken != fallbackGeneration) return;
-        resolvedVtvSources = [];
-        if (await _loadPlaylistFallback()) {
-          if (!mounted || initToken != fallbackGeneration) return;
-          await _open(0);
-          return;
-        }
-        if (!mounted || initToken != fallbackGeneration) return;
+        if (!mounted) return;
         setState(() {
           loading = false;
-          error = 'VTVgo và nguồn IPTV dự phòng chưa sẵn sàng. Thử lại sau.';
-          lastFailure = 'Không có nguồn phát phù hợp; không sửa token hoặc header.';
+          error = 'Không lấy được nguồn VTVgo mới. Thử lại hoặc mở VTVgo chính thức.';
+          lastFailure = 'VTVgo chưa trả nguồn phát; không thử các link CDN cũ.';
         });
         return;
       }
@@ -254,6 +282,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         loading ||
         switching ||
         userPaused ||
+        !widget.active || !resumed ||
         p == null ||
         usingVlc) {
       return;
@@ -288,26 +317,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
     setState(() {});
   }
 
-  Future<bool> _loadPlaylistFallback() async {
-    if (!useVtvResolver || playlistFallbackRequested || !mounted) return false;
-    playlistFallbackRequested = true;
-    loadingPlaylistFallback = true;
-    final token = fallbackGeneration;
-    try {
-      final urls = await QuangVtvSource.resolveFallback(widget.channel.name);
-      if (!mounted || token != fallbackGeneration) return false;
-      playlistVtvSources = urls.where((url) => !resolvedVtvSources.contains(url)).toList();
-      return playlistVtvSources.isNotEmpty;
-    } catch (_) {
-      return false;
-    } finally {
-      if (token == fallbackGeneration) loadingPlaylistFallback = false;
-    }
-  }
-
   Future<void> _failover([String reason = 'Playback error']) async {
-    if (switching || loadingPlaylistFallback || !mounted || error != null) return;
-    final fallbackToken = fallbackGeneration;
+    if (switching || !mounted || error != null) return;
     diagnostic = reason;
     lastFailure = reason;
     engineStage = 'Media3 lỗi, đang chuyển nguồn';
@@ -324,12 +335,6 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       (i) => (sourceIndex + i + 1) % all.length,
     ).where((i) => !failedSources.contains(i)).toList();
     if (next.isEmpty) {
-      final firstPlaylist = all.length;
-      if (await _loadPlaylistFallback()) {
-        if (mounted && fallbackToken == fallbackGeneration) await _open(firstPlaylist);
-        return;
-      }
-      if (!mounted || fallbackToken != fallbackGeneration) return;
       // Try the original URL with VLC once; its own startup timer and error
       // handling stop the retry loop if it cannot play this stream either.
       sourceIndex = 0;
@@ -371,14 +376,14 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         VlcHttpOptions.httpReconnect(true),
         VlcHttpOptions.httpForwardCookies(true),
         VlcHttpOptions.httpUserAgent(
-          headersFor(url)['User-Agent'] ?? 'QuangTV/1.3',
+          streamHeaders['User-Agent'] ?? 'QuangTV/1.3',
         ),
       ];
       var playbackUrl = url;
       if (proxyEnabled) {
         playbackUrl = await const MethodChannel('quangtv/browser').invokeMethod<String>('proxyMediaUrl', {'url': url}) ?? (throw StateError('Proxy chưa sẵn sàng'));
       }
-      final referrer = headersFor(url)['Referer'] ?? headersFor(url)['Referrer'];
+      final referrer = streamHeaders['Referer'] ?? streamHeaders['Referrer'];
       if (referrer != null && referrer.isNotEmpty) {
         vlcHttp.add(VlcHttpOptions.httpReferrer(referrer));
       }
@@ -400,7 +405,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           // Set volume before the first play, including Private's initial mute.
           await player.setVolume((volume * 100).round());
           if (mounted && token == vlcToken) {
-            await player.play();
+            if (shouldPlay) { await player.play(); }
             if (mounted && token == vlcToken) setState(() {});
           }
         } catch (e) {
@@ -493,7 +498,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       httpHeaders: {
         'User-Agent': 'QuangTV/1.3 Android Media3',
         'Accept': '*/*',
-        ...headersFor(url),
+        ...streamHeaders,
       },
     );
     try {
@@ -504,7 +509,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       }
       controller = player;
       await player.setVolume(volume);
-      await player.play();
+      if (shouldPlay) { await player.play(); }
       if (mounted) {
         setState(() {
           loading = false;
@@ -523,10 +528,6 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   }
 
   void _retry() {
-    fallbackGeneration++;
-    playlistFallbackRequested = false;
-    loadingPlaylistFallback = false;
-    playlistVtvSources = [];
     failedSources.clear();
     retriedSources.clear();
     if (useVtvResolver) {
@@ -593,7 +594,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
 
   @override
   void dispose() {
-    fallbackGeneration++;
+    WidgetsBinding.instance.removeObserver(this);
     generation++;
     controlsTimer?.cancel();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -634,11 +635,16 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         ? p.value.aspectRatio
         : 16 / 9;
     final visible = controlsVisible;
-    return Theme(
+    return PopScope(
+      canPop: !widget.embedded || !fullscreen,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && widget.embedded && fullscreen) _toggleFullscreen();
+      },
+      child: Theme(
       data: ThemeData.dark(useMaterial3: true),
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: widget.embedded ? null : fullscreen
+        appBar: fullscreen || widget.embedded
             ? null
             : AppBar(
                 title: Text(widget.channel.name),
@@ -736,7 +742,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                     ),
                   ),
                 ),
-              if (fullscreen && !widget.embedded)
+              if (fullscreen)
                 Positioned(
                   top: 0,
                   left: 0,
@@ -751,7 +757,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                         child: Row(
                           children: [
                             BackButton(
-                              onPressed: () => Navigator.maybePop(context),
+                              onPressed: widget.embedded ? _toggleFullscreen : () => Navigator.maybePop(context),
                             ),
                             Expanded(
                               child: Text(
@@ -785,7 +791,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (!fullscreen && !widget.embedded)
+                              if (!fullscreen)
                                 Text(
                                   usingVlc ? 'VLC nội bộ' : 'Android Media3',
                                 ),
@@ -804,6 +810,12 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
+                                  IconButton(
+                                    key: const ValueKey('player-fullscreen'),
+                                    tooltip: fullscreen ? 'Thu nhỏ' : 'Toàn màn hình',
+                                    icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+                                    onPressed: _toggleFullscreen,
+                                  ),
                                   IconButton(
                                     tooltip: 'Thử lại',
                                     icon: const Icon(Icons.refresh),
@@ -863,8 +875,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                                     ),
                                 ],
                               ),
-                              if (!widget.embedded) _volumeControl(),
-                              if (widget.embedded) IconButton(tooltip: 'Toàn màn hình', icon: const Icon(Icons.fullscreen), onPressed: widget.onFullscreen),
+                              _volumeControl(),
                             ],
                           ),
                         ),
@@ -876,6 +887,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
