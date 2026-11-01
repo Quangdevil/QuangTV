@@ -330,6 +330,7 @@ browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
                 }
             } else if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 when (call.method) {
+                    "homeSnapshot" -> { android.util.Log.i("QuangDownloadTest","QUANGTV_MAY_HOME_READY"); result.success(null) }
                     "inspect" -> result.success(QuangBrowserActivity.inspect())
                     "downloadsInspect" -> result.success(QuangDownloadsActivity.inspect())
                     "downloadsAction" -> { QuangDownloadsActivity.testAction(call.argument<String>("action") ?: ""); result.success(null) }

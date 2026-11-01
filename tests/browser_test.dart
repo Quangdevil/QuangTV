@@ -35,12 +35,20 @@ void main() {
     final rows=tester.widgetList<ListTile>(find.descendant(of:find.byKey(const ValueKey('may-channel-list')),matching:find.byType(ListTile))).toList();
     expect((rows.first.title! as Text).data,'VTV1 HD');
     debugPrint('QUANGTV_MAY_HOME_READY');
+    await const MethodChannel('quangtv/browser').invokeMethod<void>('homeSnapshot');
     await tester.runAsync(() => Future<void>.delayed(const Duration(seconds:2)));
     Future<void> menu(String task) async {
       tester.state<ScaffoldState>(find.byKey(const ValueKey('quangtv-may-home'))).openDrawer();
       await tester.pump(const Duration(milliseconds:400));
       final target=find.byKey(ValueKey('may-task-$task'));
-      await tester.ensureVisible(target);await tester.tap(target);
+      await tester.ensureVisible(target);
+      await tester.pump(const Duration(milliseconds:350));
+      for (var i=0; i<8 && target.hitTestable().evaluate().isEmpty; i++) {
+        await tester.drag(find.descendant(of:find.byType(Drawer),matching:find.byType(ListView)),const Offset(0,-160));
+        await tester.pump(const Duration(milliseconds:250));
+      }
+      expect(target.hitTestable(),findsOneWidget);
+      await tester.tap(target);
       await tester.pump(const Duration(milliseconds:500));
     }
     await menu('podcast');expect(find.text('Podcast · Phát trong QuangTV'),findsOneWidget);
