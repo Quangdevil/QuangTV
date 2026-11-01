@@ -62,7 +62,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p = Path('upstream/flutter_app/android/app/build.gradle')
-          p.write_text(p.read_text().replace('applicationId "com.quangduren.quangtv"', 'applicationId "com.quangduren.quangtv.autopreview"'))
+          p.write_text(p.read_text().replace('applicationId "com.quangduren.quangtv"', 'applicationId "com.quangduren.quangtv.autopreview"') + '\nandroid { buildTypes { release { signingConfig signingConfigs.debug } } }\n')
           p = Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
           p.write_text(p.read_text().replace('android:label="QuangTV"', 'android:label="QuangTV Auto Preview"'))
           p = Path('upstream/flutter_app/android/app/src/main/kotlin/app/tvviewer/player/QuangUpdateManager.kt')
