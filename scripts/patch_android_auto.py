@@ -127,7 +127,17 @@ AUDIO_BROWSER = '''  // QuangTV Auto media browser
     mediaItem.add(selected);
     try {
       _updatePlaybackState(playing: false, state: AudioProcessingState.loading);
-      await _audioPlayer.setUrl(selected.id);
+      final sources = await quangAutoPlaybackSources(selected);
+      Object? lastSourceError;
+      bool prepared = false;
+      for (final source in sources) {
+        try {
+          await _audioPlayer.setUrl(source, headers: quangAutoPlaybackHeaders(selected));
+          prepared = true;
+          break;
+        } catch (error) { lastSourceError = error; }
+      }
+      if (!prepared) throw lastSourceError ?? StateError('Không có nguồn phát');
       _isBackgroundActive = true;
       unawaited(_audioPlayer.play().catchError((Object error) {
         _isBackgroundActive = false;
