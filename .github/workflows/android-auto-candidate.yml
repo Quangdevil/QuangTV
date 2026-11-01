@@ -29,7 +29,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: quangtv-auto-gradle-agp892-v1
+          key: quangtv-auto-gecko-agp950-v1
           restore-keys: |
             quangtv-gradle-linux-agp892-desugar215-v1
       - uses: subosito/flutter-action@v2

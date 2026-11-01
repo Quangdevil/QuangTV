@@ -17,10 +17,13 @@ import org.mozilla.geckoview.*;
 
 /** Native browser chrome and home; Gecko is bundled, Android WebView is not used. */
 public final class QuangGeckoBrowser extends LinearLayout {
-    public interface Listener { void fullscreen(boolean full); }
+    public interface Listener { void fullscreen(boolean full); default void searchRequested() {} }
     private static final int BG=0xff0b111a, PANEL=0xff14232d, MINT=0xff8ae4d1, TEXT=0xffedf5f5;
     private static GeckoRuntime runtime;
     private static GeckoResult<WebExtension> extension;
+    private static WebExtension installedExtension;
+    private final Map<GeckoSession,WebExtension.Port> controls=new IdentityHashMap<>();
+    private boolean showingHome;
     private static WeakReference<QuangGeckoBrowser> focused=new WeakReference<>(null);
     private final ArrayList<GeckoSession> tabs=new ArrayList<>();
     private final Map<GeckoSession,String> urls=new IdentityHashMap<>(), titles=new IdentityHashMap<>();
@@ -47,6 +50,7 @@ public final class QuangGeckoBrowser extends LinearLayout {
         address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);
         address.setImeOptions(EditorInfo.IME_ACTION_GO|EditorInfo.IME_FLAG_NO_EXTRACT_UI);
         address.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_GO){navigate(address.getText().toString());return true;}return false;});
+        address.setOnFocusChangeListener((v,focused)->{if(focused&&listener!=null)listener.searchRequested();});
         header.addView(address,new LayoutParams(0,dp(48),1));
         header.addView(button("→","Truy cập",()->navigate(address.getText().toString())),new LayoutParams(dp(48),dp(48)));
         tabButton=button("1","Các tab",this::showTabs);header.addView(tabButton,new LayoutParams(dp(48),dp(48)));
@@ -71,6 +75,7 @@ public final class QuangGeckoBrowser extends LinearLayout {
             if(runtime==null)runtime=GeckoRuntime.create(context.getApplicationContext(),new GeckoRuntimeSettings.Builder().remoteDebuggingEnabled(false).build());
             if(extension==null)extension=runtime.getWebExtensionController().ensureBuiltIn("resource://android/assets/may_gecko/","may-native@quangtv");
             extension.accept(ext->{
+                installedExtension=ext;
                 ext.setMessageDelegate(new WebExtension.MessageDelegate(){
                     @Override public GeckoResult<Object> onMessage(String app,Object raw,WebExtension.MessageSender sender){
                         if(!(raw instanceof JSONObject))return GeckoResult.fromValue(null);
@@ -115,6 +120,9 @@ public final class QuangGeckoBrowser extends LinearLayout {
             @Override public void onPageStart(GeckoSession s,String url){if(s==session)state.setText("Đang tải…");}
             @Override public void onPageStop(GeckoSession s,boolean success){if(s==session)state.setText(success?"": "Trang chưa tải xong. Kiểm tra mạng hoặc tải lại.");}
         });
+        if(installedExtension!=null)next.getWebExtensionController().setMessageDelegate(installedExtension,new WebExtension.MessageDelegate(){
+            @Override public void onConnect(WebExtension.Port port){controls.put(next,port);port.setDelegate(new WebExtension.PortDelegate(){@Override public void onDisconnect(WebExtension.Port gone){controls.remove(next);}});}
+        },"mayControl");
         next.open(runtime);tabs.add(next);switchTab(next);
     }
     private void switchTab(GeckoSession next){if(session!=null)session.setActive(false);view.releaseSession();session=next;view.setSession(next);next.setActive(active);address.setText(urls.get(next));tabButton.setText(String.valueOf(tabs.size()));media.clear();}
@@ -128,7 +136,7 @@ public final class QuangGeckoBrowser extends LinearLayout {
         session.setActive(active);session.loadUri(target);view.requestFocus();
     }
     private View homeView;
-    private void pageHome(boolean home){if(homeView!=null)homeView.setVisibility(home?VISIBLE:GONE);view.setVisibility(home?INVISIBLE:VISIBLE);}
+    private void pageHome(boolean home){showingHome=home;if(homeView!=null)homeView.setVisibility(home?VISIBLE:GONE);view.setVisibility(home?INVISIBLE:VISIBLE);}
     public void home(){
         if(!ready)return;setFull(false);session.setActive(false);
         if(homeView==null){
@@ -140,8 +148,14 @@ public final class QuangGeckoBrowser extends LinearLayout {
             homeView=scroll;page.addView(scroll,new FrameLayout.LayoutParams(-1,-1));exit.bringToFront();
         }pageHome(true);address.setText("");state.setText("");
     }
+    public void submitSearch(String text){
+        WebExtension.Port port=controls.get(session);String current=urls.get(session);
+        if(appPage&&current!=null&&Uri.parse(current).getPath().startsWith("/tube")&&port!=null){
+            try{port.postMessage(new JSONObject().put("op","search").put("query",text));}catch(JSONException ignored){}
+        }else navigate(text);
+    }
     public boolean back(){if(menuView!=null){page.removeView(menuView);menuView=null;return true;}if(full){session.exitFullScreen();setFull(false);return true;}if(homeView!=null&&homeView.getVisibility()==VISIBLE)return false;if(session!=null&&Boolean.TRUE.equals(canBack.get(session)))session.goBack();else home();return true;}
-    public void setActive(boolean value){active=value;if(session!=null)session.setActive(value);}
+    public void setActive(boolean value){active=value;if(session!=null)session.setActive(value&&!showingHome);}
     private void setFull(boolean value){full=value;header.setVisibility(value||appPage?GONE:VISIBLE);tools.setVisibility(value||appPage?GONE:VISIBLE);state.setVisibility(value?GONE:VISIBLE);exit.setVisibility(value?VISIBLE:GONE);if(listener!=null)listener.fullscreen(value);}
     private View menuView;
     private void choose(String title,String[] items,java.util.function.IntConsumer action){

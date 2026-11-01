@@ -53,6 +53,19 @@ def patch(app=APP):
     </application>''')
         ET.fromstring(text)
         manifest.write_text(text)
+    # Current Gecko requires API 37.2 and AGP 9. Keep Flutter 3.44's supported
+    # legacy DSL/Kotlin flags; this applies to the isolated Auto flavor only.
+    android_root = app.parent
+    settings = android_root / 'settings.gradle'
+    if settings.exists():
+        settings.write_text(settings.read_text().replace('version "8.9.2"', 'version "9.5.0"').replace('version "1.9.22"', 'version "2.4.10"'))
+        wrapper = android_root / 'gradle/wrapper/gradle-wrapper.properties'
+        wrapper.write_text(wrapper.read_text().replace('gradle-8.11.1-all.zip', 'gradle-9.6.0-all.zip'))
+        properties = android_root / 'gradle.properties'
+        flags = properties.read_text() if properties.exists() else ''
+        for key in ('android.newDsl', 'android.builtInKotlin'):
+            if key + '=' not in flags: flags += '\n' + key + '=false\n'
+        properties.write_text(flags)
     # One phone launcher icon. Diagnostics stays inside app settings.
     text = manifest.read_text()
     text = re.sub(r'(<activity\b[^>]*android:name="app\.tvviewer\.player\.QuangAutoDiagnosticsActivity"[^>]*>).*?</activity>',
@@ -78,7 +91,7 @@ def patch(app=APP):
     manifest.write_text(text)
     assets = app / 'src/main/assets/may_gecko'
     assets.mkdir(parents=True, exist_ok=True)
-    for name in ('manifest.json', 'background.js'):
+    for name in ('manifest.json', 'background.js', 'content.js'):
         shutil.copyfile(ROOT / 'overrides/may_gecko' / name, assets / name)
     activity = app / 'src/main/kotlin/app/tvviewer/player/MainActivity.kt'
     if activity.exists():
@@ -125,7 +138,7 @@ def patch(app=APP):
     gradle = app / 'build.gradle'
     text = gradle.read_text()
     if 'org.mozilla.geckoview:geckoview:' not in text:
-        text += '\n// quangtv.gecko.native: independent browser engine, not Android WebView.\nrepositories { maven { url "https://maven.mozilla.org/maven2/" } }\ndependencies { implementation "org.mozilla.geckoview:geckoview:159.0.20261022150525" }\nandroid { compileSdk 36 }\n'
+        text += '\n// quangtv.gecko.native: independent browser engine, not Android WebView.\nrepositories { maven { url "https://maven.mozilla.org/maven2/" } }\ndependencies { implementation "org.mozilla.geckoview:geckoview:159.0.20261022150525" }\nandroid { compileSdkVersion "android-37.2" }\n'
 
     if 'libs/aauto.aar' not in text:
         gradle.write_text(text + '''
