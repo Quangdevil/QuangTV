@@ -70,6 +70,9 @@ def patch(app=APP):
         if '// QuangTV Auto media browser' not in content:
             content = "import 'dart:async';\nimport 'quang_auto_media.dart';\n" + content
             content = content.replace('  VideoPlayerController? _videoController;', AUDIO_BROWSER + '\n  VideoPlayerController? _videoController;', 1)
+            # Upstream's write-only URL field is unused; keep this handler clean
+            # under the expanded analyzer gate without suppressing diagnostics.
+            content = re.sub(r'^.*_currentUrl(?:\s*=.*|;)\n', '', content, flags=re.MULTILINE)
             handler.write_text(content)
     resources = app / 'src/main/res'
     (resources / 'xml').mkdir(parents=True, exist_ok=True)
@@ -121,7 +124,6 @@ AUDIO_BROWSER = '''  // QuangTV Auto media browser
     if (selected == null) return; // Never accept arbitrary external media URLs.
     await stop();
     _channelName = selected.title;
-    _currentUrl = selected.id;
     mediaItem.add(selected);
     try {
       _updatePlaybackState(playing: false, state: AudioProcessingState.loading);

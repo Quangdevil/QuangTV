@@ -38,7 +38,9 @@ Map<String, dynamic> selectUpdateApk(Map<String, dynamic> release, String packag
     final url = Uri.tryParse(value['browser_download_url'] as String? ?? '');
     if (!name.startsWith(prefix) || !name.endsWith('-arm64.apk')) continue;
     if (url == null || url.scheme != 'https' || url.host != 'github.com' ||
-        url.path != '/Quangdevil/QuangTV/releases/download/$tag/$name') continue;
+        url.path != '/Quangdevil/QuangTV/releases/download/$tag/$name') {
+      continue;
+    }
     return value;
   }
   throw Exception('Bản phát hành chưa có APK arm64 đúng ứng dụng');
