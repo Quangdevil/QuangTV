@@ -246,7 +246,7 @@ class QuangBrowserActivity : Activity() {
         tools.addView(button("›", "Tiến tới") { if (web.canGoForward()) web.goForward() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         found = button("Tải video", "Chọn video đang phát để tải hoặc xem") { showMedia() }
         tools.addView(found, LinearLayout.LayoutParams(0, dp(48), 1f))
-        downloadsButton = button("Đã tải", "Quản lý tải xuống") { showDownloads() }
+        downloadsButton = button("↓ Đã tải", "Quản lý tải xuống") { showDownloads() }
         tools.addView(downloadsButton, LinearLayout.LayoutParams(dp(52), dp(48)))
         tools.addView(button("⋮", "Tùy chọn") { showOptions() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         proxyButton = button("P", "Bật/tắt proxy") { toggleProxy() }
@@ -377,7 +377,10 @@ class QuangBrowserActivity : Activity() {
         }
         view.setDownloadListener { url, _, _, mime, _ ->
             if (mime?.startsWith("video/") == true || mime == "application/octet-stream") {
-                detect(url, true, view); if (view === web) showMedia()
+                // Detect quietly: never cover the video with a dialog just because
+                // a website exposes a download. The native download button stays available.
+                detect(url, true, view)
+                if (view === web) Toast.makeText(this, "Đã nhận diện video · chọn Tải video để xem hoặc lưu", Toast.LENGTH_SHORT).show()
             } else Toast.makeText(this, "Chỉ hỗ trợ tải tệp video trực tiếp", Toast.LENGTH_SHORT).show()
         }
     }
