@@ -131,7 +131,7 @@ public final class QuangAutoActivity extends CarActivity {
         content.addView(scroll);
         // shared_preferences Android backend prefixes Dart keys with flutter.
         String cached = getSharedPreferences("FlutterSharedPreferences", 0)
-                .getString("flutter.quangtv_cached_channels", "[]");
+                .getString("flutter.quangtv_auto_channels", "[]");
         int count = 0;
         try {
             JSONArray channels = new JSONArray(cached);

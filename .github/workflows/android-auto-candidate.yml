@@ -42,6 +42,11 @@ jobs:
           python3 scripts/patch_vlc_engine.py
           cd upstream/flutter_app
           flutter pub get
+      - name: Verify public channel export
+        working-directory: upstream/flutter_app
+        run: |
+          flutter analyze lib/screens/quang_auto_channels.dart
+          flutter test test/quang_auto_channels_test.dart
       - name: Build isolated preview APK
         # Different package and debug key: does not overwrite the installed app,
         # access production preferences or participate in production OTA.
@@ -57,6 +62,8 @@ jobs:
           PY
           cd upstream/flutter_app
           flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0-auto-preview --build-number=${{ github.run_number }}
+      - name: Verify packaged projection service and minified classes
+        run: python3 scripts/verify_android_auto_apk.py upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
       - uses: actions/upload-artifact@v4
         with:
           name: QuangTV-Auto-Preview-arm64

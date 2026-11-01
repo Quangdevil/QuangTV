@@ -30,6 +30,7 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import org.json.JSONObject
 
 /** Public YouTube extraction + Android MP4 muxing. No account cookies or extraction server. */
 object QuangYouTube {
@@ -39,9 +40,33 @@ object QuangYouTube {
     private val cancelled = AtomicBoolean(false)
     @Volatile var running = false; private set
     @Volatile var status = ""; private set
-    fun cancel() { cancelled.set(true) }
+    fun cancel() { cancelled.set(true);if(running)status="Đang hủy tải…";appContext?.let { prefs(it).edit().remove("youtube_pending_choice").apply() } }
+    private var appContext: Context? = null
     private fun prefs(c: Context) = c.getSharedPreferences("quangtv_browser", Context.MODE_PRIVATE)
     fun completed(c: Context): List<Uri> = prefs(c).getStringSet("local_videos", emptySet())!!.map { Uri.parse(it) }
+    private fun cleanStaging(c: Context): Boolean {
+        val p=prefs(c);var published=false
+        p.getString("youtube_pending_uri",null)?.let { raw ->
+            val uri=Uri.parse(raw)
+            try { c.contentResolver.query(uri,arrayOf(MediaStore.MediaColumns.IS_PENDING),null,null,null)?.use { row ->
+                if(row.moveToFirst() && row.getInt(0)==0) {
+                    QuangDownloads.rememberYouTube(c,uri);published=true
+                } else c.contentResolver.delete(uri,null,null)
+            } } catch (_: Exception) { }
+        }
+        p.getString("youtube_staging",null)?.let { raw -> try {
+            val old=File(raw);if(old.canonicalFile.parentFile==c.cacheDir.canonicalFile)old.delete()
+        } catch (_: Exception) { } }
+        p.edit().remove("youtube_pending_uri").remove("youtube_staging").apply()
+        return published
+    }
+    @Synchronized fun resumePending(c: Context) {
+        if(running)return
+        val raw=prefs(c).getString("youtube_pending_choice",null) ?: return
+        if(cleanStaging(c)) { prefs(c).edit().remove("youtube_pending_choice").apply();status="Đã tải xong · Mở trong thư mục";return }
+        try { val j=JSONObject(raw);start(c,Choice(j.getString("title"),j.getString("video"),j.optString("audio").takeIf { it.isNotEmpty() },j.getString("quality"))) }
+        catch (_: Exception) { prefs(c).edit().remove("youtube_pending_choice").apply();status="Chọn lại video để tiếp tục tải" }
+    }
     private fun canonical(url: String): String {
         val uri = Uri.parse(url); val host = uri.host?.lowercase() ?: ""
         val id = when {
@@ -93,16 +118,23 @@ object QuangYouTube {
             if (activity.isFinishing || activity.isDestroyed) return@extract
             wait.dismiss()
             if (choices == null) { Toast.makeText(activity, error, Toast.LENGTH_LONG).show(); return@extract }
-            AlertDialog.Builder(activity).setTitle("Chất lượng tải MP4").setItems(choices.map { "${it.quality} · Có âm thanh" }.toTypedArray()) { _, index -> start(activity.applicationContext, choices[index]) }.setNegativeButton("Hủy", null).show()
+            AlertDialog.Builder(activity).setTitle("Chất lượng tải MP4").setItems(choices.map { "${it.quality} · Có âm thanh" }.toTypedArray()) { _, index -> start(activity, choices[index]) }.setNegativeButton("Hủy", null).show()
         }
     }
-    @Synchronized fun start(c: Context, choice: Choice) {
+    @Synchronized fun start(context: Context, choice: Choice) {
+        val c=context.applicationContext;appContext=c
         if (running) { Toast.makeText(c, "Đang xử lý một video. Xem trong Đã tải.", Toast.LENGTH_LONG).show(); return }
         if (Build.VERSION.SDK_INT < 29) { Toast.makeText(c, "Tải và ghép YouTube cần Android 10 trở lên", Toast.LENGTH_LONG).show(); return }
+        cleanStaging(c)
         running = true; cancelled.set(false); status = "Đang chuẩn bị ${choice.quality}"
-        Toast.makeText(c, "Đang tải YouTube. Giữ QuangTV mở; xem tiến trình trong Đã tải.", Toast.LENGTH_LONG).show()
+        prefs(c).edit().putString("youtube_pending_choice",JSONObject().put("title",choice.title).put("video",choice.video).put("audio",choice.audio ?: "").put("quality",choice.quality).toString()).apply()
+        try { QuangDownloadService.keepAlive(context) } catch (_: Exception) {
+            running=false;prefs(c).edit().remove("youtube_pending_choice").apply();status="Không bắt đầu được tải nền. Mở ứng dụng rồi thử lại.";Toast.makeText(c,status,Toast.LENGTH_LONG).show();return
+        }
+        Toast.makeText(c, "Đã bắt đầu tải nền. Bạn có thể đóng giao diện QuangTV.", Toast.LENGTH_LONG).show()
         worker.execute {
-            val file = File.createTempFile("quangtube-", ".mp4", c.cacheDir)
+            val file = try { File.createTempFile("quangtube-", ".mp4", c.cacheDir) } catch (_: Exception) { running=false;status="Không đủ chỗ trống để tải";prefs(c).edit().remove("youtube_pending_choice").apply();return@execute }
+            prefs(c).edit().putString("youtube_staging",file.absolutePath).apply()
             val sources = ArrayList<MediaExtractor>(); var muxer: MediaMuxer? = null; var started = false; var saved: Uri? = null
             try {
                 QuangProxy.ensure(c)
@@ -137,12 +169,14 @@ object QuangYouTube {
                 val name = choice.title.replace(Regex("[^\\p{L}\\p{N} _.-]"), "_").take(90) + "-${System.currentTimeMillis()}.mp4"
                 val values = ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, name); put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4"); put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/QuangTV"); put(MediaStore.MediaColumns.IS_PENDING, 1) }
                 saved = c.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: error("Storage unavailable")
+                prefs(c).edit().putString("youtube_pending_uri",saved.toString()).apply()
                 c.contentResolver.openOutputStream(saved)!!.use { out -> file.inputStream().use { input -> val b = ByteArray(65536); var n = input.read(b); while (n >= 0) { check(!cancelled.get()); out.write(b, 0, n); n = input.read(b) } } }
+                check(!cancelled.get())
                 c.contentResolver.update(saved, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-                val completed = prefs(c).getStringSet("local_videos", emptySet())!!.toMutableSet(); completed.add(saved.toString()); prefs(c).edit().putStringSet("local_videos", completed).apply()
+                QuangDownloads.rememberYouTube(c,saved)
                 status = "Hoàn tất ${choice.quality} · ${"%.1f".format(file.length() / 1000000.0)} MB"
             } catch (_: Exception) { saved?.let { c.contentResolver.delete(it, null, null) }; status = if (cancelled.get()) "Đã hủy YouTube" else "Tải YouTube chưa hoàn tất. Kiểm tra nguồn, mạng và dung lượng trống." }
-            finally { sources.forEach { it.release() }; if (started) try { muxer?.stop() } catch (_: Exception) {}; muxer?.release(); file.delete(); running = false }
+            finally { sources.forEach { it.release() }; if (started) try { muxer?.stop() } catch (_: Exception) {}; muxer?.release(); file.delete(); prefs(c).edit().remove("youtube_pending_choice").remove("youtube_pending_uri").remove("youtube_staging").apply();running = false }
         }
     }
 }

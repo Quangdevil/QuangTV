@@ -107,7 +107,11 @@ class QuangTubeActivity : Activity() {
         root.addView(web, FrameLayout.LayoutParams(-1, -1).apply { bottomMargin = (48 * resources.displayMetrics.density).toInt() })
         val actions = android.widget.LinearLayout(this)
         actions.addView(android.widget.Button(this).apply { text = "Lịch sử"; setAllCaps(false); setOnClickListener { showHistory() } }, android.widget.LinearLayout.LayoutParams(0, -1, 1f))
-        actions.addView(android.widget.Button(this).apply { text = "Tải video YouTube"; setAllCaps(false); setOnClickListener { QuangYouTube.showChoices(this@QuangTubeActivity, web.url ?: "") } }, android.widget.LinearLayout.LayoutParams(0, -1, 1f))
+        actions.addView(android.widget.Button(this).apply { text = "Tải video"; setAllCaps(false); setOnClickListener { QuangYouTube.showChoices(this@QuangTubeActivity, web.url ?: "") } }, android.widget.LinearLayout.LayoutParams(0, -1, 1f))
+        actions.addView(android.widget.Button(this).apply { text = "Đã tải"; setAllCaps(false); setOnClickListener {
+            web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(v=>v.pause())",null)
+            startActivity(android.content.Intent(this@QuangTubeActivity,QuangDownloadsActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_NO_USER_ACTION))
+        } }, android.widget.LinearLayout.LayoutParams(0, -1, 1f))
         root.addView(actions, FrameLayout.LayoutParams(-1, (48 * resources.displayMetrics.density).toInt(), android.view.Gravity.BOTTOM))
         setContentView(root)
         ViewCompat.requestApplyInsets(root)
@@ -316,4 +320,3 @@ class QuangTubeActivity : Activity() {
         super.onDestroy()
     }
 }
-

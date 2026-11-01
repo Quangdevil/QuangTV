@@ -204,6 +204,9 @@ jobs:
           grep -q 'QUANGTV_MAY_CONTROLS_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_DEMO_START_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_VTV_ORDER_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_DOWNLOAD_BACKGROUND_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_DOWNLOAD_FOLDER_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_YOUTUBE_BACKGROUND_SERVICE_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_ROTATION_TAP_ONLY_PASS engine=Media3' playback-evidence/test-result.txt
           grep -q 'QUANGTV_ROTATION_TAP_ONLY_PASS engine=VLC' playback-evidence/test-result.txt
           APK="QuangTV-v1.3.0-build${{ env.BUILD_NUMBER }}-arm64.apk"

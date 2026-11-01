@@ -11,6 +11,7 @@ import '../models/channel.dart';
 import 'quang_native_player.dart';
 import 'quang_private_screen.dart';
 import 'quang_vtv_source.dart';
+import 'quang_auto_channels.dart';
 
 class QuangDiscoverScreen extends StatefulWidget {
   const QuangDiscoverScreen({super.key});
@@ -130,6 +131,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     }
     // Cached channels open instantly. Only fetch on first launch or manual refresh.
     if (mounted && cached == null) await _load();
+    await syncQuangAutoChannels(prefs);
   }
 
   Future<void> _load() async {
@@ -178,6 +180,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       await prefs.setString('quangtv_playlist', uri.toString());
       result.removeWhere((c) => deletedChannels.contains(c.url));
       await prefs.setString('quangtv_cached_channels', jsonEncode(result.map((c) => {'name': c.name, 'url': c.url}).toList()));
+      await syncQuangAutoChannels(prefs);
       if (mounted) setState(() => channels = result);
     } catch (e) {
       if (mounted) setState(() => error = 'Không tải được danh sách: $e');
@@ -215,6 +218,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     await prefs.setStringList('quangtv_deleted_channels', deletedChannels.toList());
     await prefs.setStringList('quangtv_personal_channels',
       personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
+    await syncQuangAutoChannels(prefs);
   }
 
   Future<void> _deleteChannel(Channel channel) async {
@@ -237,6 +241,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     await prefs.setStringList('quangtv_deleted_channels', deletedChannels.toList());
     await prefs.setStringList('quangtv_personal_channels', personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
     await prefs.setString('quangtv_cached_channels', jsonEncode(channels.map((c) => {'name': c.name, 'url': c.url}).toList()));
+    await syncQuangAutoChannels(prefs);
     await prefs.setStringList('quangtv_favorites', favorites.toList());
     await prefs.setStringList('quangtv_recent_channels', recentChannels);
   }

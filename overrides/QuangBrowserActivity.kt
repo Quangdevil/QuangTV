@@ -70,41 +70,26 @@ class QuangBrowserActivity : Activity() {
                     "newTab" -> it.tabsDialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.performClick()
                     "firstTab" -> it.switchTab(it.tabs.first())
                     "openDownloads" -> it.downloadsButton.performClick()
-                    "openCompleted" -> it.openCompletedButton?.performClick()
+                    "openCompleted" -> { QuangDownloadsActivity.testAction("videos");QuangDownloadsActivity.testAction("openFirst") }
                     "closePreview" -> it.previewDialog?.dismiss()
                     "playPage" -> it.web.evaluateJavascript("(()=>{const v=document.querySelector('video');v.muted=true;v.play().catch(console.error)})()", null)
                     "previewAndRotate" -> {
-                        it.previewPassed = false
-                        var downloadChecks = 0
-                        val awaitDownload = object : Runnable {
-                          override fun run() {
-                            val ready = it.downloads.query(DownloadManager.Query().setFilterByStatus(DownloadManager.STATUS_SUCCESSFUL)).use { cursor -> cursor.moveToFirst() }
-                            if (!ready && ++downloadChecks < 80) { it.handler.postDelayed(this, 250); return }
-                            it.downloadsButton.performClick()
-                            it.handler.postDelayed({
-                            it.openCompletedButton?.performClick()
-                            var checks = 0
-                            val verify = object : Runnable {
-                                override fun run() {
-                                    val video = it.previewPlayer
-                                    if (video != null && video.isPlaying && video.currentPosition >= 1000) {
-                                        it.previewPassed = true
-                                        android.util.Log.i("QuangBrowserTest", "previewFramesAdvanced=true")
-                                        it.previewDialog?.dismiss()
-                                        it.handler.postDelayed({ testAction("rotatePlayback") }, 1000)
-                                    } else if (++checks < 80) it.handler.postDelayed(this, 250)
-                                    else {
-                                        lastRotation = mapOf("previewPassed" to false, "rotationPassed" to false, "fullscreen" to false)
-                                        it.previewDialog?.dismiss()
-                                        it.media.values.firstOrNull()?.let { candidate -> it.choose(candidate) }
+                        it.previewPassed=false
+                        if(!QuangDownloadsActivity.ready())it.downloadsButton.performClick()
+                        var checks=0
+                        val wait=object:Runnable { override fun run() {
+                            if(!QuangDownloadsActivity.ready() && ++checks<60){it.handler.postDelayed(this,100);return}
+                            QuangDownloadsActivity.previewFirstThenClose { passed ->
+                                it.previewPassed=passed
+                                it.handler.postDelayed({
+                                    if(passed)testAction("rotatePlayback") else {
+                                        lastRotation=mapOf("previewPassed" to false,"rotationPassed" to false,"fullscreen" to false)
+                                        it.media.values.firstOrNull()?.let { item -> it.choose(item) }
                                     }
-                                }
+                                },700)
                             }
-                            it.handler.postDelayed(verify, 250)
-                            }, 400)
-                          }
-                        }
-                        it.handler.post(awaitDownload)
+                        } }
+                        it.handler.postDelayed(wait,200)
                     }
                     "rotatePlayback" -> {
                         // Drive both OS rotations natively: the hidden Flutter test surface
@@ -513,7 +498,7 @@ class QuangBrowserActivity : Activity() {
             box.addView(TextView(this).apply { text = "${item.kind} · ${uri.host}\n${uri.lastPathSegment ?: "Video"}"; setPadding(0, dp(12), 0, 0) })
             val row = LinearLayout(this)
             row.addView(button("Xem", "Xem bằng player") { dialog.dismiss(); choose(item) }, LinearLayout.LayoutParams(0, dp(48), 1f))
-            val download = button(if (item.kind == "HLS") "HLS: chỉ xem" else "Tải xuống", "Tải video này") { dialog.dismiss(); startDownload(item); showDownloads() }.apply { isEnabled = item.kind != "HLS" }
+            val download = button(if (item.kind == "HLS") "HLS: chỉ xem" else "Tải xuống", "Tải video này") { dialog.dismiss(); startDownload(item); showDownloads(true) }.apply { isEnabled = item.kind != "HLS" }
             if (downloadButton == null && download.isEnabled) downloadButton = download
             row.addView(download, LinearLayout.LayoutParams(0, dp(48), 1f))
             box.addView(row)
@@ -541,14 +526,8 @@ class QuangBrowserActivity : Activity() {
             val downloadUrl = if (mayMode) {
                 if (isMayUrl(item.url)) item.url else Uri.parse(MAY_HOME).buildUpon().appendPath("proxy").appendQueryParameter("url", item.url).build().toString()
             } else QuangProxy.downloadUrl(this, item.url)
-            val request = DownloadManager.Request(Uri.parse(downloadUrl)).setTitle(filename)
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
-            for ((key, value) in headers(if (mayMode) downloadUrl else item.url)) request.addRequestHeader(key, value)
-            val id = downloads.enqueue(request)
-            val ids = settings.getStringSet("downloads", emptySet())!!.toMutableSet(); ids.add(id.toString())
-            settings.edit().putStringSet("downloads", ids).apply()
-            Toast.makeText(this, "Đang tải vào Downloads", Toast.LENGTH_SHORT).show()
+            QuangDownloads.enqueue(this,downloadUrl,headers(if(mayMode) downloadUrl else item.url),filename)
+            Toast.makeText(this, "Đang tải nền vào Downloads / QuangTV", Toast.LENGTH_SHORT).show()
         } catch (_: Exception) { Toast.makeText(this, "Không bắt đầu được lượt tải", Toast.LENGTH_LONG).show() }
     }
     private fun downloadedBytes(): Long {
@@ -560,52 +539,9 @@ class QuangBrowserActivity : Activity() {
         }
         return bytes
     }
-    private fun showDownloads() {
-        if (downloadsDialog?.isShowing == true) return
-        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(12), dp(20), dp(12)) }
-        val dialog = AlertDialog.Builder(this).setTitle("Tải xuống").setView(ScrollView(this).apply { addView(rows) })
-            .setNeutralButton("Hủy tải đang chạy") { _, _ ->
-                QuangYouTube.cancel()
-                for (id in settings.getStringSet("downloads", emptySet())!!) {
-                    downloads.query(DownloadManager.Query().setFilterById(id.toLong())).use { cursor ->
-                        if (cursor.moveToFirst() && cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) in listOf(DownloadManager.STATUS_PENDING, DownloadManager.STATUS_RUNNING, DownloadManager.STATUS_PAUSED)) downloads.remove(id.toLong())
-                    }
-                }
-            }.setNegativeButton("Đóng", null).create()
-        val refresh = object : Runnable {
-            override fun run() {
-                if (!dialog.isShowing) return
-                rows.removeAllViews()
-                openCompletedButton = null
-                if (QuangYouTube.status.isNotEmpty()) rows.addView(TextView(this@QuangBrowserActivity).apply { text = QuangYouTube.status })
-                for (uri in QuangYouTube.completed(this@QuangBrowserActivity)) {
-                    try { contentResolver.query(uri, arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { cursor -> if (cursor.moveToFirst()) rows.addView(button("Mở xem · ${cursor.getString(0)}", "Mở YouTube đã tải") { dialog.dismiss(); openLocalVideo(uri) }) } } catch (_: Exception) { }
-                }
-                var count = 0
-                for (id in settings.getStringSet("downloads", emptySet())!!.sortedBy { it.toLong() }.takeLast(20).reversed()) {
-                    downloads.query(DownloadManager.Query().setFilterById(id.toLong())).use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val bytes = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                            val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-                            val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                            val label = when (status) { DownloadManager.STATUS_SUCCESSFUL -> "Hoàn tất"; DownloadManager.STATUS_FAILED -> "Lỗi tải"; DownloadManager.STATUS_PAUSED -> "Tạm chờ mạng"; else -> "Đang tải" }
-                            count++
-                            rows.addView(TextView(this@QuangBrowserActivity).apply { text = "${cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE))}\n$label · ${"%.1f".format(bytes / 1000000.0)} / ${if (total > 0) "%.1f MB · %d%%".format(total / 1000000.0, bytes * 100 / total) else "? MB"}" })
-                            if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                                val open = button("Mở xem", "Mở video đã tải") { dialog.dismiss(); openDownloaded(id.toLong()) }
-                                if (openCompletedButton == null) openCompletedButton = open
-                                rows.addView(open)
-                            }
-                        }
-                    }
-                }
-                if (count == 0) rows.addView(TextView(this@QuangBrowserActivity).apply { text = "Chưa có lượt tải. Tệp đã tải nằm trong Downloads của Android." })
-                handler.postDelayed(this, 800)
-            }
-        }
-        downloadsDialog = dialog
-        dialog.setOnDismissListener { handler.removeCallbacks(refresh); downloadsDialog = null }
-        dialog.show(); refresh.run()
+    private fun showDownloads(active: Boolean=false) {
+        web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(v=>v.pause())",null)
+        startActivity(Intent(this,QuangDownloadsActivity::class.java).putExtra("folder",if(active) "active" else "root").addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP))
     }
     private fun installMediaMute(view: WebView) {
         if (mayMode || isMayUrl(view.url)) return // Mây owns its own mute/volume policy.
