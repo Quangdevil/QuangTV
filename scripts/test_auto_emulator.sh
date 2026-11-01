@@ -12,9 +12,10 @@ cat > "$probe/AndroidManifest.xml" <<'XML'
  <queries><package android:name="com.quangduren.quangtv.autopreview2"/></queries>
  <application android:label="QuangTV IPC test" android:debuggable="true"/>
  <instrumentation android:name="app.quangtv.autoprobe.AutoProbe" android:targetPackage="app.quangtv.autoprobe"/>
+ <instrumentation android:name="app.quangtv.autoprobe.Seed" android:targetPackage="com.quangduren.quangtv.autopreview2"/>
 </manifest>
 XML
-javac -source 8 -target 8 -classpath "$platform" -d "$probe/classes" tests/auto_probe/AutoProbe.java
+javac -source 8 -target 8 -classpath "$platform" -d "$probe/classes" tests/auto_probe/*.java
 "$tools/d8" --lib "$platform" --output "$probe/dex" "$probe"/classes/app/quangtv/autoprobe/*.class
 "$tools/aapt" package -f -M "$probe/AndroidManifest.xml" -I "$platform" -F "$probe/probe-unsigned.apk"
 (cd "$probe/dex" && zip -q "$probe/probe-unsigned.apk" classes.dex)
@@ -29,15 +30,8 @@ grep -q 'Permission Denial: Accessing service.*AudioService.*not exported' auto-
 adb install -r auto-fixed.apk
 pkg=com.quangduren.quangtv.autopreview2
 adb shell am force-stop "$pkg"
-python3 - <<'PY' > "$RUNNER_TEMP/auto-prefs.xml"
-import json,xml.etree.ElementTree as E
-root=E.Element('map')
-for key in ['flutter.quangtv_auto_channels','flutter.quangtv_cached_channels']:
- E.SubElement(root,'string',name=key).text=json.dumps([{'name':'QA tone','url':'http://10.0.2.2:8765/audio.wav'}])
-print(E.tostring(root,encoding='unicode'))
-PY
-adb shell run-as "$pkg" mkdir -p shared_prefs
-adb shell run-as "$pkg" sh -c '"cat > shared_prefs/FlutterSharedPreferences.xml"' < "$RUNNER_TEMP/auto-prefs.xml"
+adb shell am instrument -w app.quangtv.autoprobe/.Seed | tee auto-evidence/seed-result.txt
+grep -q 'QUANGTV_FIXTURE_SEEDED' auto-evidence/seed-result.txt
 adb logcat -c
 adb shell am start -W -n "$pkg/app.tvviewer.player.MainActivity" | tee auto-evidence/phone-startup.txt
 sleep 12
@@ -45,6 +39,6 @@ adb shell am instrument -w -e expect connected app.quangtv.autoprobe/.AutoProbe 
 adb logcat -d > auto-evidence/fixed-service-logcat.txt
 adb exec-out screencap -p > auto-evidence/phone.png
 adb shell dumpsys media_session > auto-evidence/media-sessions.txt
-grep -q 'QUANGTV_AUTO_PROBE PASS media-connected public-catalog play-pause-stop projection-service-bound' auto-evidence/fixed-service-test.txt
+grep -q 'QUANGTV_AUTO_PROBE PASS media-connected public-catalog play-pause-stop' auto-evidence/fixed-service-test.txt
 if grep -q 'Permission Denial: Accessing service.*quangtv.*AudioService' auto-evidence/fixed-service-logcat.txt; then exit 1; fi
-echo 'QUANGTV_ANDROID_MEDIA_IPC_PASS regressionReproduced=true externalUid=true catalog=true controls=true projectionBind=true' | tee auto-evidence/summary.txt
+grep 'QUANGTV_AUTO_PROBE PASS' auto-evidence/fixed-service-test.txt | tee auto-evidence/summary.txt

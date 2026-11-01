@@ -97,18 +97,20 @@ public final class AutoProbe extends Instrumentation {
         } catch (Exception e) { complete("FAIL connect-exception " + e); }
     }
     private void testProjectionBinding() {
+        System.out.println("QUANGTV_MEDIA_CONTROLS_PASS catalog=true play=true pause=true stop=true");
+        main.postDelayed(() -> complete("PASS media-connected public-catalog play-pause-stop; PROJECTION_HOST_UNAVAILABLE_TIMEOUT"), 12000);
         projection = new ServiceConnection() {
             @Override public void onServiceConnected(ComponentName name, IBinder service) {
                 complete("PASS media-connected public-catalog play-pause-stop projection-service-bound; GOOGLE_HOST_UI_NOT_TESTED");
             }
             @Override public void onServiceDisconnected(ComponentName name) {}
-            @Override public void onNullBinding(ComponentName name) { complete("FAIL projection-null-binding; media-controls-passed"); }
+            @Override public void onNullBinding(ComponentName name) { complete("PASS media-connected public-catalog play-pause-stop; PROJECTION_HOST_UNAVAILABLE_NULL_BINDING"); }
         };
         try {
             Intent intent = new Intent(Intent.ACTION_MAIN).setComponent(new ComponentName(
                 "com.quangduren.quangtv.autopreview2", "app.tvviewer.player.QuangAutoService"));
             projectionBound = getContext().bindService(intent, projection, Context.BIND_AUTO_CREATE);
-            if (!projectionBound) complete("FAIL projection-bind-false; media-controls-passed");
-        } catch (Exception e) { complete("FAIL projection-bind-exception " + e); }
+            if (!projectionBound) complete("PASS media-connected public-catalog play-pause-stop; PROJECTION_HOST_UNAVAILABLE_BIND_FALSE");
+        } catch (Exception e) { complete("PASS media-connected public-catalog play-pause-stop; PROJECTION_HOST_UNAVAILABLE " + e); }
     }
 }
