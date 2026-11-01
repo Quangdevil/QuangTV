@@ -1,6 +1,7 @@
 from pathlib import Path
 import shutil
 shutil.copyfile('overrides/quang_discover_screen.dart', 'upstream/flutter_app/lib/screens/quang_discover_screen.dart')
+shutil.copyfile('overrides/quang_may_shell.dart', 'upstream/flutter_app/lib/screens/quang_may_shell.dart')
 shutil.copyfile('overrides/quang_private_screen.dart', 'upstream/flutter_app/lib/screens/quang_private_screen.dart')
 shutil.copyfile('overrides/quang_web_screen.dart', 'upstream/flutter_app/lib/screens/quang_web_screen.dart')
 shutil.copyfile('overrides/quang_vtv_source.dart', 'upstream/flutter_app/lib/screens/quang_vtv_source.dart')
@@ -317,6 +318,9 @@ browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "
                     try { startActivity(Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)); result.success(null) }
                     catch (_: Exception) { result.error("SETTINGS", "Không mở được cài đặt mạng", null) }
                 }
+            } else if (call.method == "showDownloadLibrary") {
+                startActivity(Intent(this, QuangDownloadsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                result.success(null)
             } else if (call.method == "open") {
                 if (browserReply != null) { result.error("BUSY", "Trình duyệt đang mở", null) }
                 else {
@@ -455,6 +459,9 @@ shutil.copyfile('overrides/quang_network.dart', 'upstream/flutter_app/lib/screen
 main_file=Path('upstream/flutter_app/lib/main.dart')
 main_source=main_file.read_text().replace("import 'dart:async';", "import 'dart:async';\nimport 'screens/quang_network.dart';", 1)
 main_source=main_source.replace('  WidgetsFlutterBinding.ensureInitialized();', '  WidgetsFlutterBinding.ensureInitialized();\n  await QuangNetwork.install();', 1)
+assert "home: const HomeScreen()," in main_source
+main_source=main_source.replace("import 'screens/home_screen.dart';", "import 'screens/quang_discover_screen.dart';", 1)
+main_source=main_source.replace('home: const HomeScreen(),', 'home: const QuangDiscoverScreen(mayHome: true),', 1)
 main_file.write_text(main_source)
 
 # Flutter's test runner requires VM service extensions, so exercise the native

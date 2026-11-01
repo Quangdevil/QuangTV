@@ -16,6 +16,9 @@ with path.open(errors='replace') as log:
         if not line:
             time.sleep(.1)
             continue
+        if 'QUANGTV_MAY_HOME_READY' in line:
+            with (path.parent / 'may-home-native.png').open('wb') as image:
+                subprocess.run(['adb', 'exec-out', 'screencap', '-p'], stdout=image, check=True)
         if 'QuangDownloadTest' in line and 'QUANGTV_DOWNLOADS_RESTORE_REQUEST' in line:
             subprocess.run(['adb','shell','am','force-stop','com.google.android.apps.nexuslauncher'],check=True)
             subprocess.run(['adb', 'shell', 'am', 'start', '-n',

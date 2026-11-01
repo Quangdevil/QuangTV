@@ -11,9 +11,14 @@ import '../models/channel.dart';
 import 'quang_native_player.dart';
 import 'quang_private_screen.dart';
 import 'quang_vtv_source.dart';
+import 'quang_may_shell.dart';
+import 'home_screen.dart';
+import 'quang_update_screen.dart';
+import 'quang_browser_screen.dart';
 
 class QuangDiscoverScreen extends StatefulWidget {
-  const QuangDiscoverScreen({super.key});
+  final bool mayHome;
+  const QuangDiscoverScreen({super.key, this.mayHome = false});
   @override
   State<QuangDiscoverScreen> createState() => _QuangDiscoverScreenState();
 }
@@ -356,6 +361,98 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     super.dispose();
   }
 
+  Future<void> _mayTask(String task) async {
+    switch (task) {
+      case 'tv': setState(() => section = 0); break;
+      case 'podcast': setState(() => section = 2); break;
+      case 'radio': setState(() => section = 3); break;
+      case 'favorites': setState(() => section = 4); break;
+      case 'youtube': await _openYoutube(); break;
+      case 'private':
+        if (await QuangPrivateSecurity.verify(context) && mounted) {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangPrivateScreen()));
+        }
+        break;
+      case 'iptv': await Navigator.push(context, MaterialPageRoute(builder: (_) => const HomeScreen())); break;
+      case 'browser': await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangBrowserScreen())); break;
+      case 'proxy': await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangProxyScreen())); break;
+      case 'update': await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangUpdateScreen())); break;
+      case 'settings': await _showSettings(); break;
+      case 'downloads':
+        try { await const MethodChannel('quangtv/browser').invokeMethod<void>('showDownloadLibrary'); }
+        on PlatformException { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không mở được thư mục đã tải'))); }
+        break;
+    }
+  }
+
+  Widget _mayTelevision(List<Channel> shown) => SafeArea(child: LayoutBuilder(builder: (context, constraints) {
+    final all = [...personalChannels, ...channels].where((c) => !deletedChannels.contains(c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
+    final recent = recentChannels.expand((url) => all.where((c) => c.url == url)).toList();
+    final featured = recent.isNotEmpty ? recent.first : (shown.isNotEmpty ? shown.first : null);
+    final wide = constraints.maxWidth >= 760;
+    Widget stage() => Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      const Text('QUANGTV × MÂY', style: TextStyle(fontSize: 9, letterSpacing: 2, color: Color(0xff93a7b3))),
+      const SizedBox(height: 12),
+      Text(featured?.name ?? 'Một chạm. Kênh bạn thích.', maxLines: 2, overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 24, height: 1.2, fontWeight: FontWeight.w600, color: Color(0xffedf5f5))),
+      const SizedBox(height: 14),
+      SizedBox(height: wide ? 240 : (constraints.maxHeight * .22).clamp(95.0, 165.0), width: double.infinity,
+        child: Material(color: const Color(0xff081018), borderRadius: BorderRadius.circular(16), clipBehavior: Clip.antiAlias,
+          child: InkWell(key: const ValueKey('may-featured-channel'), onTap: featured == null ? null : () => _playChannel(featured),
+            child: Container(decoration: BoxDecoration(border: Border.all(color: const Color(0xff263742)), borderRadius: BorderRadius.circular(16),
+              gradient: const RadialGradient(colors: [Color(0xff173b3b), Color(0xff070b11)], radius: 1.1)),
+              child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.play_circle_outline, color: QuangMayShell.mint, size: 46), SizedBox(height: 8),
+                Text('Chạm để xem', style: TextStyle(color: Color(0xffd9e8e8), fontSize: 14)),
+              ]))))),
+      const SizedBox(height: 8),
+      Text(recent.isNotEmpty ? 'Tiếp tục kênh đã xem' : 'Chọn kênh để bắt đầu', style: const TextStyle(fontSize: 11, color: Color(0xff93a7b3))),
+      Wrap(spacing: 6, children: [
+        TextButton.icon(onPressed: () => _mayTask('youtube'), icon: const Icon(Icons.smart_display_outlined, size: 18), label: const Text('QuangTube')),
+        TextButton.icon(onPressed: () => _mayTask('browser'), icon: const Icon(Icons.public, size: 18), label: const Text('Trình duyệt')),
+      ]),
+      ExpansionTile(key: const ValueKey('may-sources'), tilePadding: EdgeInsets.zero, title: const Text('Nguồn & kênh đã lưu', style: TextStyle(fontSize: 13)), children: [
+        TextField(controller: urlController, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Link M3U (có thể nhập tay)')),
+        Wrap(spacing: 8, children: [
+          TextButton(onPressed: loading ? null : _load, child: const Text('Tải danh sách')),
+          TextButton.icon(onPressed: _addPersonalChannel, icon: const Icon(Icons.add), label: const Text('Thêm kênh')),
+          TextButton(onPressed: () { urlController.text = defaultUrl; _load(); }, child: const Text('TV Việt Nam · GitHub')),
+          TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangWebScreen(title: 'VTVgo · Xem lại', initialUrl: Uri.parse('https://vtvgo.vn/')))), child: const Text('VTVgo · Xem lại')),
+        ]),
+      ]),
+      if (recent.isNotEmpty) ExpansionTile(tilePadding: EdgeInsets.zero, title: const Text('Kênh đã xem gần đây', style: TextStyle(fontSize: 13)), children: [
+        Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _clearRecents, child: const Text('Xóa tất cả'))),
+        for (final c in recent) ListTile(title: Text(c.name), onTap: () => _playChannel(c), trailing: IconButton(tooltip: 'Xóa lịch sử kênh', icon: const Icon(Icons.close), onPressed: () => _removeRecent(c.url))),
+      ]),
+    ]);
+    Widget library() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [const Expanded(child: Text('Kênh truyền hình', style: TextStyle(fontSize: 17, color: Color(0xffedf5f5), fontWeight: FontWeight.w600))),
+        IconButton(tooltip: 'Ưa thích', onPressed: () => _mayTask('favorites'), icon: const Icon(Icons.star_border)),
+        IconButton(tooltip: 'Tải lại danh sách', onPressed: loading ? null : _load, icon: const Icon(Icons.refresh)),
+      ]),
+      TextField(controller: searchController, onChanged: (_) => setState(() {}), decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Tìm kênh TV', isDense: true)),
+      Padding(padding: const EdgeInsets.symmetric(vertical: 9), child: Text('${shown.length} kênh · VTV ở đầu', style: const TextStyle(fontSize: 10, color: Color(0xff93a7b3)))),
+      if (loading) const LinearProgressIndicator(),
+      if (error.isNotEmpty) Text(error, style: const TextStyle(color: Colors.orangeAccent)),
+      Expanded(child: ListView.builder(key: const ValueKey('may-channel-list'), itemCount: shown.length, itemBuilder: (context, index) {
+        final c = shown[index]; final selected = recent.isNotEmpty && recent.first.url == c.url;
+        return Padding(padding: const EdgeInsets.only(bottom: 8), child: Material(color: selected ? const Color(0xff133934) : const Color(0xff111e29), borderRadius: BorderRadius.circular(13),
+          child: ListTile(key: ValueKey('may-channel-${c.url}'), contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            leading: Container(width: 46, height: 38, alignment: Alignment.center, decoration: BoxDecoration(color: const Color(0xffe5efec), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.live_tv, color: Color(0xff245f56), size: 25)),
+            title: Text(c.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            subtitle: Text(QuangVtvSource.channelId(c.name) != null ? 'VTV' : 'Truyền hình', style: const TextStyle(fontSize: 10, color: Color(0xff93a7b3))),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(tooltip: 'Ưa thích', onPressed: () => _toggleFavorite(c), icon: Icon(favorites.contains(c.url) ? Icons.star : Icons.star_border, color: QuangMayShell.mint, size: 21)),
+              IconButton(tooltip: 'Xóa kênh', onPressed: () => _deleteChannel(c), icon: const Icon(Icons.more_vert, size: 20)),
+            ]), onTap: () => _playChannel(c))));
+      })),
+    ]);
+    return Padding(padding: const EdgeInsets.fromLTRB(16, 14, 16, 0), child: wide
+      ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(flex: 6, child: SingleChildScrollView(child: stage())), const SizedBox(width: 28), Expanded(flex: 4, child: library())])
+      : Column(children: [ConstrainedBox(constraints: BoxConstraints(maxHeight: constraints.maxHeight * .50), child: SingleChildScrollView(child: stage())), const SizedBox(height: 8), Expanded(child: library())]));
+  }));
+
   @override
   Widget build(BuildContext context) {
     final filter = searchController.text.toLowerCase();
@@ -370,15 +467,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       return difference != 0 ? difference : a.$1.compareTo(b.$1);
     });
     final shown = ordered.map((row) => row.$2).toList();
-    return Scaffold(
-      appBar: AppBar(title: const Text('QuangTV'), actions: [
-        IconButton(tooltip: 'Private', icon: const Icon(Icons.lock_outline), onPressed: () async {
-          if (!await QuangPrivateSecurity.verify(context) || !context.mounted) return;
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangPrivateScreen()));
-        }),
-        IconButton(tooltip: 'Cài đặt', icon: const Icon(Icons.settings), onPressed: _showSettings),
-      ]),
-      body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
+    final content = SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
         SizedBox(width: double.infinity, child: SegmentedButton<int>(
           segments: const [ButtonSegment(value: 0, icon: Icon(Icons.live_tv), tooltip: 'TV'), ButtonSegment(value: 1, icon: Icon(Icons.smart_display), tooltip: 'YouTube'), ButtonSegment(value: 2, icon: Icon(Icons.podcasts), tooltip: 'Podcast'), ButtonSegment(value: 3, icon: Icon(Icons.radio), tooltip: 'Radio'), ButtonSegment(value: 4, icon: Icon(Icons.favorite), tooltip: 'Ưa thích')],
           selected: {section},
@@ -504,7 +593,18 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: 'Radio', streamUrl: uri.toString())));
             }),
         ],
-      ])),
+      ]));
+    if (widget.mayHome) return QuangMayShell(section: section, onTask: _mayTask,
+      body: section == 0 ? _mayTelevision(shown) : content);
+    return Scaffold(
+      appBar: AppBar(title: const Text('QuangTV'), actions: [
+        IconButton(tooltip: 'Private', icon: const Icon(Icons.lock_outline), onPressed: () async {
+          if (!await QuangPrivateSecurity.verify(context) || !context.mounted) return;
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangPrivateScreen()));
+        }),
+        IconButton(tooltip: 'Cài đặt', icon: const Icon(Icons.settings), onPressed: _showSettings),
+      ]),
+      body: content,
     );
   }
 }
