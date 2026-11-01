@@ -1,0 +1,107 @@
+name: Test Preview 2 on Android emulator and probe DHU
+on:
+  push:
+    branches: [test/auto-preview2-emulator]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quangtv-auto-emulator
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tv-viewer-app/tv_viewer
+          ref: 188df516a8acb4a2fda0d65fed8b6199c734603f
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: quangtv-auto-gradle-agp892-v1
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+          cache: true
+      - name: Apply Preview 2 source, using x86_64 for the emulator
+        run: |
+          python3 scripts/patch_quangtv.py
+          python3 scripts/patch_android_auto.py
+          cd upstream/flutter_app
+          flutter pub get
+          cd ../..
+          python3 scripts/patch_vlc_engine.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('upstream/flutter_app/android/app/build.gradle')
+          p.write_text(p.read_text().replace('applicationId "com.quangduren.quangtv"','applicationId "com.quangduren.quangtv.autopreview2"') + '\nandroid { buildTypes { release { signingConfig signingConfigs.debug; debuggable true } } }\n')
+          PY
+          cd upstream/flutter_app
+          flutter pub get
+          flutter build apk --release --target-platform android-x64 --build-name=1.3.0-auto-preview2 --build-number=9
+          cp build/app/outputs/flutter-apk/app-release.apk ../../auto-fixed.apk
+      - name: Build negative control with the original private service
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('upstream/flutter_app/android/app/src/main/AndroidManifest.xml')
+          s,n=re.subn(r'(<service\b[^>]*android:name="com\.ryanheise\.audioservice\.AudioService"[^>]*android:exported=")true(")',r'\g<1>false\2',p.read_text())
+          assert n==1
+          p.write_text(s)
+          PY
+          cd upstream/flutter_app
+          flutter build apk --release --target-platform android-x64 --build-name=1.3.0-auto-preview2 --build-number=9
+          cp build/app/outputs/flutter-apk/app-release.apk ../../auto-regression.apk
+      - name: Enable hardware acceleration and install DHU dependencies
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -qq
+          sudo apt-get install -y libc++1 libc++abi1
+          mkdir -p auto-evidence
+          sdkmanager 'extras;google;auto' > auto-evidence/dhu-sdk-install.txt 2>&1 || true
+      - name: Start deterministic audio fixture
+        run: |
+          mkdir -p "$RUNNER_TEMP/auto-media"
+          python3 - <<'PY'
+          import math, os, struct, wave
+          from pathlib import Path
+          p=Path(os.environ['RUNNER_TEMP'])/'auto-media/audio.wav'
+          with wave.open(str(p),'wb') as w:
+              w.setparams((1,2,16000,0,'NONE','not compressed'))
+              w.writeframes(b''.join(struct.pack('<h',int(6000*math.sin(2*math.pi*440*i/16000))) for i in range(16000*30)))
+          PY
+          python3 -m http.server 8765 --directory "$RUNNER_TEMP/auto-media" > auto-evidence/media-server.txt 2>&1 &
+      - name: Android runtime, external media client, and Google DHU preflight
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          emulator-build: 15261927
+          api-level: 35
+          target: google_apis_playstore
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -memory 3072 -cores 2
+          script: bash scripts/run_auto_emulator_checks.sh
+      - name: Preserve evidence, including failed tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Preview2-Android-runtime-evidence
+          path: auto-evidence/
+          if-no-files-found: warn
+          retention-days: 14
