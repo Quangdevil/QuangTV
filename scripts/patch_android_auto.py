@@ -77,7 +77,7 @@ def patch(app=APP):
     resources = app / 'src/main/res'
     (resources / 'xml').mkdir(parents=True, exist_ok=True)
     (resources / 'xml/quangtv_automotive_app.xml').write_text(
-        '<?xml version="1.0" encoding="utf-8"?>\n<automotiveApp><uses name="media" /></automotiveApp>\n')
+        '<?xml version="1.0" encoding="utf-8"?>\n<automotiveApp><uses name="media" /><uses name="projection" /></automotiveApp>\n')
     (resources / 'values').mkdir(parents=True, exist_ok=True)
     (resources / 'values/quangtv_auto.xml').write_text('''<resources>
     <style name="QuangAutoTheme" parent="Theme.AppCompat.DayNight.NoActionBar">

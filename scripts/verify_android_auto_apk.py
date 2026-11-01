@@ -28,6 +28,16 @@ for name in ('app.tvviewer.player.QuangAutoService', 'com.ryanheise.audioservice
 assert 'android.media.browse.MediaBrowserService' in manifest
 assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION' in manifest
 assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM' in manifest
+# Check the descriptor shipped in the APK, not merely Java/manifest classes.
+resources = subprocess.check_output([str(tools / 'aapt'), 'dump', '--values', 'resources', str(apk)], text=True)
+match = re.search(r'(?ms)^\s*resource 0x[0-9a-f]+ [^\n]*:xml/quangtv_automotive_app:.*?\(string8\) "([^"\n]+)"', resources)
+if match:
+    descriptor_path = match.group(1)
+else:
+    descriptor_path = 'res/xml/quangtv_automotive_app.xml'
+descriptor = subprocess.check_output([str(tools / 'aapt'), 'dump', 'xmltree', str(apk), descriptor_path], text=True)
+assert re.search(r'name="projection"|name[^\n]*"projection"', descriptor), 'Projection capability missing from packaged automotive descriptor'
+assert re.search(r'name="media"|name[^\n]*"media"', descriptor), 'Media capability missing from packaged automotive descriptor'
 with ZipFile(apk) as archive:
     defined = set()
     for name in archive.namelist():

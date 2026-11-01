@@ -46,6 +46,8 @@ class AutoPatchTest(unittest.TestCase):
                              service.find('intent-filter/category').get(A + 'name'))
             self.assertIn('com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM',
                           [c.get(A + 'name') for c in service.findall('intent-filter/category')])
+            descriptor = ET.parse(app / 'src/main/res/xml/quangtv_automotive_app.xml').getroot()
+            self.assertEqual({'media', 'projection'}, {node.get('name') for node in descriptor.findall('uses')})
             self.assertFalse(list(application.iter('uses-feature')))
             self.assertTrue((app / 'src/main/java/app/tvviewer/player/QuangAutoActivity.java').is_file())
 

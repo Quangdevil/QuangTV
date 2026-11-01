@@ -92,6 +92,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Publish isolated Preview 2 update
+        # Publish only after a deliberate dispatch following DHU runtime QA.
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
