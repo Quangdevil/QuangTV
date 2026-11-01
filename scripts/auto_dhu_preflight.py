@@ -36,6 +36,9 @@ path=adb('shell','pm','path',pkg)
 if 'package:' not in path:
     result('DHU_BLOCKED: official emulator system image has no Android Auto host installed. Media IPC results are separate.')
     raise SystemExit(0)
+if 'AndroidAutoStubPrebuilt' in path:
+    result('DHU_BLOCKED: emulator contains AndroidAutoStubPrebuilt only, not the full Google Android Auto projection host. Full Android Auto setup is required; media IPC tests passed separately.')
+    raise SystemExit(0)
 activity=adb('shell','am','start','-W','-a','android.settings.ANDROID_AUTO_SETTINGS')
 if 'Error' in activity:
     activity += adb('shell','am','start','-W','-n',pkg+'/.companion.settings.DefaultSettingsActivity')

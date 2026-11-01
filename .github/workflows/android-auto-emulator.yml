@@ -84,7 +84,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y libc++1 libc++abi1
           mkdir -p auto-evidence
-          sdkmanager 'extras;google;auto' > auto-evidence/dhu-sdk-install.txt 2>&1 || true
+          sdkmanager_bin=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)
+          test -x "$sdkmanager_bin"
+          "$sdkmanager_bin" 'extras;google;auto' > auto-evidence/dhu-sdk-install.txt 2>&1 || true
       - name: Start deterministic audio fixture
         run: |
           mkdir -p "$RUNNER_TEMP/auto-media"
