@@ -594,8 +594,10 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
             }),
         ],
       ]));
-    if (widget.mayHome) return QuangMayShell(section: section, onTask: _mayTask,
-      body: section == 0 ? _mayTelevision(shown) : content);
+    if (widget.mayHome) {
+      return QuangMayShell(section: section, onTask: _mayTask,
+        body: section == 0 ? _mayTelevision(shown) : content);
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('QuangTV'), actions: [
         IconButton(tooltip: 'Private', icon: const Icon(Icons.lock_outline), onPressed: () async {
