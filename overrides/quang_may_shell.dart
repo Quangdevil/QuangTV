@@ -1,12 +1,27 @@
 import 'package:flutter/material.dart';
 import 'quang_proxy_screen.dart';
 
+class QuangPinnedHeader extends SliverPersistentHeaderDelegate {
+  final double height;
+  final Widget child;
+  QuangPinnedHeader({required this.height, required this.child});
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
+  @override
+  bool shouldRebuild(covariant QuangPinnedHeader oldDelegate) => oldDelegate.child != child || oldDelegate.height != height;
+}
+
 /// Presentation only. Each destination is handled by QuangTV's existing screen.
 class QuangMayShell extends StatelessWidget {
   final Widget body;
+  final bool fullscreen;
   final int section;
   final ValueChanged<String> onTask;
-  const QuangMayShell({super.key, required this.body, required this.section, required this.onTask});
+  const QuangMayShell({super.key, required this.body, this.fullscreen = false, required this.section, required this.onTask});
   static const mint = Color(0xff8ae4d1);
   static const background = Color(0xff0b111a);
   static ThemeData theme() => ThemeData(
@@ -28,7 +43,7 @@ class QuangMayShell extends StatelessWidget {
         leading: Icon(icon, color: mint), title: Text(label), onTap: () { Navigator.pop(context); onTask(id); }));
     return Scaffold(
       key: const ValueKey('quangtv-may-home'),
-      appBar: AppBar(toolbarHeight: 68, titleSpacing: 0,
+      appBar: fullscreen ? null : AppBar(toolbarHeight: 68, titleSpacing: 0,
         title: Row(children: [
           Container(width: 36, height: 30, decoration: BoxDecoration(color: mint, borderRadius: BorderRadius.circular(9)),
             child: const Icon(Icons.cloud, color: Color(0xff0b3330), size: 24)),
@@ -42,7 +57,7 @@ class QuangMayShell extends StatelessWidget {
         actions: [const QuangProxyToggle(compact: true), IconButton(tooltip: 'Cài đặt', onPressed: () => onTask('settings'), icon: const Icon(Icons.settings_outlined))],
         bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider(height: 1)),
       ),
-      drawer: Drawer(backgroundColor: const Color(0xff0d1720), child: SafeArea(child: ListView(children: [
+      drawer: fullscreen ? null : Drawer(backgroundColor: const Color(0xff0d1720), child: SafeArea(child: ListView(children: [
         const Padding(padding: EdgeInsets.fromLTRB(28, 28, 16, 18), child: Text('KHÔNG GIAN CỦA BẠN', style: TextStyle(fontSize: 10, letterSpacing: 2, color: Color(0xff93a7b3)))),
         task('tv', Icons.live_tv, 'QuangTV', selected: section == 0),
         task('iptv', Icons.playlist_play, 'IPTV'),

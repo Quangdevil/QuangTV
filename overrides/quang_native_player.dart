@@ -14,6 +14,9 @@ class QuangNativePlayer extends StatefulWidget {
   final Channel channel;
   final bool startWithVlc;
   final bool startMuted;
+  final bool embedded;
+  final bool active;
+  final ValueChanged<bool>? onFullscreenChanged;
   @visibleForTesting
   final List<String>? fallbackOverride;
   const QuangNativePlayer({
@@ -21,16 +24,21 @@ class QuangNativePlayer extends StatefulWidget {
     required this.channel,
     this.startWithVlc = false,
     this.startMuted = false,
+    this.embedded = false,
+    this.active = true,
+    this.onFullscreenChanged,
     this.fallbackOverride,
   });
   @override
-  State<QuangNativePlayer> createState() => _QuangNativePlayerState();
+  State<QuangNativePlayer> createState() => QuangNativePlayerState();
 }
 
-class _QuangNativePlayerState extends State<QuangNativePlayer> {
+class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindingObserver {
   late double volume;
   double lastAudibleVolume = 1;
   bool fullscreen = false;
+  bool manualFullscreen = false;
+  bool resumed = true;
   bool controlsVisible = true;
   Timer? controlsTimer;
   VideoPlayerController? controller;
@@ -94,6 +102,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     volume = widget.startMuted ? 0 : 1;
     _scheduleControlsHide();
     _initializePlayback();
@@ -103,7 +112,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final next = MediaQuery.orientationOf(context) == Orientation.landscape;
+    final next = manualFullscreen || MediaQuery.orientationOf(context) == Orientation.landscape;
     if (next != fullscreen) {
       fullscreen = next;
       // Rotation changes the viewport, not the user's request for controls.
@@ -111,11 +120,52 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       controlsVisible = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
+          widget.onFullscreenChanged?.call(fullscreen);
           SystemChrome.setEnabledSystemUIMode(
             fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
           );
         }
       });
+    }
+  }
+
+  bool get shouldPlay => widget.active && resumed && !userPaused;
+
+  @override
+  void didUpdateWidget(covariant QuangNativePlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active) _applyActivity();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!widget.embedded) return;
+    resumed = state == AppLifecycleState.resumed;
+    _applyActivity();
+  }
+
+  Future<void> _applyActivity() async {
+    try {
+      if (controller?.value.isInitialized == true) {
+        if (shouldPlay) { await controller?.play(); } else { await controller?.pause(); }
+      }
+      if (vlc?.value.isInitialized == true) {
+        if (shouldPlay) { await vlc?.play(); } else { await vlc?.pause(); }
+      }
+    } catch (_) { /* A channel switch can dispose the old controller. */ }
+  }
+
+  void toggleFullscreen() => _toggleFullscreen();
+
+  void _toggleFullscreen() {
+    final next = !fullscreen;
+    manualFullscreen = next;
+    setState(() => fullscreen = next);
+    widget.onFullscreenChanged?.call(next);
+    SystemChrome.setEnabledSystemUIMode(next ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
+    if (!next && MediaQuery.orientationOf(context) == Orientation.landscape) {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      Future<void>.delayed(const Duration(milliseconds:700), () => SystemChrome.setPreferredOrientations(DeviceOrientation.values));
     }
   }
 
@@ -250,6 +300,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         loading ||
         switching ||
         userPaused ||
+        !widget.active || !resumed ||
         p == null ||
         usingVlc) {
       return;
@@ -396,7 +447,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
           // Set volume before the first play, including Private's initial mute.
           await player.setVolume((volume * 100).round());
           if (mounted && token == vlcToken) {
-            await player.play();
+            if (shouldPlay) { await player.play(); }
             if (mounted && token == vlcToken) setState(() {});
           }
         } catch (e) {
@@ -500,7 +551,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       }
       controller = player;
       await player.setVolume(volume);
-      await player.play();
+      if (shouldPlay) { await player.play(); }
       if (mounted) {
         setState(() {
           loading = false;
@@ -589,6 +640,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     fallbackGeneration++;
     generation++;
     controlsTimer?.cancel();
@@ -630,11 +682,16 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
         ? p.value.aspectRatio
         : 16 / 9;
     final visible = controlsVisible;
-    return Theme(
+    return PopScope(
+      canPop: !widget.embedded || !fullscreen,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && widget.embedded && fullscreen) _toggleFullscreen();
+      },
+      child: Theme(
       data: ThemeData.dark(useMaterial3: true),
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: fullscreen
+        appBar: fullscreen || widget.embedded
             ? null
             : AppBar(
                 title: Text(widget.channel.name),
@@ -747,7 +804,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                         child: Row(
                           children: [
                             BackButton(
-                              onPressed: () => Navigator.maybePop(context),
+                              onPressed: widget.embedded ? _toggleFullscreen : () => Navigator.maybePop(context),
                             ),
                             Expanded(
                               child: Text(
@@ -800,6 +857,12 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
+                                  IconButton(
+                                    key: const ValueKey('player-fullscreen'),
+                                    tooltip: fullscreen ? 'Thu nhỏ' : 'Toàn màn hình',
+                                    icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+                                    onPressed: _toggleFullscreen,
+                                  ),
                                   IconButton(
                                     tooltip: 'Thử lại',
                                     icon: const Icon(Icons.refresh),
@@ -871,6 +934,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

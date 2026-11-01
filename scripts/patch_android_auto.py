@@ -19,7 +19,7 @@ def patch(app=APP):
     shutil.copyfile(sdk, app / 'libs/aauto.aar')
     source = app / 'src/main/java/app/tvviewer/player'
     source.mkdir(parents=True, exist_ok=True)
-    for name in ('QuangAutoActivity.java', 'QuangAutoService.java', 'QuangAutoDiagnostics.java', 'QuangAutoDiagnosticsActivity.java'):
+    for name in ('QuangAutoActivity.java', 'QuangAutoService.java', 'QuangAutoDiagnostics.java', 'QuangAutoDiagnosticsActivity.java', 'QuangGeckoBrowser.java', 'QuangGeckoActivity.java'):
         shutil.copyfile(ROOT / 'overrides' / name, source / name)
 
     manifest = app / 'src/main/AndroidManifest.xml'
@@ -39,15 +39,11 @@ def patch(app=APP):
         <meta-data android:name="com.google.android.gms.car.application.theme"
             android:resource="@style/QuangAutoTheme" />
         <activity android:name="app.tvviewer.player.QuangAutoDiagnosticsActivity"
-            android:label="QuangTV Auto – Chẩn đoán" android:exported="true"
+            android:label="QuangTV Auto – Chẩn đoán" android:exported="false"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
         <service android:name="app.tvviewer.player.QuangAutoService"
-            android:exported="true" android:label="QuangTV Auto">
+            android:exported="true" android:label="QuangTV · Mây">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
@@ -57,6 +53,46 @@ def patch(app=APP):
     </application>''')
         ET.fromstring(text)
         manifest.write_text(text)
+    # One phone launcher icon. Diagnostics stays inside app settings.
+    text = manifest.read_text()
+    text = re.sub(r'(<activity\b[^>]*android:name="app\.tvviewer\.player\.QuangAutoDiagnosticsActivity"[^>]*>).*?</activity>',
+        lambda m: re.sub(r'android:exported="true"', 'android:exported="false"', m.group(1)) + '</activity>', text, flags=re.S)
+    if 'app.tvviewer.player.QuangGeckoActivity' not in text:
+        text = text.replace('</application>', '''
+        <activity android:name="app.tvviewer.player.QuangGeckoActivity" android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar" android:hardwareAccelerated="true"
+            android:resizeableActivity="true" android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|uiMode|keyboardHidden" />
+        <activity-alias android:name="app.tvviewer.player.QuangParked" android:targetActivity="app.tvviewer.player.MainActivity"
+            android:exported="true" android:label="QuangTV · Đỗ xe">
+            <intent-filter><action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.CAR_LAUNCHER" /></intent-filter>
+        </activity-alias>
+        </application>''')
+    if 'android:appCategory=' not in text:
+        text = text.replace('<application', '<application android:appCategory="video"', 1)
+    text = re.sub(r'(<service\b[^>]*android:name="com\.ryanheise\.audioservice\.AudioService")(?![^>]*android:label)', r'\1 android:label="QuangTV · Âm thanh"', text)
+    if 'package android:name="com.google.android.projection.gearhead"' not in text and '<queries>' in text:
+        text = text.replace('<queries>', '<queries><package android:name="com.google.android.projection.gearhead" />', 1)
+    ET.fromstring(text)
+    manifest.write_text(text)
+    assets = app / 'src/main/assets/may_gecko'
+    assets.mkdir(parents=True, exist_ok=True)
+    for name in ('manifest.json', 'background.js'):
+        shutil.copyfile(ROOT / 'overrides/may_gecko' / name, assets / name)
+    activity = app / 'src/main/kotlin/app/tvviewer/player/MainActivity.kt'
+    if activity.exists():
+        kotlin = activity.read_text().replace('Intent(this, QuangBrowserActivity::class.java)', 'Intent(this, QuangGeckoActivity::class.java)')
+        if '"quangtv/auto"' not in kotlin:
+            kotlin = kotlin.replace('    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {', '''    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/auto").setMethodCallHandler { call, result ->
+            if (call.method == "diagnostics") {
+                startActivity(Intent(this, QuangAutoDiagnosticsActivity::class.java)); result.success(null)
+            } else result.notImplemented()
+        }
+''', 1)
+        activity.write_text(kotlin)
+
     # AudioService's default BaseAudioHandler returns an empty browser tree.
     # Supply the same public catalog used by the native projection screen.
     flutter = app.parents[1]
@@ -88,6 +124,9 @@ def patch(app=APP):
 ''')
     gradle = app / 'build.gradle'
     text = gradle.read_text()
+    if 'org.mozilla.geckoview:geckoview:' not in text:
+        text += '\n// quangtv.gecko.native: independent browser engine, not Android WebView.\nrepositories { maven { url "https://maven.mozilla.org/maven2/" } }\ndependencies { implementation "org.mozilla.geckoview:geckoview:159.0.20261022150525" }\nandroid { compileSdk 36 }\n'
+
     if 'libs/aauto.aar' not in text:
         gradle.write_text(text + '''
 dependencies {
@@ -97,6 +136,8 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
 }
 ''')
+    else:
+        gradle.write_text(text)
     rules = app / 'proguard-rules.pro'
     text = rules.read_text()
     if '# QuangTV Auto projection' not in text:
@@ -107,6 +148,8 @@ dependencies {
 -keep class app.tvviewer.player.QuangAutoActivity { *; }
 -keep class app.tvviewer.player.QuangAutoService { *; }
 -keep class app.tvviewer.player.QuangAutoDiagnosticsActivity { *; }
+-keep class app.tvviewer.player.QuangGeckoBrowser { *; }
+-keep class app.tvviewer.player.QuangGeckoActivity { *; }
 ''')
 
 

@@ -1,187 +1,48 @@
 package app.tvviewer.player;
-
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
-import android.view.View;
-import android.view.ViewGroup;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.FrameLayout;
-import android.widget.LinearLayout;
-import android.widget.TextView;
+import android.view.*;
+import android.widget.*;
 import com.google.android.apps.auto.sdk.CarActivity;
-import com.google.android.apps.auto.sdk.SearchCallback;
-import com.google.android.apps.auto.sdk.SearchItem;
-import org.json.JSONObject;
+import com.google.android.gms.car.CarSensorManager;
 
-/** Native projection UI. Does not start phone Activities from the car display. */
+/** Native task rail, bundled Gecko content, and a fail-closed parked-state gate. */
 public final class QuangAutoActivity extends CarActivity {
-    private static final String MAY = "https://may-viet-web-proxy.daquang.workers.dev/";
-    private static final String YOUTUBE = MAY + "tube";
-    private LinearLayout root;
-    private FrameLayout content;
-    private TextView status;
-    private WebView web;
-    private View fullScreen;
-    private WebChromeClient.CustomViewCallback fullScreenCallback;
-    private boolean stopped;
-
-    @Override public void onCreate(Bundle state) {
-        QuangAutoDiagnostics.record(this, "activity.onCreate", null);
-        try { initialize(state); }
-        catch (RuntimeException | LinkageError error) {
-            QuangAutoDiagnostics.record(this, "activity.startup.failed", error);
-            throw error;
-        }
-    }
-
-    private void initialize(Bundle state) {
-        super.onCreate(state);
-        QuangAutoDiagnostics.record(this, "activity.super.ready", null);
-        setIgnoreConfigChanges(0xFFFFFFFF);
-        // Optional host chrome must not prevent the main screen from opening.
-        try {
-            getCarUiController().getStatusBarController().hideAppHeader();
-            getCarUiController().getMenuController().hideMenuButton();
-        } catch (RuntimeException error) { QuangAutoDiagnostics.record(this, "host.chrome.failed", error); }
-        root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
-        status = new TextView(this);
-        status.setTextColor(Color.WHITE);
-        status.setPadding(12, 4, 12, 4);
-        status.setVisibility(View.GONE);
-        root.addView(status);
-        content = new FrameLayout(this);
-        root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(root);
-        QuangAutoDiagnostics.record(this, "activity.view.attached", null);
-        try {
-        getCarUiController().getSearchController().setSearchHint("Tìm trong QuangTube của Mây");
-        getCarUiController().getSearchController().setSearchCallback(new SearchCallback() {
-            @Override public void onSearchItemSelected(SearchItem item) {}
-            @Override public void onSearchTextChanged(String text) {}
-            @Override public boolean onSearchSubmitted(String text) {
-                String query = text.trim();
-                getCarUiController().getSearchController().stopSearch();
-                Uri uri = Uri.parse(query);
-                if ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) {
-                    String path = uri.getPath();
-                    openWeb(query);
-                } else {
-                    if (web != null && web.getUrl() != null && Uri.parse(web.getUrl()).getPath().startsWith("/tube")) {
-                        web.evaluateJavascript("(()=>{const q=document.getElementById('tube-query');const f=document.getElementById('tube-search');if(q&&f){q.value=" + JSONObject.quote(query) + ";q.dispatchEvent(new Event('input',{bubbles:true}));f.requestSubmit();}})()", null);
-                    } else openWeb(YOUTUBE);
-                }
-                return true;
-            }
-        });
-        } catch (RuntimeException error) { QuangAutoDiagnostics.record(this, "host.search.failed", error); }
-        String initial = state == null ? null : state.getString("quangtv.auto.url");
-        openWeb(initial == null ? MAY : initial);
-        QuangAutoDiagnostics.record(this, "activity.native.ready", null);
-    }
-
-    private void openWeb(String url) {
-        QuangAutoDiagnostics.record(this, "webview.open", null);
-        try { createWeb(url); }
-        catch (RuntimeException | LinkageError error) {
-            QuangAutoDiagnostics.record(this, "webview.failed", error);
-            if (status != null) { status.setText("Không mở được Mây. Mở QuangTV Auto – Chẩn đoán trên điện thoại."); status.setVisibility(View.VISIBLE); }
-        }
-    }
-
-    private void createWeb(String url) {
-        clearContent();
-        web = new WebView(new android.view.ContextThemeWrapper(
-                this, android.R.style.Theme_Material_NoActionBar));
-        WebSettings settings = web.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setUseWideViewPort(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setMediaPlaybackRequiresUserGesture(true);
-        settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        web.setWebViewClient(new WebViewClient() {
-            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String scheme = request.getUrl().getScheme();
-                return !("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme));
-            }
-            @Override public void onPageFinished(WebView view, String loaded) {
-                status.setVisibility(View.GONE);
-                QuangAutoDiagnostics.record(QuangAutoActivity.this, "webview.page.ready", null);
-            }
-        });
-        web.setWebChromeClient(new WebChromeClient() {
-            @Override public void onShowCustomView(View view, CustomViewCallback callback) {
-                if (fullScreen != null) { callback.onCustomViewHidden(); return; }
-                fullScreen = view;
-                fullScreenCallback = callback;
-                web.setVisibility(View.GONE);
-                content.addView(view, new FrameLayout.LayoutParams(-1, -1));
-            }
-            @Override public void onHideCustomView() { leaveFullScreen(); }
-        });
-        content.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        status.setVisibility(View.GONE);
-        web.loadUrl(url);
-    }
-
-    private void leaveFullScreen() {
-        if (fullScreen == null) return;
-        content.removeView(fullScreen);
-        fullScreen = null;
-        WebChromeClient.CustomViewCallback callback = fullScreenCallback;
-        fullScreenCallback = null;
-        if (web != null) web.setVisibility(View.VISIBLE);
-        if (callback != null) callback.onCustomViewHidden();
-    }
-
-    private void back() {
-        if (fullScreen != null) leaveFullScreen();
-        else if (web != null && web.canGoBack()) web.goBack();
-        else if (web != null && !MAY.equals(web.getUrl())) openWeb(MAY);
-        else super.onBackPressed();
-    }
-
-    private void clearContent() {
-        leaveFullScreen();
-        if (web != null) {
-            web.onPause();
-            web.stopLoading();
-            if (web.getParent() instanceof ViewGroup) ((ViewGroup) web.getParent()).removeView(web);
-            web.destroy();
-            web = null;
-        }
-        if (content != null) content.removeAllViews();
-    }
-
-    @Override public void onBackPressed() { back(); }
-    @Override public void onSaveInstanceState(Bundle state) {
-        super.onSaveInstanceState(state);
-        if (web != null) state.putString("quangtv.auto.url", web.getUrl());
-    }
-    @Override public void onResume() {
-        super.onResume();
-        stopped = false;
-        if (web != null) web.onResume();
-    }
-    @Override public void onStop() {
-        stopped = true;
-        if (web != null) {
-            web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(v=>v.pause())", null);
-            web.onPause();
-        }
-        super.onStop();
-    }
-    @Override public void onDestroy() {
-        clearContent();
-        super.onDestroy();
-    }
+ private static final String MAY="https://may-viet-web-proxy.daquang.workers.dev/";
+ private LinearLayout root,rail;
+ private FrameLayout content;
+ private TextView blocked;
+ private QuangGeckoBrowser browser;
+ private CarSensorManager sensors;
+ private boolean statusKnown,restricted=true,moving,stopped;
+ private final CarSensorManager.CarSensorEventListener listener=(type,time,floats,bytes)->{
+   if(type==11&&bytes!=null&&bytes.length>0){statusKnown=true;restricted=bytes[0]!=0;}
+   if(type==2&&floats!=null&&floats.length>0)moving=Math.abs(floats[0])>.05f;
+   updateGate();
+ };
+ @Override public void onCreate(Bundle saved){
+  super.onCreate(saved);QuangAutoDiagnostics.record(this,"activity.onCreate.nativeGecko",null);setIgnoreConfigChanges(0xffffffff);
+  try{getCarUiController().getStatusBarController().hideAppHeader();getCarUiController().getMenuController().hideMenuButton();}catch(RuntimeException ignored){}
+  root=new LinearLayout(this);root.setBackgroundColor(0xff0b111a);root.setOrientation(LinearLayout.HORIZONTAL);
+  rail=new LinearLayout(this);rail.setOrientation(LinearLayout.VERTICAL);rail.setPadding(dp(8),dp(12),dp(8),dp(12));
+  TextView title=new TextView(this);title.setText("☁ Mây");title.setTextColor(0xff8ae4d1);title.setTextSize(24);title.setPadding(dp(12),0,0,dp(12));rail.addView(title);
+  task("QuangTV",MAY);task("QuangTube",MAY+"tube");task("Podcast",MAY+"iptv?tab=podcast");task("Radio",MAY+"iptv?tab=radio");task("Private",MAY+"iptv?tab=private");task("Trình duyệt",null);
+  ScrollView scroll=new ScrollView(this);scroll.addView(rail);root.addView(scroll,new LinearLayout.LayoutParams(dp(150),-1));
+  content=new FrameLayout(this);root.addView(content,new LinearLayout.LayoutParams(0,-1,1));
+  blocked=new TextView(this);blocked.setBackgroundColor(0xff0b111a);blocked.setTextColor(Color.WHITE);blocked.setTextSize(20);blocked.setGravity(Gravity.CENTER);blocked.setText("Chỉ mở nội dung khi xe đã đỗ.\nĐang chờ trạng thái từ Android Auto…");content.addView(blocked,new FrameLayout.LayoutParams(-1,-1));
+  setContentView(root);
+  try{sensors=(CarSensorManager)a("sensor");sensors.registerListener(listener,11,3);CarSensorManager.RawEventData initial=sensors.getLatestSensorEvent(11);if(initial!=null)listener.onSensorChanged(initial.sensorType,initial.timeStamp,initial.floatValues,initial.byteValues);if(sensors.isSensorSupported(2)){sensors.registerListener(listener,2,3);CarSensorManager.RawEventData speed=sensors.getLatestSensorEvent(2);if(speed!=null)listener.onSensorChanged(speed.sensorType,speed.timeStamp,speed.floatValues,speed.byteValues);}}
+  catch(Exception error){QuangAutoDiagnostics.record(this,"parked.sensor.unavailable",error);}
+  if(browser==null&&statusKnown&&!restricted&&!moving)open(MAY);
+  updateGate();
+ }
+ private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
+ private void task(String title,String url){Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setTextSize(15);b.setTextColor(0xff8ae4d1);b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xff14232d));b.setOnClickListener(v->open(url));rail.addView(b,new LinearLayout.LayoutParams(-1,dp(52)));}
+ private boolean allowed(){return statusKnown&&!restricted&&!moving&&!stopped;}
+ private void open(String url){if(!allowed()){updateGate();return;}if(browser!=null){browser.close();content.removeView(browser);}browser=new QuangGeckoBrowser(this,url!=null,full->{if(rail.getParent() instanceof View)((View)rail.getParent()).setVisibility(full?View.GONE:View.VISIBLE);});content.addView(browser,0,new FrameLayout.LayoutParams(-1,-1));if(url!=null)browser.navigate(url);updateGate();}
+ private void updateGate(){if(blocked==null)return;boolean allow=allowed();blocked.setVisibility(allow?View.GONE:View.VISIBLE);if(browser!=null){browser.setActive(allow);browser.setVisibility(allow?View.VISIBLE:View.INVISIBLE);}if(!allow&&statusKnown)blocked.setText("Chỉ mở video và trình duyệt khi xe đã đỗ.");if(allow&&browser==null&&content!=null)open(MAY);}
+ @Override public void onResume(){super.onResume();stopped=false;updateGate();}
+ @Override public void onStop(){stopped=true;updateGate();super.onStop();}
+ @Override public void onBackPressed(){if(browser!=null&&browser.back())return;super.onBackPressed();}
+ @Override public void onDestroy(){if(sensors!=null)sensors.unregisterListener(listener);if(browser!=null)browser.close();super.onDestroy();}
 }

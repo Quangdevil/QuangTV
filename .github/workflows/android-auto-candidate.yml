@@ -53,7 +53,7 @@ jobs:
       - name: Verify public channel export
         working-directory: upstream/flutter_app
         run: |
-          flutter analyze lib/screens/quang_auto_channels.dart lib/screens/quang_update_screen.dart lib/screens/quang_update_release.dart lib/services/quang_auto_media.dart lib/services/background_audio_service.dart
+          flutter analyze lib/screens/quang_may_shell.dart lib/screens/quang_discover_screen.dart lib/screens/quang_auto_channels.dart lib/screens/quang_update_screen.dart lib/screens/quang_update_release.dart lib/services/quang_auto_media.dart lib/services/background_audio_service.dart
           flutter test test/quang_auto_channels_test.dart test/quang_update_release_test.dart test/quang_auto_media_test.dart
       - name: Build isolated preview APK
         # Preview 2 retains its package and stable test signer for in-place updates.
@@ -82,7 +82,7 @@ jobs:
           }
           GRADLE
           cd upstream/flutter_app
-          flutter build apk --release --split-per-abi --target-platform android-arm64 --build-name=1.3.0-auto-preview2 --build-number=${{ github.run_number }}
+          flutter build apk --release --split-per-abi --target-platform android-arm64 --dart-define=QUANGTV_AUTO=true --build-name=1.3.0-auto-preview2 --build-number=${{ github.run_number }}
       - name: Verify packaged projection service and minified classes
         run: python3 scripts/verify_android_auto_apk.py upstream/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
       - uses: actions/upload-artifact@v4

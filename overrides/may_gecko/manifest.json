@@ -1,0 +1,1 @@
+{"manifest_version":2,"name":"May native browser transport","version":"1.0","browser_specific_settings":{"gecko":{"id":"may-native@quangtv"}},"permissions":["nativeMessaging","nativeMessagingFromContent","geckoViewAddons","proxy","webRequest","webRequestBlocking","<all_urls>","tabs"],"background":{"scripts":["background.js"]}}

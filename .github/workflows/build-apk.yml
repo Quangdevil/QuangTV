@@ -201,6 +201,7 @@ jobs:
           grep -q 'QUANGTV_YOUTUBE_DIRECT_PASS' playback-evidence/ota-test-result.txt
           grep -q 'QUANGTV_YOUTUBE_HISTORY_PASS' playback-evidence/ota-test-result.txt
           grep -q 'QUANGTV_MAY_HOME_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_INLINE_HOME_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_EMBED_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_CONTROLS_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_DEMO_START_PASS' playback-evidence/browser-test-result.txt

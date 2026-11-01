@@ -25,15 +25,64 @@ void main() {
         {'name':'HTV7','url':'https://example.org/htv.m3u8'},
         {'name':'VTV3 HD','url':'https://example.org/vtv3.m3u8'},
         {'name':'VTV1 HD','url':'https://example.org/vtv1.m3u8'},
+        for (var i=0;i<30;i++) {'name':'Kênh thử $i','url':'http://10.0.2.2:8765/fixture.mp4?channel=$i'},
       ]),
       'quangtv_favorites': ['https://example.org/vtv1.m3u8'],
     });
     await tester.pumpWidget(const MaterialApp(home: QuangDiscoverScreen(mayHome:true)));
     await tester.pump(const Duration(seconds:2));
     expect(find.byKey(const ValueKey('quangtv-may-home')),findsOneWidget);
-    expect(find.text('3 kênh · VTV ở đầu'),findsOneWidget);
-    final rows=tester.widgetList<ListTile>(find.descendant(of:find.byKey(const ValueKey('may-channel-list')),matching:find.byType(ListTile))).toList();
+    expect(find.text('33 kênh · VTV ở đầu'),findsOneWidget);
+    final rows=tester.widgetList<ListTile>(find.descendant(of:find.byKey(const ValueKey('may-channel-list')),matching:find.byType(ListTile))).where((tile) => tile.key is ValueKey<String> && (tile.key! as ValueKey<String>).value.startsWith('may-channel-')).toList();
     expect((rows.first.title! as Text).data,'VTV1 HD');
+    expect(tester.widget<QuangNativePlayer>(find.byType(QuangNativePlayer,skipOffstage:false)).channel.name,'VTV3 HD');
+    Future<Object> advancing() async {
+      final end=DateTime.now().add(const Duration(seconds:60));
+      while(DateTime.now().isBefore(end)) {
+        await tester.pump(const Duration(milliseconds:400));
+        final media3=tester.widgetList<VideoPlayer>(find.byType(VideoPlayer,skipOffstage:false));
+        if(media3.isNotEmpty && media3.first.controller.value.isPlaying && media3.first.controller.value.position.inSeconds>=2) {
+          expect(media3.first.controller.value.volume,1);
+          return media3.first.controller;
+        }
+        final vlc=tester.widgetList<VlcPlayer>(find.byType(VlcPlayer,skipOffstage:false));
+        if(vlc.isNotEmpty && vlc.first.controller.value.isPlaying && vlc.first.controller.value.position.inSeconds>=2) {
+          expect(vlc.first.controller.value.volume,100);
+          return vlc.first.controller;
+        }
+      }
+      fail('Inline player must autoplay and advance at full app volume');
+    }
+    final firstController=await advancing();
+    await tester.tap(find.byKey(const ValueKey('home-fullscreen')));
+    await tester.pump(const Duration(milliseconds:500));
+    expect(find.byType(AppBar),findsNothing);
+    expect(await advancing(),same(firstController),reason:'Fullscreen must retain the decoder');
+    if (tester.widget<IgnorePointer>(find.byKey(const ValueKey('player-controls'))).ignoring) {
+      await tester.tap(find.byKey(const ValueKey('player-tap-surface')));
+      await tester.pump(const Duration(milliseconds:300));
+    }
+    await tester.tap(find.byKey(const ValueKey('player-fullscreen')));
+    await tester.pump(const Duration(milliseconds:500));
+    expect(find.byType(AppBar),findsOneWidget);
+    expect(await advancing(),same(firstController));
+    final scroll=find.byKey(const ValueKey('may-channel-list'));
+    await tester.drag(scroll,const Offset(0,-650));await tester.pump(const Duration(milliseconds:400));
+    final search=find.byType(TextField).first;
+    final firstY=tester.getTopLeft(search).dy;
+    await tester.drag(scroll,const Offset(0,-450));await tester.pump(const Duration(milliseconds:400));
+    expect(tester.getTopLeft(search).dy,closeTo(firstY,2));
+    expect(tester.getTopLeft(find.byKey(const ValueKey('home-top-bar'))).dy,greaterThanOrEqualTo(tester.getBottomRight(scroll).dy-1));
+    await tester.tap(find.byKey(const ValueKey('home-scroll-top')));await tester.pump(const Duration(milliseconds:500));
+    final firstChannel=find.byKey(const ValueKey('may-channel-0-https://example.org/vtv1.m3u8'));
+    await tester.ensureVisible(firstChannel);await tester.pump(const Duration(milliseconds:300));await tester.tap(firstChannel);
+    await tester.pump(const Duration(milliseconds:300));
+    expect(tester.widget<QuangNativePlayer>(find.byType(QuangNativePlayer,skipOffstage:false)).channel.name,'VTV1 HD');
+    expect(tester.widget<QuangNativePlayer>(find.byType(QuangNativePlayer,skipOffstage:false)).embedded,true);
+    await advancing();
+    debugPrint('QUANGTV_INLINE_HOME_PASS autoplayVtv3=true volume100=true inlineChannelSwitch=true fullscreenRetainsDecoder=true pinnedSearch=true topButtonOutsideChannels=true');
+    final homeScroll=tester.widget<CustomScrollView>(scroll).controller!;
+    homeScroll.jumpTo(0);await tester.pump(const Duration(milliseconds:500));
     debugPrint('QUANGTV_MAY_HOME_READY');
     await const MethodChannel('quangtv/browser').invokeMethod<void>('homeSnapshot');
     await tester.runAsync(() => Future<void>.delayed(const Duration(seconds:2)));
@@ -63,6 +112,9 @@ void main() {
     await menu('podcast');expect(find.text('Podcast · Phát trong QuangTV'),findsOneWidget);
     await menu('radio');expect(find.text('Radio · Nghe trong QuangTV'),findsOneWidget);
     await menu('favorites');expect(find.text('Kênh yêu thích'),findsOneWidget);expect(find.text('VTV1 HD'),findsOneWidget);
+    await tester.tap(find.text('VTV1 HD'));await tester.pump(const Duration(milliseconds:500));
+    expect(tester.widget<QuangNativePlayer>(find.byType(QuangNativePlayer,skipOffstage:false)).channel.name,'VTV1 HD');
+    expect(find.text('Kênh yêu thích'),findsNothing);
     await menu('settings');expect(find.text('Đổi PIN Private'),findsOneWidget);
     Navigator.of(tester.element(find.text('Đổi PIN Private'))).pop();await tester.pump(const Duration(milliseconds:500));
     await menu('update');expect(find.byType(QuangUpdateScreen),findsOneWidget);
