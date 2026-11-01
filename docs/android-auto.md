@@ -1,5 +1,19 @@
 # QuangTV Auto preview
 
+## Build 12: current Mây interface
+
+The projection screen now loads https://may-viet-web-proxy.daquang.workers.dev/
+in its WebView, so the TV catalog, fresh VTV playback sources, QuangTube,
+Podcast/Radio tabs and responsive interface come from the current Mây app.
+It no longer recreates IPTV with a separate VideoView or a phone-saved catalog.
+The standard Android Auto audio browser remains a separate audio-only entry.
+The native seven-button UI documented below describes builds 11 and earlier.
+
+Runtime evidence and remaining real-head-unit admission limitations are in
+[the build 12 report](android-auto-may-runtime.md).
+
+## Previous native preview (through build 11)
+
 The preview adds a projection service with a native CarActivity, following the
 same legacy host interface used by Fermata Auto. It is not screen mirroring and
 does not require the phone's Flutter Activity to stay on screen.
