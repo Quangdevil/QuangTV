@@ -450,7 +450,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     ]);
     return Padding(padding: const EdgeInsets.fromLTRB(16, 14, 16, 0), child: wide
       ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(flex: 6, child: SingleChildScrollView(child: stage())), const SizedBox(width: 28), Expanded(flex: 4, child: library())])
-      : Column(children: [ConstrainedBox(constraints: BoxConstraints(maxHeight: constraints.maxHeight * .50), child: SingleChildScrollView(child: stage())), const SizedBox(height: 8), Expanded(child: library())]));
+      : Column(children: [ConstrainedBox(constraints: BoxConstraints(maxHeight: constraints.maxHeight * .30), child: SingleChildScrollView(child: stage())), const SizedBox(height: 8), Expanded(child: library())]));
   }));
 
   @override
