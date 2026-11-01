@@ -14,6 +14,8 @@ class QuangNativePlayer extends StatefulWidget {
   final Channel channel;
   final bool startWithVlc;
   final bool startMuted;
+  final bool embedded;
+  final VoidCallback? onFullscreen;
   @visibleForTesting
   final List<String>? fallbackOverride;
   const QuangNativePlayer({
@@ -21,6 +23,8 @@ class QuangNativePlayer extends StatefulWidget {
     required this.channel,
     this.startWithVlc = false,
     this.startMuted = false,
+    this.embedded = false,
+    this.onFullscreen,
     this.fallbackOverride,
   });
   @override
@@ -634,7 +638,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
       data: ThemeData.dark(useMaterial3: true),
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: fullscreen
+        appBar: widget.embedded ? null : fullscreen
             ? null
             : AppBar(
                 title: Text(widget.channel.name),
@@ -732,7 +736,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                     ),
                   ),
                 ),
-              if (fullscreen)
+              if (fullscreen && !widget.embedded)
                 Positioned(
                   top: 0,
                   left: 0,
@@ -781,7 +785,7 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (!fullscreen)
+                              if (!fullscreen && !widget.embedded)
                                 Text(
                                   usingVlc ? 'VLC nội bộ' : 'Android Media3',
                                 ),
@@ -859,7 +863,8 @@ class _QuangNativePlayerState extends State<QuangNativePlayer> {
                                     ),
                                 ],
                               ),
-                              _volumeControl(),
+                              if (!widget.embedded) _volumeControl(),
+                              if (widget.embedded) IconButton(tooltip: 'Toàn màn hình', icon: const Icon(Icons.fullscreen), onPressed: widget.onFullscreen),
                             ],
                           ),
                         ),
