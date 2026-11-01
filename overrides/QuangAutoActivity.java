@@ -10,26 +10,22 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.VideoView;
 import com.google.android.apps.auto.sdk.CarActivity;
 import com.google.android.apps.auto.sdk.SearchCallback;
 import com.google.android.apps.auto.sdk.SearchItem;
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Native projection UI. Does not start phone Activities from the car display. */
 public final class QuangAutoActivity extends CarActivity {
-    private static final String YOUTUBE = "https://m.youtube.com/";
+    private static final String MAY = "https://may-viet-web-proxy.daquang.workers.dev/";
+    private static final String YOUTUBE = MAY + "tube";
     private LinearLayout root;
     private FrameLayout content;
     private TextView status;
     private WebView web;
-    private VideoView video;
     private View fullScreen;
     private WebChromeClient.CustomViewCallback fullScreenCallback;
     private boolean stopped;
@@ -55,25 +51,17 @@ public final class QuangAutoActivity extends CarActivity {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.BLACK);
-        LinearLayout toolbar = new LinearLayout(this);
-        addButton(toolbar, "‹", this::back);
-        addButton(toolbar, "YouTube", () -> openWeb(YOUTUBE));
-        addButton(toolbar, "TV", this::showChannels);
-        addButton(toolbar, "Tìm", () -> getCarUiController().getSearchController().startSearch(""));
-        addButton(toolbar, "−10s", () -> seek(-10000));
-        addButton(toolbar, "▶/Ⅱ", this::togglePlayback);
-        addButton(toolbar, "+10s", () -> seek(10000));
-        root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
         status = new TextView(this);
         status.setTextColor(Color.WHITE);
         status.setPadding(12, 4, 12, 4);
+        status.setVisibility(View.GONE);
         root.addView(status);
         content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         QuangAutoDiagnostics.record(this, "activity.view.attached", null);
         try {
-        getCarUiController().getSearchController().setSearchHint("Tìm YouTube hoặc nhập URL HTTPS");
+        getCarUiController().getSearchController().setSearchHint("Tìm trong QuangTube của Mây");
         getCarUiController().getSearchController().setSearchCallback(new SearchCallback() {
             @Override public void onSearchItemSelected(SearchItem item) {}
             @Override public void onSearchTextChanged(String text) {}
@@ -83,26 +71,19 @@ public final class QuangAutoActivity extends CarActivity {
                 Uri uri = Uri.parse(query);
                 if ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) {
                     String path = uri.getPath();
-                    if (path != null && path.matches("(?i).*\\.(m3u8|mp4|webm|mp3|aac)$")) play(query, query);
-                    else openWeb(query);
-                } else openWeb(YOUTUBE + "results?search_query=" + Uri.encode(query));
+                    openWeb(query);
+                } else {
+                    if (web != null && web.getUrl() != null && Uri.parse(web.getUrl()).getPath().startsWith("/tube")) {
+                        web.evaluateJavascript("(()=>{const q=document.getElementById('tube-query');const f=document.getElementById('tube-search');if(q&&f){q.value=" + JSONObject.quote(query) + ";q.dispatchEvent(new Event('input',{bubbles:true}));f.requestSubmit();}})()", null);
+                    } else openWeb(YOUTUBE);
+                }
                 return true;
             }
         });
         } catch (RuntimeException error) { QuangAutoDiagnostics.record(this, "host.search.failed", error); }
-        showChannels();
-        status.setText("QuangTV Auto đã kết nối · Chọn YouTube hoặc TV");
+        String initial = state == null ? null : state.getString("quangtv.auto.url");
+        openWeb(initial == null ? MAY : initial);
         QuangAutoDiagnostics.record(this, "activity.native.ready", null);
-    }
-
-    private void addButton(LinearLayout row, String label, Runnable action) {
-        Button button = new Button(this);
-        button.setText(label);
-        button.setTextSize(16);
-        button.setMinWidth(0);
-        button.setMinimumWidth(0);
-        button.setOnClickListener(v -> action.run());
-        row.addView(button, new LinearLayout.LayoutParams(0, -2, 1));
     }
 
     private void openWeb(String url) {
@@ -110,7 +91,7 @@ public final class QuangAutoActivity extends CarActivity {
         try { createWeb(url); }
         catch (RuntimeException | LinkageError error) {
             QuangAutoDiagnostics.record(this, "webview.failed", error);
-            if (status != null) status.setText("Lỗi mở YouTube. Mở QuangTV Auto – Chẩn đoán trên điện thoại.");
+            if (status != null) { status.setText("Không mở được Mây. Mở QuangTV Auto – Chẩn đoán trên điện thoại."); status.setVisibility(View.VISIBLE); }
         }
     }
 
@@ -133,7 +114,7 @@ public final class QuangAutoActivity extends CarActivity {
                 return !("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme));
             }
             @Override public void onPageFinished(WebView view, String loaded) {
-                status.setText("QuangTV Auto · " + Uri.parse(loaded).getHost());
+                status.setVisibility(View.GONE);
                 QuangAutoDiagnostics.record(QuangAutoActivity.this, "webview.page.ready", null);
             }
         });
@@ -148,74 +129,8 @@ public final class QuangAutoActivity extends CarActivity {
             @Override public void onHideCustomView() { leaveFullScreen(); }
         });
         content.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        status.setText("QuangTV Auto · Đang tải…");
+        status.setVisibility(View.GONE);
         web.loadUrl(url);
-    }
-
-    private void showChannels() {
-        clearContent();
-        status.setText("Các kênh IPTV đã lưu trong QuangTV trên điện thoại");
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(list);
-        content.addView(scroll);
-        // shared_preferences Android backend prefixes Dart keys with flutter.
-        String cached = getSharedPreferences("FlutterSharedPreferences", 0)
-                .getString("flutter.quangtv_auto_channels", "[]");
-        int count = 0;
-        try {
-            JSONArray channels = new JSONArray(cached);
-            for (int i = 0; i < channels.length(); i++) {
-                JSONObject channel = channels.getJSONObject(i);
-                String name = channel.optString("name");
-                String url = channel.optString("url");
-                if (url.isEmpty()) continue;
-                Button button = new Button(this);
-                button.setText(name);
-                button.setOnClickListener(v -> play(name, url));
-                list.addView(button, new LinearLayout.LayoutParams(-1, -2));
-                count++;
-            }
-        } catch (Exception e) {
-            status.setText("Không đọc được danh sách kênh. Hãy tải lại danh sách trên điện thoại.");
-        }
-        if (count == 0) {
-            TextView empty = new TextView(this);
-            empty.setTextColor(Color.WHITE);
-            empty.setText("Mở QuangTV trên điện thoại và tải danh sách IPTV trước. Hoặc bấm Tìm để nhập URL phát trực tiếp.");
-            empty.setPadding(24, 24, 24, 24);
-            list.addView(empty);
-        }
-    }
-
-    private void play(String name, String url) {
-        clearContent();
-        status.setText("Đang tải · " + name);
-        VideoView current = new VideoView(this);
-        video = current;
-        content.addView(current, new FrameLayout.LayoutParams(-1, -1));
-        current.setOnPreparedListener(player -> {
-            if (video != current) return;
-            status.setText(name);
-            if (!stopped) current.start();
-        });
-        current.setOnErrorListener((player, what, extra) -> {
-            if (video != current) return true;
-            status.setText("Không phát được nguồn · " + name + " (" + what + "/" + extra + ")");
-            return true;
-        });
-        current.setVideoURI(Uri.parse(url));
-    }
-
-    private void togglePlayback() {
-        if (video != null) { if (video.isPlaying()) video.pause(); else video.start(); }
-        if (web != null) web.evaluateJavascript("(()=>{const v=document.querySelector('video');if(v){if(v.paused)v.play().catch(()=>{});else v.pause();}})()", null);
-    }
-
-    private void seek(int millis) {
-        if (video != null) video.seekTo(Math.max(0, video.getCurrentPosition() + millis));
-        if (web != null) web.evaluateJavascript("(()=>{const v=document.querySelector('video');if(v)v.currentTime=Math.max(0,v.currentTime+" + millis / 1000 + ");})()", null);
     }
 
     private void leaveFullScreen() {
@@ -231,13 +146,12 @@ public final class QuangAutoActivity extends CarActivity {
     private void back() {
         if (fullScreen != null) leaveFullScreen();
         else if (web != null && web.canGoBack()) web.goBack();
-        else if (web != null || video != null) showChannels();
+        else if (web != null && !MAY.equals(web.getUrl())) openWeb(MAY);
         else super.onBackPressed();
     }
 
     private void clearContent() {
         leaveFullScreen();
-        if (video != null) { video.stopPlayback(); video = null; }
         if (web != null) {
             web.onPause();
             web.stopLoading();
@@ -260,7 +174,6 @@ public final class QuangAutoActivity extends CarActivity {
     }
     @Override public void onStop() {
         stopped = true;
-        if (video != null) video.pause();
         if (web != null) {
             web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(v=>v.pause())", null);
             web.onPause();
