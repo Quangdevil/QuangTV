@@ -117,10 +117,12 @@ public final class QuangAutoActivity extends CarActivity {
     private void createWeb(String url) {
         clearContent();
         web = new WebView(new android.view.ContextThemeWrapper(
-                getApplicationContext(), android.R.style.Theme_Material_NoActionBar));
+                this, android.R.style.Theme_Material_NoActionBar));
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
