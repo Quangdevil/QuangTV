@@ -39,6 +39,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   Set<String> deletedChannels = {};
   List<Channel> privateChannels = [];
   bool loading = false;
+  Channel? activeTvChannel;
+  bool tvFullscreen = false;
   String error = '';
 
   @override
@@ -258,7 +260,11 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     await prefs.setStringList('quangtv_recent_channels', recentChannels);
     if (!mounted) return;
     setState(() {});
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c)));
+    if (section == 0) {
+      setState(() => activeTvChannel = c);
+    } else {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c)));
+    }
   }
 
   Future<void> _removeRecent(String url) async {
@@ -388,7 +394,11 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   Widget _mayTelevision(List<Channel> shown) => SafeArea(child: LayoutBuilder(builder: (context, constraints) {
     final all = [...personalChannels, ...channels].where((c) => !deletedChannels.contains(c.url) && !privateChannels.any((p) => p.url == c.url)).toList();
     final recent = recentChannels.expand((url) => all.where((c) => c.url == url)).toList();
-    final featured = recent.isNotEmpty ? recent.first : (shown.isNotEmpty ? shown.first : null);
+    final vtv3 = all.where((c) => QuangVtvSource.channelId(c.name) == '3').toList();
+    final featured = activeTvChannel ?? (vtv3.isNotEmpty ? vtv3.first : (shown.isNotEmpty ? shown.first : null));
+    if (activeTvChannel == null && featured != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && activeTvChannel == null) setState(() => activeTvChannel = featured); });
+    }
     final wide = constraints.maxWidth >= 760;
     Widget stage() => Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       const Text('QUANGTV × MÂY', style: TextStyle(fontSize: 9, letterSpacing: 2, color: Color(0xff93a7b3))),
@@ -397,14 +407,11 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         style: const TextStyle(fontSize: 24, height: 1.2, fontWeight: FontWeight.w600, color: Color(0xffedf5f5))),
       const SizedBox(height: 14),
       SizedBox(height: wide ? 240 : (constraints.maxHeight * .22).clamp(95.0, 165.0), width: double.infinity,
-        child: Material(color: const Color(0xff081018), borderRadius: BorderRadius.circular(16), clipBehavior: Clip.antiAlias,
-          child: InkWell(key: const ValueKey('may-featured-channel'), onTap: featured == null ? null : () => _playChannel(featured),
-            child: Container(decoration: BoxDecoration(border: Border.all(color: const Color(0xff263742)), borderRadius: BorderRadius.circular(16),
-              gradient: const RadialGradient(colors: [Color(0xff173b3b), Color(0xff070b11)], radius: 1.1)),
-              child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(Icons.play_circle_outline, color: QuangMayShell.mint, size: 46), SizedBox(height: 8),
-                Text('Chạm để xem', style: TextStyle(color: Color(0xffd9e8e8), fontSize: 14)),
-              ]))))),
+        child: ClipRRect(borderRadius: BorderRadius.circular(16), child: featured == null
+          ? const Center(child: Text('Đang tải kênh truyền hình'))
+          : QuangNativePlayer(key: ValueKey('inline-${featured.url}'), channel: featured, embedded: true,
+              onFullscreen: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: featured))))),
+      ),
       const SizedBox(height: 8),
       Text(recent.isNotEmpty ? 'Tiếp tục kênh đã xem' : 'Chọn kênh để bắt đầu', style: const TextStyle(fontSize: 11, color: Color(0xff93a7b3))),
       Wrap(spacing: 6, children: [
