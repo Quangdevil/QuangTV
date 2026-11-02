@@ -1,0 +1,40 @@
+name: Publish verified Auto 24
+on:
+  push:
+    branches: [publish/auto-preview24]
+    paths: [.github/workflows/publish-auto24.yml]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: QuangTV-Auto-Preview-arm64
+          run-id: 41386374569
+          github-token: ${{ github.token }}
+          path: artifact
+      - name: Verify and publish exact tested APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: Quangdevil/QuangTV
+        run: |
+          set -eu
+          apk="$(find artifact -name app-arm64-v8a-release.apk -print -quit)"
+          echo "13d17d9c8219e951b7017ef9740980f1f900bc71749908d7fd06abba81132e17  $apk" | sha256sum -c -
+          cp "$apk" QuangTV-Auto-Preview2-build24-arm64.apk
+          cat > notes.md <<'EOF'
+          Build 24: VTV channels first, valid Android Auto media metadata, preserved playback icons and stale-channel protection.
+
+          Installation for Mây · Video: download this APK and official KingInstaller 2.5 (https://github.com/fcaronte/KingInstaller/releases/tag/2.5). In KingInstaller choose this APK, leave Root/Shizuku OFF, use Install as king and confirm Update. Install over the existing Preview 2; do not uninstall. Reconnect Android Auto and select the mint cloud Mây · Video icon. QuangTV · Âm thanh is intentionally audio only. Future updates should use the same installer route.
+
+          Verified on Android 17 / Android Auto 17.9 emulator with a nondeveloper head-unit model: ordinary installation admitted audio only; the identical APK installed through KingInstaller admitted Mây · Video, all six destinations, and fullscreen VTV1 moving video. Actual Samsung One UI 9 / VF8 compatibility remains unconfirmed. Parked-only gate retained. This is a preview, not Google approval or production OTA.
+
+          Source: f2398cbc835a804a148c1b2719dd6598edf3f767
+          CI: https://github.com/Quangdevil/QuangTV/actions/runs/41386374569
+          SHA256: 13d17d9c8219e951b7017ef9740980f1f900bc71749908d7fd06abba81132e17
+          EOF
+          gh release create auto-preview2-build24 QuangTV-Auto-Preview2-build24-arm64.apk --target f2398cbc835a804a148c1b2719dd6598edf3f767 --title "Android Auto Preview 2 — build 24" --prerelease --latest=false --notes-file notes.md
