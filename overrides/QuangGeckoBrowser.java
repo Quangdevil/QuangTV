@@ -156,6 +156,7 @@ public final class QuangGeckoBrowser extends LinearLayout {
     }
     public boolean back(){if(menuView!=null){page.removeView(menuView);menuView=null;return true;}if(full){session.exitFullScreen();setFull(false);return true;}if(homeView!=null&&homeView.getVisibility()==VISIBLE)return false;if(session!=null&&Boolean.TRUE.equals(canBack.get(session)))session.goBack();else home();return true;}
     public void setActive(boolean value){active=value;if(session!=null)session.setActive(value&&!showingHome);}
+    public void enterFullscreen(){setFull(true);}
     private void setFull(boolean value){full=value;header.setVisibility(value||appPage?GONE:VISIBLE);tools.setVisibility(value||appPage?GONE:VISIBLE);state.setVisibility(value?GONE:VISIBLE);exit.setVisibility(value?VISIBLE:GONE);if(listener!=null)listener.fullscreen(value);}
     private View menuView;
     private void choose(String title,String[] items,java.util.function.IntConsumer action){
