@@ -26,7 +26,7 @@ for name in ('app.tvviewer.player.QuangAutoService', 'com.ryanheise.audioservice
     attributes = '\n'.join(attributes[:next((i for i, line in enumerate(attributes[1:], 1) if 'E: ' in line), len(attributes))])
     assert re.search(r'android:exported.*(?:0xffffffff|true)', attributes), f'{name} must be exported'
 assert 'android.intent.category.CAR_LAUNCHER' in manifest
-assert 'org.mozilla.geckoview' in manifest
+assert 'org.mozilla.gecko.process.GeckoChildProcessServices' in manifest
 assert 'android.media.browse.MediaBrowserService' in manifest
 assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION' in manifest
 assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM' in manifest
