@@ -1,0 +1,13 @@
+{
+  "build": 20,
+  "source": "f9a3f9bbdf5b175c9e88920cd10abfa1807dd09e",
+  "apkSHA256": "d1f1bb1280bf5e25f5461386975492d7a1d2fdbe47fb6900e7501249eae7a302",
+  "vtvMeanRGBDifference": 47.20877793896411,
+  "nativeURLVisible": "https://example.org/",
+  "urlKeyboardReopened": false,
+  "phoneLauncherCount": 1,
+  "realVehicleVerified": false,
+  "googleApproved": false,
+  "audioListeningTest": false,
+  "audioHeadUnitFocusGranted": true
+}
