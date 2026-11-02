@@ -61,7 +61,25 @@ object QuangModuleApi {
                     }catch(e:Exception){main.post{result.error("BROWSE",e.message ?: "Không mở được trang",null)}}finally{connection?.disconnect()}
                 }
             }
-            "catalog" -> QuangYouTube.catalog(a.applicationContext,call.argument<String>("query") ?: ""){items,error->if(items!=null)result.success(items)else result.error("TUBE",error,null)}
+            "catalog" -> {
+                val query=(call.argument<String>("query") ?: "").take(300)
+                workers.execute {
+                    var connection:HttpURLConnection?=null
+                    try {
+                        val path=if(query.isBlank())"tube-feed" else "tube"
+                        connection=URL("$ORIGIN/api/iptv/$path").openConnection() as HttpURLConnection
+                        connection.connectTimeout=15000;connection.readTimeout=20000;connection.requestMethod="POST";connection.doOutput=true;connection.setRequestProperty("Content-Type","application/json")
+                        val body=(if(query.isBlank())JSONObject().put("kind","home")else JSONObject().put("query",query)).toString().toByteArray(Charsets.UTF_8)
+                        connection.setFixedLengthStreamingMode(body.size);connection.outputStream.use{it.write(body)}
+                        check(connection.responseCode in 200..299)
+                        val text=connection.inputStream.bufferedReader().use{it.readText()};check(text.length<2*1024*1024)
+                        val videos=JSONObject(text).getJSONArray("videos")
+                        val items=(0 until videos.length()).mapNotNull{videos.optJSONObject(it)}.filter{it.optString("id").matches(Regex("[A-Za-z0-9_-]{11}"))}.take(40).map{mapOf<String,Any>("url" to "https://www.youtube.com/watch?v=${it.optString("id")}","title" to it.optString("title"),"author" to it.optString("author"),"thumbnail" to "https://i.ytimg.com/vi/${it.optString("id")}/hqdefault.jpg","duration" to it.optString("duration"))}
+                        check(items.isNotEmpty());main.post{result.success(items)}
+                    }catch(_:Exception){main.post{QuangYouTube.catalog(a.applicationContext,query){items,error->if(items!=null)result.success(items)else result.error("TUBE",error,null)}}}
+                    finally{connection?.disconnect()}
+                }
+            }
             "playback" -> QuangYouTube.playback(a.applicationContext,call.argument<String>("url") ?: ""){item,error->if(item!=null)result.success(item)else result.error("TUBE",error,null)}
             "tubeExtract" -> QuangYouTube.extract(a.applicationContext,call.argument<String>("url") ?: ""){choices,error->if(choices!=null)result.success(choices.map{mapOf("title" to it.title,"video" to it.video,"audio" to it.audio,"quality" to it.quality)})else result.error("TUBE",error,null)}
             "tubeDownload" -> {QuangYouTube.start(a,QuangYouTube.Choice(call.argument<String>("title") ?: "Video",call.argument<String>("video") ?: "",call.argument<String>("audio"),call.argument<String>("quality") ?: "MP4"));result.success(null)}

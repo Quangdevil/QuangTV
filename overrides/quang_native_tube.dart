@@ -26,6 +26,8 @@ class _QuangNativeTubeState extends State<QuangNativeTube> {
   void initState(){super.initState();_history();_load();}
   Future<void> _history()async{try{final value=await api.invokeMapMethod<String,dynamic>('history',{'legacy':widget.legacySearches});if(mounted)setState((){searches=(value?['searches'] as List? ?? []).map((e)=>e.toString()).toList();watched=(value?['videos'] as List? ?? []).map((e)=>Map<String,dynamic>.from(e as Map)).toList();});}on PlatformException{/* Keep the current list available. */}}
   Future<void> _load([String query=''])async{
+    final uri=Uri.tryParse(query);
+    if(uri?.scheme=='https'&&(uri!.host=='youtu.be'||uri.host=='youtube.com'||uri.host.endsWith('.youtube.com'))){await _play({'url':query,'title':'YouTube'});return;}
     final request=++generation;setState((){loading=true;error='';mode='feed';title=query.isEmpty?'Đề xuất':query;});
     try{if(query.trim().isNotEmpty)await api.invokeMethod<void>('recordSearch',{'query':query});final data=await api.invokeListMethod<dynamic>('catalog',{'query':query});if(mounted&&request==generation)setState(()=>items=(data ?? []).map((e)=>Map<String,dynamic>.from(e as Map)).toList());await _history();}
     on PlatformException catch(e){if(mounted&&request==generation)setState(()=>error=e.message ?? 'Không tải được danh sách');}

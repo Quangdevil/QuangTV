@@ -28,12 +28,16 @@ class _QuangNativeBrowserState extends State<QuangNativeBrowser> {
   late final WebViewController web;
   bool loading=false,showFiles=false,history=false;
   String page='',error='';int generation=0;
+  bool wasLandscape=false;
+  @override
+  void didChangeDependencies(){super.didChangeDependencies();final landscape=MediaQuery.orientationOf(context)==Orientation.landscape;if(landscape!=wasLandscape){wasLandscape=landscape;if(media.isNotEmpty||playing!=null){WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)widget.onFullscreen(landscape);});}}}
   Channel? playing;GlobalKey<QuangNativePlayerState> playerKey=GlobalKey<QuangNativePlayerState>();
   @override
   void initState(){super.initState();web=WebViewController()
     ..setBackgroundColor(const Color(0xff0b111a))
     ..setJavaScriptMode(JavaScriptMode.unrestricted)
     ..addJavaScriptChannel('MayNative',onMessageReceived:(message){
+      if(!mounted)return;
       try{final d=jsonDecode(message.message) as Map<String,dynamic>;if(d['token']!=token)return;
         final type=d['type'];if(type=='quang-media'){_detect(d['url']?.toString() ?? '');}
         if(type=='may-navigate'){_open(d['url']?.toString() ?? '',method:d['method']=='POST'?'POST':'GET',fields:d['fields']);}
@@ -41,6 +45,7 @@ class _QuangNativeBrowserState extends State<QuangNativeBrowser> {
       }catch(_){/* Ignore messages that are not from the app-owned parent. */}
     })
     ..setNavigationDelegate(NavigationDelegate(onNavigationRequest:(request){
+      if(!mounted)return NavigationDecision.prevent;
       if(request.url.startsWith('$origin/native-content')||request.url=='about:blank'||request.url=='about:srcdoc')return NavigationDecision.navigate;
       final uri=Uri.tryParse(request.url);
       if(uri==null||!['http','https'].contains(uri.scheme))return NavigationDecision.prevent;
@@ -55,6 +60,7 @@ class _QuangNativeBrowserState extends State<QuangNativeBrowser> {
     if(media.length<40&&mounted&&!media.contains(uri.toString()))setState(()=>media.add(uri.toString()));
   }
   Future<void> _open(String raw,{String method='GET',dynamic fields,bool replace=false})async{
+    if(!mounted)return;
     final value=raw.trim();if(value.isEmpty)return;
     final url=value.startsWith('http://')||value.startsWith('https://')?value:(!value.contains(' ')&&value.contains('.')?'https://$value':'https://duckduckgo.com/?q=${Uri.encodeQueryComponent(value)}');
     if(!['http','https'].contains(Uri.tryParse(url)?.scheme))return;
@@ -66,7 +72,7 @@ class _QuangNativeBrowserState extends State<QuangNativeBrowser> {
       if(!mounted||request!=generation)return;
       if(!replace&&page.isNotEmpty){previous.add(page);next.clear();}
       page=url;tabs[tabIndex].url=url;address.text=url;media.clear();
-      final capture="""<script>(()=>{const send=u=>{if(u)parent.postMessage({type:'quang-media',url:u},'*')};const scan=()=>{document.querySelectorAll('video,video source').forEach(v=>send(v.currentSrc||v.src));document.querySelectorAll('meta[property^="og:video"],meta[itemprop="contentUrl"]').forEach(m=>send(m.content));performance.getEntriesByType('resource').forEach(r=>send(r.name));};addEventListener('loadedmetadata',scan,true);addEventListener('message',e=>{if(e.source===parent&&e.data?.type==='quang-pause')document.querySelectorAll('video,audio').forEach(v=>v.pause())});setInterval(scan,1500);scan()})();</script>""";
+      const capture="""<script>(()=>{const send=u=>{if(u)parent.postMessage({type:'quang-media',url:u},'*')};const scan=()=>{document.querySelectorAll('video,video source').forEach(v=>send(v.currentSrc||v.src));document.querySelectorAll('meta[property^="og:video"],meta[itemprop="contentUrl"]').forEach(m=>send(m.content));performance.getEntriesByType('resource').forEach(r=>send(r.name));};addEventListener('loadedmetadata',scan,true);addEventListener('message',e=>{if(e.source===parent&&e.data?.type==='quang-pause')document.querySelectorAll('video,audio').forEach(v=>v.pause())});setInterval(scan,1500);scan()})();</script>""";
       final html=jsonEncode((data?['html']?.toString() ?? '')+capture).replaceAll('<',r'\u003c');
       final shell='''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0;background:#0b111a}</style></head><body><script>
       const f=document.createElement('iframe');f.setAttribute('sandbox','allow-scripts allow-forms');f.allow='fullscreen; autoplay';f.allowFullscreen=true;f.referrerPolicy='no-referrer';f.srcdoc=$html;document.body.append(f);
@@ -94,7 +100,7 @@ class _QuangNativeBrowserState extends State<QuangNativeBrowser> {
         IconButton(tooltip:'Phát trong app',icon:const Icon(Icons.play_circle_outline),onPressed:(){Navigator.pop(sheet);_pausePage();setState((){playerKey=GlobalKey<QuangNativePlayerState>();playing=Channel(name:'Video trình duyệt',url:'$origin/proxy?url=${Uri.encodeQueryComponent(url)}',country:'Browser');});}),
         IconButton(tooltip:'Tải về',icon:const Icon(Icons.download_outlined),onPressed:()async{Navigator.pop(sheet);try{final extension=Uri.tryParse(url)?.path.toLowerCase().endsWith('.webm')==true?'webm':Uri.tryParse(url)?.path.toLowerCase().endsWith('.m3u8')==true?'m3u8':'mp4';await api.invokeMethod<Object>('download',{'url':'$origin/proxy?url=${Uri.encodeQueryComponent(url)}','name':'May-${DateTime.now().millisecondsSinceEpoch}.$extension'});if(mounted)setState(()=>showFiles=true);}on PlatformException catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.message ?? 'Không tải được')));}}),
       ]))])),
-    ])))));
+    ]))));
   }
   @override
   void dispose(){generation++;web.runJavaScript("document.querySelector('iframe')?.remove()");address.dispose();super.dispose();}
@@ -102,7 +108,7 @@ class _QuangNativeBrowserState extends State<QuangNativeBrowser> {
   Widget build(BuildContext context){
     final video=playing;
     final content=video!=null?QuangNativePlayer(key:playerKey,channel:video,embedded:true,startMuted:true,onFullscreenChanged:widget.onFullscreen):page.isEmpty?_landing():WebViewWidget(controller:web);
-    if(widget.fullscreen)return Stack(children:[Positioned.fill(child:content),Positioned(top:8,right:8,child:IconButton(tooltip:'Thu nhỏ',onPressed:(){if(playerKey.currentState?.fullscreen==true){playerKey.currentState?.toggleFullscreen();}else{widget.onFullscreen(false);}},icon:const Icon(Icons.fullscreen_exit)))]);
+    if(widget.fullscreen)return PopScope(canPop:false,onPopInvokedWithResult:(didPop,result){if(!didPop){if(playerKey.currentState?.fullscreen==true){playerKey.currentState?.toggleFullscreen();}else{widget.onFullscreen(false);}}},child:Stack(children:[Positioned.fill(child:content),Positioned(top:8,right:8,child:IconButton(tooltip:'Thu nhỏ',onPressed:(){if(playerKey.currentState?.fullscreen==true){playerKey.currentState?.toggleFullscreen();}else{widget.onFullscreen(false);}},icon:const Icon(Icons.fullscreen_exit)))]));
     return Column(children:[
       Padding(padding:const EdgeInsets.fromLTRB(12,8,12,6),child:Row(children:[Expanded(child:TextField(controller:address,onSubmitted:_open,keyboardType:TextInputType.url,textInputAction:TextInputAction.go,decoration:const InputDecoration(hintText:'Tìm kiếm hoặc nhập địa chỉ',prefixIcon:Icon(Icons.public),isDense:true))),TextButton(onPressed:_tabs,child:Text('${tabs.length}')),IconButton(tooltip:'Trang đầu Mây',onPressed:_home,icon:const Icon(Icons.home_outlined))])),
       if(loading)const LinearProgressIndicator(),
