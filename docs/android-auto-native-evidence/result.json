@@ -1,0 +1,13 @@
+{
+  "vtvMeanRGBDifference": 69.26236118658474,
+  "tubeMeanRGBDifference": 72.9235707617495,
+  "source": "c8adff7b24640ce1589c8168b5f2bf54e2b94e27",
+  "build": 18,
+  "apkSHA256": "a1dfe447a6e1a90d0cc0c887109621a3747a55ea4e782a4626b9e2d44f5b3948",
+  "androidAuto": "17.9.664044-release",
+  "cleanInstall": true,
+  "seeded": false,
+  "instrumentationOverride": false,
+  "realVehicleVerified": false,
+  "googleApproved": false
+}

@@ -1,0 +1,16 @@
+{
+  "build": 21,
+  "nativeFullscreenButtonUsed": true,
+  "tubeMeanRGBDifference": 54.55774707742898,
+  "realVehicleVerified": false,
+  "googleApproved": false,
+  "listenedToAudio": false,
+  "source": "0508b8e8146217ff5f0e181ae8477e721e3037c4",
+  "apkSHA256": "b0ecb8b470405bdd847c52517a755b05589fb9a7cbc964d37f9b06fb022126f5",
+  "androidAuto": "17.9.664044-release",
+  "phoneLauncherCount": 1,
+  "androidCrashBytes": 0,
+  "headUnitAudioBufferSamples": 10240,
+  "seeded": false,
+  "instrumentationOverride": false
+}

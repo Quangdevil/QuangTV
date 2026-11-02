@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/channel.dart';
 import 'quang_native_player.dart';
+import 'quang_auto_channels.dart';
 
 class QuangPrivateSecurity {
   static const pinKey = 'quangtv_pin_hash';
@@ -109,6 +110,7 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(key, channels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
+    await syncQuangAutoChannels(prefs);
   }
   Future<void> _add() async {
     name.clear(); url.clear();

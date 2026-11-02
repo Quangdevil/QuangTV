@@ -43,7 +43,10 @@ jobs:
           channel: stable
           cache: true
       - name: Apply QuangTV UI integration
-        run: python3 scripts/patch_quangtv.py
+        run: |
+          python3 scripts/patch_quangtv.py
+          python3 -m unittest discover -s tests -p test_android_auto_patch.py
+          python3 scripts/patch_android_auto.py
       - name: Restore Gradle dependency cache
         id: gradle-cache
         uses: actions/cache/restore@v4

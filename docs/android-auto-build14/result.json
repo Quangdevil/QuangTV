@@ -1,0 +1,22 @@
+{
+  "build": 14,
+  "source": "b11fee7887e9d9e88a5d4121e04f9d434085e50e",
+  "apkSHA256": "a78658235d00eb4bb553c9f6587b162dcbde08e37fe1cb6d338f260ed2e53785",
+  "freshInstallBeforePhoneActivity": "AA public catalog populated",
+  "phoneUI": "Current native QuangTV May home",
+  "projection": "May UI opens; fullscreen video clean and moving with emulator GPU host",
+  "fullscreenMeanPixelDifference": 97.24229326513215,
+  "audioVTV1": "MediaSession PLAYING; DHU audio stream closed with buffered samples on pause",
+  "audioListenedTo": false,
+  "AA": "17.9.664044-release",
+  "android": 17,
+  "headUnit": "Google DHU 2.0; 1280x720 with 320px horizontal margins",
+  "applicationMode": "Release",
+  "physicalSamsungCarAdmissionVerified": false,
+  "fullscreenPlaybackPass": true,
+  "firstFullscreenFramesIdentical": true,
+  "softwareDecoderTest": "ccodec=2 still selected c2.goldfish.h264.decoder; not an actual software-decoder comparison",
+  "swiftshaderPlaybackPass": false,
+  "hostGpu": "Apple M2 / gfxstream Metal",
+  "crashBufferEmpty": true
+}

@@ -1,0 +1,16 @@
+{
+  "build": 12,
+  "cleanInstall": true,
+  "aaVersion": "17.9.664044-release",
+  "applicationMode": "Release",
+  "dhu": true,
+  "physicalHeadUnitVerified": false,
+  "vtv1MotionDifference": 104.44323949408404,
+  "vtv3MotionDifference": 82.12833613445379,
+  "youtubeMotionDifference": 80.60854781582054,
+  "youtubePausedFramesEqual": true,
+  "speakerOutputVerified": false,
+  "voiceVerified": false,
+  "youtubeResumeFrameChanged": true,
+  "crashBufferEmpty": true
+}
