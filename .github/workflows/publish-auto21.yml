@@ -1,0 +1,37 @@
+name: Publish tested Auto Preview 21
+on:
+  push:
+    branches: [publish/auto-preview21]
+    paths: [.github/workflows/publish-auto21.yml]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: QuangTV-Auto-Preview-arm64
+          run-id: 41370112006
+          github-token: ${{ github.token }}
+          path: artifact
+      - name: Verify exact tested APK and publish preview download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: Quangdevil/QuangTV
+        run: |
+          set -euo pipefail
+          echo 'b0ecb8b470405bdd847c52517a755b05589fb9a7cbc964d37f9b06fb022126f5  artifact/app-arm64-v8a-release.apk' | sha256sum -c -
+          APK=QuangTV-Auto-Preview2-build21-arm64.apk
+          cp artifact/app-arm64-v8a-release.apk "$APK"
+          cat > notes.md <<'NOTES'
+          Bản Preview 2 build 21. APK gốc từ CI 41370112006, đã kiểm trên Android 17 / Android Auto 17.9 với DHU.
+          Video VTV/QuangTube, toàn màn native, khóa khi xe chạy và trình duyệt Gecko. Xe thật/Google chưa được xác nhận.
+          Cài đè lên Preview 2. Không thay bản QuangTV chính.
+          Nguồn: 0508b8e8146217ff5f0e181ae8477e721e3037c4
+          SHA256: b0ecb8b470405bdd847c52517a755b05589fb9a7cbc964d37f9b06fb022126f5
+          Báo cáo: https://github.com/Quangdevil/QuangTV/blob/71b4ee41424fda6ec54c53db6cabb958b3e2e9dc/docs/android-auto-native-browser.md
+          NOTES
+          gh release create auto-preview2-build21 "$APK" --target 0508b8e8146217ff5f0e181ae8477e721e3037c4 --prerelease --latest=false --title "QuangTV Auto Preview 2 · build 21" --notes-file notes.md
