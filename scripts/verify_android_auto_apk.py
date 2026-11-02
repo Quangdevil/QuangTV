@@ -32,6 +32,8 @@ assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION' in manifest
 assert 'com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM' in manifest
 # Check the descriptor shipped in the APK, not merely Java/manifest classes.
 resources = subprocess.check_output([str(tools / 'aapt'), 'dump', '--values', 'resources', str(apk)], text=True)
+for icon in ('audio_service_play_arrow', 'audio_service_pause', 'audio_service_stop', 'ic_notification'):
+    assert f':drawable/{icon}:' in resources, f'Dynamic media control icon stripped: {icon}'
 match = re.search(r'(?ms)^\s*resource 0x[0-9a-f]+ [^\n]*:xml/quangtv_automotive_app:.*?\(string8\) "([^"\n]+)"', resources)
 if match:
     descriptor_path = match.group(1)

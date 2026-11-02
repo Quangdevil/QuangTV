@@ -129,6 +129,10 @@ def patch(app=APP):
     <path android:fillColor="#8AE4D1" android:pathData="M19.35,10.04C18.67,6.59 15.64,4 12,4C9.11,4 6.6,5.64 5.35,8.04C2.34,8.36 0,10.91 0,14C0,17.31 2.69,20 6,20H19C21.76,20 24,17.76 24,15C24,12.36 21.95,10.22 19.35,10.04Z"/>
     <path android:fillColor="#0B3330" android:pathData="M10,9L10,16L16,12.5Z"/>
 </vector>''')
+    # audio_service looks these up by Dart-provided names at runtime. AGP 9's
+    # optimized shrinker otherwise removes them, breaking PlaybackState updates.
+    (resources / 'raw').mkdir(parents=True, exist_ok=True)
+    (resources / 'raw/quangtv_auto_keep.xml').write_text('''<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/audio_service_*,@drawable/ic_notification" />''')
     (resources / 'xml').mkdir(parents=True, exist_ok=True)
     (resources / 'xml/quangtv_automotive_app.xml').write_text(
         '<?xml version="1.0" encoding="utf-8"?>\n<automotiveApp><uses name="media" /><uses name="projection" /></automotiveApp>\n')
