@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:tv_viewer/screens/quang_native_browser.dart';
+import 'package:tv_viewer/screens/quang_native_tube.dart';
 import 'package:tv_viewer/screens/quang_network.dart';
 import 'package:tv_viewer/screens/quang_proxy_screen.dart';
 import 'package:flutter/material.dart';
@@ -66,12 +68,22 @@ void main() {
     await tester.pump(const Duration(milliseconds:500));
     expect(find.byType(AppBar),findsOneWidget);
     expect(await advancing(),same(firstController));
+    expect(tester.widget<IgnorePointer>(find.byKey(const ValueKey('player-controls'))).ignoring,isTrue);
+    await tester.tap(find.byKey(const ValueKey('home-fullscreen')));
+    await tester.pump(const Duration(milliseconds:500));
+    await tester.drag(find.byKey(const ValueKey('player-tap-surface')),const Offset(0,180));
+    await tester.pump(const Duration(milliseconds:500));
+    expect(find.byType(AppBar),findsOneWidget);
+    expect(tester.widget<IgnorePointer>(find.byKey(const ValueKey('player-controls'))).ignoring,isTrue);
+    final playerY=tester.getTopLeft(find.byKey(const ValueKey('player-tap-surface'))).dy;
     final scroll=find.byKey(const ValueKey('may-channel-list'));
     await tester.drag(scroll,const Offset(0,-650));await tester.pump(const Duration(milliseconds:400));
     final search=find.byType(TextField).first;
     final firstY=tester.getTopLeft(search).dy;
     await tester.drag(scroll,const Offset(0,-450));await tester.pump(const Duration(milliseconds:400));
     expect(tester.getTopLeft(search).dy,closeTo(firstY,2));
+    expect(tester.getTopLeft(find.byKey(const ValueKey('player-tap-surface'))).dy,closeTo(playerY,2));
+    debugPrint('QUANGTV_PINNED_PLAYER_PASS videoFixed=true searchFixed=true swipeCollapse=true controlsHiddenOnCollapse=true');
     expect(tester.getTopLeft(find.byKey(const ValueKey('home-top-bar'))).dy,greaterThanOrEqualTo(tester.getBottomRight(scroll).dy-1));
     await tester.tap(find.byKey(const ValueKey('home-scroll-top')));await tester.pump(const Duration(milliseconds:500));
     final firstChannel=find.byKey(const ValueKey('may-channel-0-https://example.org/vtv1.m3u8'));
@@ -121,19 +133,75 @@ void main() {
     Navigator.of(tester.element(find.byType(QuangUpdateScreen))).pop();await tester.pump(const Duration(milliseconds:500));
     await menu('tv');
     await menu('downloads');
-    await tester.runAsync(() async {
-      const bridge=MethodChannel('quangtv/browser');
-      Map<String,dynamic> state={};
-      for(var i=0;i<30;i++) { await Future<void>.delayed(const Duration(milliseconds:200));state=await bridge.invokeMapMethod<String,dynamic>('downloadsInspect') ?? {};if(state['folder']=='root')break; }
-      expect(state['folder'],'root');
-      await bridge.invokeMethod<void>('downloadsAction',{'action':'close'});
-    });
+    expect(find.byType(QuangNativeDownloads),findsOneWidget);
+    expect(find.byType(AppBar),findsOneWidget);
     await tester.pump(const Duration(milliseconds:500));
     expect(tester.takeException(),isNull);
     debugPrint('QUANGTV_MAY_HOME_PASS nativeShell=true savedChannels=true vtvFirst=true podcast=true radio=true favorites=true settings=true ota=true downloads=true');
     await tester.pumpWidget(const SizedBox.shrink());
     SharedPreferences.setMockInitialValues({});
   });
+
+  testWidgets('Native modules play and keep download folders in the shared shell', (tester) async {
+    const api=MethodChannel('quangtv/modules');
+    await api.invokeMethod<void>('testFixture',{'enabled':true});
+    SharedPreferences.setMockInitialValues({'quangtv_cached_channels':'[]'});
+    await tester.pumpWidget(const MaterialApp(home:QuangDiscoverScreen(mayHome:true)));
+    await tester.pump(const Duration(seconds:1));
+    Future<void> menu(String task)async{
+      tester.state<ScaffoldState>(find.byKey(const ValueKey('quangtv-may-home'))).openDrawer();
+      await tester.pump(const Duration(milliseconds:400));
+      final list=find.descendant(of:find.byType(Drawer),matching:find.byType(ListView));
+      await tester.drag(list,const Offset(0,1800));await tester.pump(const Duration(milliseconds:300));
+      final target=find.byKey(ValueKey('may-task-$task'));
+      await tester.scrollUntilVisible(target,120,scrollable:find.descendant(of:find.byType(Drawer),matching:find.byType(Scrollable)));
+      await tester.ensureVisible(target);await tester.pump(const Duration(milliseconds:300));
+      await tester.tap(target);await tester.pump(const Duration(milliseconds:500));
+      expect(find.byType(AppBar),findsOneWidget);
+      expect(find.byKey(const ValueKey('quangtv-may-home')),findsOneWidget);
+    }
+    Future<void> waitFor(bool Function() condition)async{
+      final end=DateTime.now().add(const Duration(seconds:60));
+      while(!condition()&&DateTime.now().isBefore(end)){await tester.pump(const Duration(milliseconds:500));}
+      expect(condition(),true);
+    }
+    try{
+      await menu('youtube');expect(find.byType(QuangNativeTube),findsOneWidget);
+      await waitFor(()=>find.text('Native Tube fixture').evaluate().isNotEmpty);
+      await tester.tap(find.text('Native Tube fixture'));
+      await waitFor(()=>tester.widgetList<VideoPlayer>(find.byType(VideoPlayer)).any((p)=>p.controller.value.isPlaying&&p.controller.value.position.inSeconds>1));
+      expect(tester.widgetList<VideoPlayer>(find.byType(VideoPlayer)).first.controller.value.volume,1);
+      await tester.enterText(find.byType(TextField).first,'native fixture search');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump(const Duration(seconds:2));
+      final history=await api.invokeMapMethod<String,dynamic>('history');
+      expect(history?['searches'],contains('native fixture search'));
+      await api.invokeMethod<void>('deleteHistory',{'kind':'searches','value':'native fixture search'});
+      expect((await api.invokeMapMethod<String,dynamic>('history'))?['searches'],isNot(contains('native fixture search')));
+      await menu('browser');expect(find.byType(QuangNativeBrowser),findsOneWidget);
+      await tester.enterText(find.byType(TextField).first,'https://quangtv.fixture/');
+      await tester.testTextInput.receiveAction(TextInputAction.go);
+      await waitFor(()=>find.text('Video (1)').evaluate().isNotEmpty);
+      await tester.tap(find.text('Video (1)'));await tester.pump(const Duration(milliseconds:500));
+      await tester.tap(find.byTooltip('Tải về'));await tester.pump(const Duration(seconds:2));
+      await menu('downloads');expect(find.byType(QuangNativeDownloads),findsOneWidget);
+      await tester.tap(find.text('Video đã tải'));await tester.pump(const Duration(seconds:2));
+      await waitFor(()=>find.byType(Dismissible).evaluate().isNotEmpty);
+      final downloaded=await api.invokeListMethod<dynamic>('downloads');
+      expect(downloaded!.any((e)=>e['complete']==true&&(e['bytes'] as num)>0),true);
+      await tester.drag(find.byType(Dismissible).first,const Offset(-600,0));
+      await tester.pump(const Duration(seconds:2));
+      expect(await api.invokeMethod<bool>('lastDeleteExists'),false);
+      debugPrint('QUANGTV_NATIVE_MODULES_PASS sharedShell=true nativeTubePlayback=true searchHistoryDelete=true browserCapture=true nativeFolders=true backgroundDownload=true physicalSwipeDelete=true');
+    }finally{
+      await tester.pumpWidget(const SizedBox.shrink());await tester.pump(const Duration(milliseconds:500));
+      await api.invokeMethod<void>('deleteHistory',{'kind':'searches'});
+      await api.invokeMethod<void>('deleteHistory',{'kind':'videos'});
+      await api.invokeMethod<void>('testFixture',{'enabled':false});
+      SharedPreferences.setMockInitialValues({});
+    }
+  },timeout:const Timeout(Duration(minutes:4)));
+
   testWidgets('Background download survives leaving the app and files open and swipe-delete', (tester) async {
     const bridge=MethodChannel('quangtv/browser');
     await tester.pumpWidget(const MaterialApp(home:Scaffold(body:Text('Background download test'))));
