@@ -202,6 +202,7 @@ AUDIO_BROWSER = '''  // QuangTV Auto media browser
       Object? lastSourceError;
       bool prepared = false;
       for (final source in sources) {
+        if (request != _autoPlaybackGeneration) return;
         try {
           await _audioPlayer.setUrl(source, headers: quangAutoPlaybackHeaders(selected));
           if (request != _autoPlaybackGeneration) return;
