@@ -36,6 +36,10 @@ import org.json.JSONObject
 object QuangYouTube {
     data class Choice(val title: String, val video: String, val audio: String?, val quality: String)
     private val worker = Executors.newSingleThreadExecutor()
+    private val extractorWorker = Executors.newFixedThreadPool(2)
+    private var extractorReady = false
+    @Volatile private var extractorUa:String?=null
+    private fun warmUp(c:Context){if(extractorUa==null)extractorUa=WebSettings.getDefaultUserAgent(c).replace("; wv", "").replace(" Version/4.0", "")}
     private val main = Handler(Looper.getMainLooper())
     private val cancelled = AtomicBoolean(false)
     @Volatile var running = false; private set
@@ -77,12 +81,9 @@ object QuangYouTube {
         require(id != null && id.matches(Regex("[A-Za-z0-9_-]{11}"))) { "Mở một video YouTube trước khi tải" }
         return "https://www.youtube.com/watch?v=$id"
     }
-    fun extract(c: Context, url: String, done: (List<Choice>?, String?) -> Unit) {
-        val page = try { canonical(url) } catch (e: Exception) { done(null, e.message); return }
-        val ua = WebSettings.getDefaultUserAgent(c).replace("; wv", "").replace(" Version/4.0", "")
-        worker.execute {
-            try {
-                QuangProxy.ensure(c)
+    @Synchronized private fun prepare(c:Context) {
+        if(extractorReady)return
+        val ua=extractorUa ?: "Mozilla/5.0"
                 NewPipe.init(object : Downloader() {
                     override fun execute(request: Request): Response {
                         val conn = URL(request.url()).openConnection() as HttpURLConnection
@@ -101,6 +102,15 @@ object QuangYouTube {
                         } finally { conn.disconnect() }
                     }
                 })
+        extractorReady=true
+    }
+    fun extract(c: Context, url: String, done: (List<Choice>?, String?) -> Unit) {
+        warmUp(c)
+        val page = try { canonical(url) } catch (e: Exception) { done(null, e.message); return }
+        extractorWorker.execute {
+            try {
+                QuangProxy.ensure(c)
+                prepare(c)
                 val info = StreamInfo.getInfo(ServiceList.YouTube, page)
                 require(info.ageLimit == 0) { "Chỉ hỗ trợ video công khai không giới hạn độ tuổi" }
                 val audio = info.audioStreams.firstOrNull { it.isUrl && it.format == NPFormat.M4A && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }?.content
@@ -110,6 +120,38 @@ object QuangYouTube {
                 if (choices.isEmpty()) throw IllegalStateException("Không có nguồn MP4/AAC tương thích để tải")
                 main.post { done(choices, null) }
             } catch (_: Exception) { main.post { done(null, "Chưa lấy được nguồn YouTube. Video có thể bị hạn chế, yêu cầu xác minh hoặc bộ trích xuất cần cập nhật.") } }
+        }
+    }
+    fun catalog(c:Context, query:String, done:(List<Map<String,Any>>?,String?)->Unit) {
+        warmUp(c)
+        extractorWorker.execute {
+            try {
+                prepare(c)
+                val service=ServiceList.YouTube
+                val items=if(query.isBlank())try {
+                    val kiosk=service.kioskList.defaultKioskExtractor ?: error("No kiosk")
+                    kiosk.fetchPage();kiosk.initialPage.items
+                }catch(_:Exception){val search=service.getSearchExtractor("Việt Nam");search.fetchPage();search.initialPage.items}
+                else {val search=service.getSearchExtractor(query.take(300));search.fetchPage();search.initialPage.items}
+                val result=items.filterIsInstance<org.schabi.newpipe.extractor.stream.StreamInfoItem>().take(40).map {
+                    mapOf<String,Any>("url" to it.url,"title" to it.name,"thumbnail" to (it.thumbnails.firstOrNull()?.url ?: ""),"author" to it.uploaderName,"duration" to it.duration)
+                }
+                main.post{done(result,null)}
+            }catch(_:Exception){main.post{done(null,"Chưa lấy được danh sách YouTube. Thử tìm kiếm hoặc tải lại.")}}
+        }
+    }
+    fun playback(c:Context, url:String, done:(Map<String,Any>?,String?)->Unit) {
+        warmUp(c)
+        val page=try{canonical(url)}catch(_:Exception){done(null,"Liên kết YouTube không hợp lệ");return}
+        extractorWorker.execute {
+            try {
+                prepare(c);val info=StreamInfo.getInfo(ServiceList.YouTube,page)
+                require(info.ageLimit==0)
+                val streams=info.videoStreams.filter{it.isUrl && !it.isVideoOnly && it.format==NPFormat.MPEG_4 && it.deliveryMethod==DeliveryMethod.PROGRESSIVE_HTTP}.sortedByDescending{Regex("[0-9]+").find(it.resolution)?.value?.toIntOrNull() ?: 0}
+                val choices=streams.map{mapOf("url" to it.content,"quality" to it.resolution)}
+                val media=info.hlsUrl?.takeIf{it.startsWith("https://")} ?: streams.firstOrNull()?.content ?: error("No compatible stream")
+                main.post{done(mapOf("url" to media,"title" to info.name,"page" to page,"choices" to choices,"thumbnail" to (info.thumbnails.firstOrNull()?.url ?: "")),null)}
+            }catch(_:Exception){main.post{done(null,"Chưa lấy được nguồn phát. YouTube có thể yêu cầu xác minh hoặc nguồn cần cập nhật.")}}
         }
     }
     fun showChoices(activity: Activity, url: String) {

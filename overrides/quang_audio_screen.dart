@@ -4,10 +4,11 @@ import 'package:xml/xml.dart';
 import 'package:just_audio/just_audio.dart';
 
 class QuangAudioScreen extends StatefulWidget {
+  final bool embedded;
   final String title;
   final String? feedUrl;
   final String? streamUrl;
-  const QuangAudioScreen({super.key, required this.title, this.feedUrl, this.streamUrl});
+  const QuangAudioScreen({super.key, required this.title, this.feedUrl, this.streamUrl, this.embedded = false});
   @override
   State<QuangAudioScreen> createState() => _QuangAudioScreenState();
 }
@@ -66,7 +67,7 @@ class _QuangAudioScreenState extends State<QuangAudioScreen> {
   void dispose() { player.dispose(); super.dispose(); }
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.title)),
+    appBar: widget.embedded ? null : AppBar(title: Text(widget.title)),
     body: SafeArea(child: Column(children: [
       if (loading) const LinearProgressIndicator(),
       if (error != null) Padding(padding: const EdgeInsets.all(16), child: Text(error!, style: const TextStyle(color: Colors.red))),

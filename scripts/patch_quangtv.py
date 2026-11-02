@@ -2,6 +2,8 @@ from pathlib import Path
 import shutil
 shutil.copyfile('overrides/quang_discover_screen.dart', 'upstream/flutter_app/lib/screens/quang_discover_screen.dart')
 shutil.copyfile('overrides/quang_may_shell.dart', 'upstream/flutter_app/lib/screens/quang_may_shell.dart')
+for module in ['quang_native_browser.dart','quang_native_tube.dart']:
+    shutil.copyfile('overrides/'+module,'upstream/flutter_app/lib/screens/'+module)
 shutil.copyfile('overrides/quang_private_screen.dart', 'upstream/flutter_app/lib/screens/quang_private_screen.dart')
 shutil.copyfile('overrides/quang_web_screen.dart', 'upstream/flutter_app/lib/screens/quang_web_screen.dart')
 shutil.copyfile('overrides/quang_vtv_source.dart', 'upstream/flutter_app/lib/screens/quang_vtv_source.dart')
@@ -272,7 +274,7 @@ activity.write_text(kotlin.replace('class MainActivity: FlutterActivity()',
 # Replace both full-width and compact Map actions with the same browser route.
 shutil.copyfile('overrides/quang_browser_screen.dart', 'upstream/flutter_app/lib/screens/quang_browser_screen.dart')
 shutil.copyfile('overrides/QuangBrowserActivity.kt', activity.parent / 'QuangBrowserActivity.kt')
-for source in ['QuangDownloads.kt', 'QuangDownloadService.kt', 'QuangDownloadsActivity.kt']:
+for source in ['QuangModuleApi.kt', 'QuangDownloads.kt', 'QuangDownloadService.kt', 'QuangDownloadsActivity.kt']:
     shutil.copyfile('overrides/' + source, activity.parent / source)
 s = home.read_text().replace("import 'map_screen.dart';", "import 'quang_browser_screen.dart';")
 s = s.replace('const MapScreen()', 'const QuangBrowserScreen()').replace('Icons.map', 'Icons.public')
@@ -303,7 +305,8 @@ bridge = '''
     }
 '''
 kotlin = kotlin.replace(marker, marker + bridge, 1)
-browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/browser").setMethodCallHandler { call, result ->
+browser = '''        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/modules").setMethodCallHandler { call, result -> QuangModuleApi.handle(this,call,result) }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "quangtv/browser").setMethodCallHandler { call, result ->
             if (call.method == "dnsStatus") {
                 try {
                     val mode = android.provider.Settings.Global.getString(contentResolver, "private_dns_mode")

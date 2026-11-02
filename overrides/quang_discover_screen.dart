@@ -12,9 +12,9 @@ import 'quang_native_player.dart';
 import 'quang_private_screen.dart';
 import 'quang_vtv_source.dart';
 import 'quang_may_shell.dart';
-import 'home_screen.dart';
+import 'quang_native_browser.dart';
+import 'quang_native_tube.dart';
 import 'quang_update_screen.dart';
-import 'quang_browser_screen.dart';
 
 class QuangDiscoverScreen extends StatefulWidget {
   final bool mayHome;
@@ -31,6 +31,9 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   List<Channel> channels = [];
   int section = 0;
   Channel? _inlineChannel;
+  Channel? _privateChannel;
+  Widget? _audioView;
+  GlobalKey<QuangNativePlayerState> _privatePlayerKey=GlobalKey<QuangNativePlayerState>();
   GlobalKey<QuangNativePlayerState> _inlineKey = GlobalKey<QuangNativePlayerState>();
   final ScrollController _homeScroll = ScrollController();
   bool _homeFullscreen = false;
@@ -135,12 +138,39 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     if (cached != null) {
       try {
         final list = jsonDecode(cached) as List<dynamic>;
-        channels = list.map((v) => Channel(name: v['name'] as String, url: v['url'] as String, country: 'Vietnam')).toList();
+        channels = list.map((v) => Channel(name: v['name'] as String, url: v['url'] as String, logo: v['logo'] as String?, country: 'Vietnam')).toList();
         if (mounted) setState(() {});
       } catch (_) {}
     }
     // Cached channels open instantly. Only fetch on first launch or manual refresh.
     if (mounted && cached == null) await _load();
+    if (mounted && cached != null && channels.any((c) => (c.logo ?? '').isEmpty)) { _refreshLogos(); }
+  }
+
+  Future<void> _refreshLogos() async {
+    try {
+      final response = await http.get(Uri.parse(urlController.text.trim())).timeout(const Duration(seconds:20));
+      if (response.statusCode != 200 || !mounted) return;
+      final byUrl = <String,String>{}; final byName = <String,String>{}; final byVtv = <String,String>{};
+      String name = ''; String? logo;
+      for (final raw in response.body.split(RegExp(r'\r?\n'))) {
+        final line = raw.trim();
+        if (line.startsWith('#EXTINF:')) {
+          name = line.contains(',') ? line.substring(line.indexOf(',')+1).trim() : '';
+          logo = RegExp(r'tvg-logo="([^"]*)"').firstMatch(line)?.group(1);
+        } else if (line.isNotEmpty && !line.startsWith('#')) {
+          if (Uri.tryParse(logo ?? '')?.scheme == 'https') {
+            byUrl[line] = logo!; byName[name] = logo;
+            final id = QuangVtvSource.channelId(name); if (id != null) byVtv[id] = logo;
+          }
+          logo = null;
+        }
+      }
+      if (!mounted) return;
+      setState(() => channels = channels.map((c) => c.copyWith(logo: byUrl[c.url] ?? byName[c.name] ?? byVtv[QuangVtvSource.channelId(c.name)] ?? c.logo)).toList());
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('quangtv_cached_channels',jsonEncode(channels.map((c)=>{'name':c.name,'url':c.url,'logo':c.logo}).toList()));
+    } catch (_) { /* Existing channels and playback remain available offline. */ }
   }
 
   Future<void> _load() async {
@@ -159,11 +189,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       final lines = response.body.split(RegExp(r'\r?\n'));
       final result = <Channel>[];
       String name = '';
+      String? logo;
       final headers = <String, String>{};
       for (final line in lines) {
         final s = line.trim();
         if (s.startsWith('#EXTINF:')) {
           name = s.contains(',') ? s.substring(s.indexOf(',') + 1).trim() : 'Kênh TV';
+          logo = RegExp(r'tvg-logo="([^"]*)"').firstMatch(s)?.group(1);
         } else if (s.startsWith('#EXTVLCOPT:http-user-agent=')) {
           headers['User-Agent'] = s.substring('#EXTVLCOPT:http-user-agent='.length).trim();
         } else if (s.startsWith('#EXTVLCOPT:http-referrer=')) {
@@ -178,7 +210,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         } else if (s.isNotEmpty && !s.startsWith('#')) {
           final stream = Uri.tryParse(s);
           if (stream != null && (stream.scheme == 'https' || stream.scheme == 'http')) {
-            result.add(Channel(name: name.isEmpty ? 'Kênh TV' : name, url: s, country: 'Vietnam'));
+            result.add(Channel(name: name.isEmpty ? 'Kênh TV' : name, url: s, logo: logo, country: 'Vietnam'));
             if (headers.isNotEmpty) await savedPrefs.setString('quangtv_headers_${base64Url.encode(utf8.encode(s))}', jsonEncode(headers));
           }
           name = '';
@@ -188,7 +220,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('quangtv_playlist', uri.toString());
       result.removeWhere((c) => deletedChannels.contains(c.url));
-      await prefs.setString('quangtv_cached_channels', jsonEncode(result.map((c) => {'name': c.name, 'url': c.url}).toList()));
+      await prefs.setString('quangtv_cached_channels', jsonEncode(result.map((c) => {'name': c.name, 'url': c.url, 'logo': c.logo}).toList()));
       if (mounted) setState(() => channels = result);
     } catch (e) {
       if (mounted) setState(() => error = 'Không tải được danh sách: $e');
@@ -225,7 +257,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('quangtv_deleted_channels', deletedChannels.toList());
     await prefs.setStringList('quangtv_personal_channels',
-      personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
+      personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url, 'logo': c.logo})).toList());
   }
 
   Future<void> _deleteChannel(Channel channel) async {
@@ -246,8 +278,8 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     });
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('quangtv_deleted_channels', deletedChannels.toList());
-    await prefs.setStringList('quangtv_personal_channels', personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url})).toList());
-    await prefs.setString('quangtv_cached_channels', jsonEncode(channels.map((c) => {'name': c.name, 'url': c.url}).toList()));
+    await prefs.setStringList('quangtv_personal_channels', personalChannels.map((c) => jsonEncode({'name': c.name, 'url': c.url, 'logo': c.logo})).toList());
+    await prefs.setString('quangtv_cached_channels', jsonEncode(channels.map((c) => {'name': c.name, 'url': c.url, 'logo': c.logo}).toList()));
     await prefs.setStringList('quangtv_favorites', favorites.toList());
     await prefs.setStringList('quangtv_recent_channels', recentChannels);
   }
@@ -321,7 +353,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
                   subtitle: Text(item['artistName']?.toString() ?? ''),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(this.context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: title, feedUrl: feed)));
+                    _showAudio(QuangAudioScreen(title:title,feedUrl:feed,embedded:widget.mayHome));
                   });
               })),
         ])),
@@ -342,17 +374,18 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       final feed = (results.first as Map<String, dynamic>)['feedUrl'] as String?;
       if (feed == null || Uri.tryParse(feed)?.scheme != 'https') throw Exception('Không có RSS HTTPS hợp lệ');
       if (!mounted) return;
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: title, feedUrl: feed)));
+      _showAudio(QuangAudioScreen(title:title,feedUrl:feed,embedded:widget.mayHome));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không tải được podcast: $e')));
     }
   }
 
   void _openRadio(String title, String url) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: title, streamUrl: url)));
+    _showAudio(QuangAudioScreen(title:title,streamUrl:url,embedded:widget.mayHome));
   }
 
   Future<void> _openYoutube([String query = '']) async {
+    if (widget.mayHome) { setState(()=>section=1); return; }
     final parsed = Uri.tryParse(query);
     final isYoutubeLink = parsed != null && parsed.scheme == 'https' &&
       (parsed.host == 'youtu.be' || parsed.host == 'youtube.com' || parsed.host.endsWith('.youtube.com'));
@@ -377,29 +410,36 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     super.dispose();
   }
 
+  void _moduleFullscreen(bool value) {
+    if (!mounted) return;
+    setState(()=>_homeFullscreen=value);
+    SystemChrome.setEnabledSystemUIMode(value ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
+  }
+  void _showAudio(QuangAudioScreen audio) {
+    if (widget.mayHome) { setState(()=>_audioView=audio); }
+    else { Navigator.push(context,MaterialPageRoute(builder:(_)=>audio)); }
+  }
   Future<void> _mayTask(String task) async {
-    setState(() => _inlineActive = false);
+    setState(() { _inlineActive = false; _homeFullscreen=false; });
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     try {
     switch (task) {
       case 'tv': setState(() => section = 0); break;
-      case 'podcast': setState(() => section = 2); break;
-      case 'radio': setState(() => section = 3); break;
+      case 'podcast': setState(() { section = 2; _audioView=null; }); break;
+      case 'radio': setState(() { section = 3; _audioView=null; }); break;
       case 'favorites': setState(() => section = 4); break;
-      case 'youtube': await _openYoutube(); break;
+      case 'youtube': setState(()=>section=1); break;
       case 'private':
         if (await QuangPrivateSecurity.verify(context) && mounted) {
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangPrivateScreen()));
+          setState(() { _privateChannel=null; section=5; });
         }
         break;
-      case 'iptv': await Navigator.push(context, MaterialPageRoute(builder: (_) => const HomeScreen())); break;
-      case 'browser': await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangBrowserScreen())); break;
+      case 'iptv': setState(()=>section=0); break;
+      case 'browser': setState(()=>section=6); break;
       case 'proxy': await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangProxyScreen())); break;
       case 'update': await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangUpdateScreen())); break;
       case 'settings': await _showSettings(); break;
-      case 'downloads':
-        try { await const MethodChannel('quangtv/browser').invokeMethod<void>('showDownloadLibrary'); }
-        on PlatformException { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không mở được thư mục đã tải'))); }
-        break;
+      case 'downloads': setState(()=>section=7); break;
     }
     } finally {
       if (mounted) setState(() => _inlineActive = true);
@@ -431,18 +471,18 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         if (loading) const LinearProgressIndicator(),
       ]));
     return Column(children:[
+      Padding(padding:const EdgeInsets.fromLTRB(12,4,12,0),child:Column(children:[
+        Row(children:[if (featured != null) Expanded(child:Text(featured.name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:15,fontWeight:FontWeight.w600))),
+          IconButton(key:const ValueKey('home-fullscreen'),tooltip:'Toàn màn hình',onPressed:featured==null ? null : ()=>_inlineKey.currentState?.toggleFullscreen(),icon:const Icon(Icons.fullscreen)),
+        ]),
+        ClipRRect(borderRadius:BorderRadius.circular(12),child:SizedBox(height:(constraints.maxHeight*.29).clamp(110.0,220.0),width:double.infinity,child:player)),
+      ])),
       Expanded(child:NotificationListener<ScrollNotification>(onNotification:(notification){
         final show = _homeScroll.hasClients && _homeScroll.offset > 260;
         if (show != _showTop) setState(()=>_showTop=show);
         return false;
       },child:CustomScrollView(key:const ValueKey('may-channel-list'),controller:_homeScroll,slivers:[
-        SliverToBoxAdapter(child:Padding(padding:const EdgeInsets.fromLTRB(16,8,16,8),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          if (featured != null) Text(featured.name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:18,fontWeight:FontWeight.w600)),
-          const SizedBox(height:6),
-          ClipRRect(borderRadius:BorderRadius.circular(12),child:SizedBox(height:(constraints.maxWidth*9/16).clamp(150.0,260.0),width:double.infinity,child:player)),
-          Align(alignment:Alignment.centerRight,child:TextButton.icon(key:const ValueKey('home-fullscreen'),onPressed:featured==null ? null : (){
-            _inlineKey.currentState?.toggleFullscreen();
-          },icon:const Icon(Icons.fullscreen,size:19),label:const Text('Toàn màn hình'))),
+        SliverToBoxAdapter(child:Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Column(children:[
           ExpansionTile(tilePadding:EdgeInsets.zero,title:const Text('Nguồn, lịch sử & tác vụ',style:TextStyle(fontSize:12)),children:[
             Wrap(spacing:8,children:[TextButton.icon(onPressed:()=>_mayTask('youtube'),icon:const Icon(Icons.smart_display_outlined),label:const Text('QuangTube')),
               TextButton.icon(onPressed:()=>_mayTask('browser'),icon:const Icon(Icons.public),label:const Text('Trình duyệt'))]),
@@ -469,7 +509,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         return Padding(padding: const EdgeInsets.only(bottom: 8), child: Material(color: selected ? const Color(0xff133934) : const Color(0xff111e29), borderRadius: BorderRadius.circular(13),
           child: ListTile(key: ValueKey('may-channel-$index-${c.url}'), contentPadding: const EdgeInsets.symmetric(horizontal: 12),
             leading: Container(width: 46, height: 38, alignment: Alignment.center, decoration: BoxDecoration(color: const Color(0xffe5efec), borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.live_tv, color: Color(0xff245f56), size: 25)),
+              child: (c.logo ?? '').isNotEmpty ? Image.network(c.logo!,fit:BoxFit.contain,errorBuilder:(_,error,stack)=>const Icon(Icons.live_tv,color:Color(0xff245f56),size:25)) : const Icon(Icons.live_tv, color: Color(0xff245f56), size: 25)),
             title: Text(c.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             subtitle: Text(QuangVtvSource.channelId(c.name) != null ? 'VTV' : 'Truyền hình', style: const TextStyle(fontSize: 10, color: Color(0xff93a7b3))),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -483,6 +523,25 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
         child:TextButton.icon(key:const ValueKey('home-scroll-top'),onPressed:()=>_homeScroll.animateTo(0,duration:const Duration(milliseconds:300),curve:Curves.easeOut),icon:const Icon(Icons.vertical_align_top,size:18),label:const Text('Lên đầu'))),
     ]);
   }));
+
+  Widget _moduleBody(List<Channel> shown,Widget directory) {
+    if (section==0) return _mayTelevision(shown);
+    if (section==1) return QuangNativeTube(legacySearches:youtubeHistory,fullscreen:_homeFullscreen,onFullscreen:_moduleFullscreen);
+    if (section==6) return QuangNativeBrowser(fullscreen:_homeFullscreen,onFullscreen:_moduleFullscreen);
+    if (section==7) return const QuangNativeDownloads();
+    if (section==5) {
+      final selected=_privateChannel;
+      final player=selected==null ? const SizedBox.shrink() : QuangNativePlayer(key:_privatePlayerKey,channel:selected,startMuted:true,embedded:true,onFullscreenChanged:_moduleFullscreen);
+      if (_homeFullscreen && selected!=null) return player;
+      return Column(children:[
+        ListTile(leading:const Icon(Icons.lock_outline),title:const Text('Private'),trailing:TextButton.icon(onPressed:(){setState((){_privateChannel=null;section=0;});},icon:const Icon(Icons.lock),label:const Text('Khóa'))),
+        if(selected!=null) SizedBox(height:(MediaQuery.sizeOf(context).height*.28).clamp(130.0,240.0),width:double.infinity,child:player),
+        Expanded(child:QuangPrivateScreen(embedded:true,onPlay:(channel)=>setState((){_privatePlayerKey=GlobalKey<QuangNativePlayerState>();_privateChannel=channel;}))),
+      ]);
+    }
+    if ((section==2 || section==3) && _audioView!=null) return Column(children:[ListTile(leading:IconButton(tooltip:'Danh sách',onPressed:()=>setState(()=>_audioView=null),icon:const Icon(Icons.arrow_back)),title:Text(section==2?'Podcast':'Radio')),Expanded(child:_audioView!)]);
+    return directory;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -499,7 +558,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     });
     final shown = ordered.map((row) => row.$2).toList();
     final content = SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
-        SizedBox(width: double.infinity, child: SegmentedButton<int>(
+        if (!widget.mayHome) SizedBox(width: double.infinity, child: SegmentedButton<int>(
           segments: const [ButtonSegment(value: 0, icon: Icon(Icons.live_tv), tooltip: 'TV'), ButtonSegment(value: 1, icon: Icon(Icons.smart_display), tooltip: 'YouTube'), ButtonSegment(value: 2, icon: Icon(Icons.podcasts), tooltip: 'Podcast'), ButtonSegment(value: 3, icon: Icon(Icons.radio), tooltip: 'Radio'), ButtonSegment(value: 4, icon: Icon(Icons.favorite), tooltip: 'Ưa thích')],
           selected: {section},
           onSelectionChanged: (values) { if (values.first == 1) { _openYoutube(); } else { setState(() => section = values.first); } },
@@ -595,7 +654,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
             onPressed: () {
               final uri = Uri.tryParse(podcastFeed.text.trim());
               if (uri?.scheme != 'https') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nhập link RSS HTTPS hợp lệ'))); return; }
-              Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: 'Podcast', feedUrl: uri.toString())));
+              _showAudio(QuangAudioScreen(title:'Podcast',feedUrl:uri.toString(),embedded:widget.mayHome));
             }),
         ],
         if (section == 3) ...[
@@ -621,13 +680,13 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
             onPressed: () {
               final uri = Uri.tryParse(radioStream.text.trim());
               if (uri?.scheme != 'https') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nhập URL luồng HTTPS hợp lệ'))); return; }
-              Navigator.push(context, MaterialPageRoute(builder: (_) => QuangAudioScreen(title: 'Radio', streamUrl: uri.toString())));
+              _showAudio(QuangAudioScreen(title:'Radio',streamUrl:uri.toString(),embedded:widget.mayHome));
             }),
         ],
       ]));
     if (widget.mayHome) {
       return QuangMayShell(section: section, fullscreen: _homeFullscreen, onTask: _mayTask,
-        body: section == 0 ? _mayTelevision(shown) : content);
+        body: _moduleBody(shown,content));
     }
     return Scaffold(
       appBar: AppBar(title: const Text('QuangTV'), actions: [

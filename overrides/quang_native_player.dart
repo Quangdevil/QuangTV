@@ -40,6 +40,7 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
   bool manualFullscreen = false;
   bool resumed = true;
   bool controlsVisible = true;
+  double collapseDrag = 0;
   Timer? controlsTimer;
   VideoPlayerController? controller;
   VlcPlayerController? vlc;
@@ -104,6 +105,7 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     volume = widget.startMuted ? 0 : 1;
+    controlsVisible = !widget.embedded;
     _scheduleControlsHide();
     _initializePlayback();
     watchdog = Timer.periodic(const Duration(seconds: 1), (_) => _watch());
@@ -160,7 +162,8 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
   void _toggleFullscreen() {
     final next = !fullscreen;
     manualFullscreen = next;
-    setState(() => fullscreen = next);
+    controlsTimer?.cancel();
+    setState(() { fullscreen = next; controlsVisible = false; });
     widget.onFullscreenChanged?.call(next);
     SystemChrome.setEnabledSystemUIMode(next ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
     if (!next && MediaQuery.orientationOf(context) == Orientation.landscape) {
@@ -739,13 +742,18 @@ class QuangNativePlayerState extends State<QuangNativePlayer> with WidgetsBindin
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTap: _toggleControls,
+                  onVerticalDragStart: widget.embedded && fullscreen ? (_) { collapseDrag = 0; } : null,
+                  onVerticalDragUpdate: widget.embedded && fullscreen ? (details) { collapseDrag += details.delta.dy; } : null,
+                  onVerticalDragEnd: widget.embedded && fullscreen ? (details) {
+                    if (collapseDrag > 65 || (details.primaryVelocity ?? 0) > 300) _toggleFullscreen();
+                  } : null,
                   onDoubleTapDown: (details) {
                     final width = MediaQuery.sizeOf(context).width;
                     _seekRelative(details.localPosition.dx < width / 2 ? -10 : 10);
                   },
                 ),
               ),
-              if (loading && visible)
+              if (loading && (visible || widget.embedded))
                 const Center(child: CircularProgressIndicator()),
               if (error != null)
                 Center(

@@ -65,16 +65,17 @@ class QuangDownloadsActivity : Activity() {
     private fun dp(n:Int)=(n*resources.displayMetrics.density).toInt()
     private fun button(label:String,action:()->Unit)=Button(this).apply { text=label;isAllCaps=false;setOnClickListener { action() } }
     override fun onCreate(state:Bundle?) {
+        setTheme(android.R.style.Theme_Material_NoActionBar)
         super.onCreate(state)
-        val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(246,248,251)) }
+        val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(11,17,26)) }
         WindowCompat.setDecorFitsSystemWindows(window,false)
         ViewCompat.setOnApplyWindowInsetsListener(root) { view,insets ->
             val bars=insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             view.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets
         }
-        val bar=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL;setBackgroundColor(Color.WHITE) }
+        val bar=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL;setBackgroundColor(Color.rgb(17,30,41)) }
         bar.addView(button("‹") { onBackPressed() },LinearLayout.LayoutParams(dp(52),dp(52)))
-        bar.addView(TextView(this).apply { text="Đã tải";textSize=22f;setTextColor(Color.BLACK) },LinearLayout.LayoutParams(0,dp(48),1f))
+        bar.addView(TextView(this).apply { text="Đã tải";textSize=22f;setTextColor(Color.rgb(237,245,245)) },LinearLayout.LayoutParams(0,dp(48),1f))
         bar.addView(button("Tệp Android") { try { startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) } catch (_:Exception) { Toast.makeText(this,"Không mở được ứng dụng Tệp",Toast.LENGTH_SHORT).show() } })
         root.addView(bar)
         path=button("📁 Downloads / QuangTV") { openFolder("root") };root.addView(path)
@@ -83,6 +84,7 @@ class QuangDownloadsActivity : Activity() {
         videosFolder=button("") { openFolder("videos") };activeFolder=button("") { openFolder("active") }
         section=state?.getString("folder") ?: intent.getStringExtra("folder") ?: "root"
         setContentView(root);current=WeakReference(this);render()
+        intent.getStringExtra("openKey")?.let { key -> handler.post { QuangDownloads.entries(this).firstOrNull{it.key==key && it.complete}?.let{openVideo(it)} } }
     }
     private fun openFolder(next:String) { section=next;keys=emptyList();rows.removeAllViews();fileRows.clear();render() }
     private val refresh=object:Runnable { override fun run() { if(!isFinishing){render();handler.postDelayed(this,1000)} } }
@@ -119,9 +121,9 @@ class QuangDownloadsActivity : Activity() {
                 lastDeleted=removed;keys=emptyList();render()
             } else Toast.makeText(this@QuangDownloadsActivity,"Chưa xóa được tệp",Toast.LENGTH_SHORT).show()
         }
-        val content=LinearLayout(this@QuangDownloadsActivity).apply { orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(86);setBackgroundColor(Color.WHITE);setPadding(dp(12),dp(8),dp(12),dp(8));isClickable=true }
-        private val name=TextView(this@QuangDownloadsActivity).apply { textSize=15f;setTextColor(Color.BLACK);maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
-        private val detail=TextView(this@QuangDownloadsActivity).apply { textSize=12f;setTextColor(Color.DKGRAY);maxLines=2 }
+        val content=LinearLayout(this@QuangDownloadsActivity).apply { orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(86);setBackgroundColor(Color.rgb(17,30,41));setPadding(dp(12),dp(8),dp(12),dp(8));isClickable=true }
+        private val name=TextView(this@QuangDownloadsActivity).apply { textSize=15f;setTextColor(Color.rgb(237,245,245));maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
+        private val detail=TextView(this@QuangDownloadsActivity).apply { textSize=12f;setTextColor(Color.rgb(147,167,179));maxLines=2 }
         val revealed get()=content.translationX < -dp(30)
         init {
             delete.setBackgroundColor(Color.rgb(190,35,45));delete.setTextColor(Color.WHITE)

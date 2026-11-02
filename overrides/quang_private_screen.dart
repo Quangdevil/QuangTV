@@ -74,7 +74,10 @@ class QuangPrivateSecurity {
 }
 
 class QuangPrivateScreen extends StatefulWidget {
-  const QuangPrivateScreen({super.key});
+  final bool embedded;
+  final ValueChanged<Channel>? onPlay;
+  final VoidCallback? onLock;
+  const QuangPrivateScreen({super.key,this.embedded=false,this.onPlay,this.onLock});
   @override
   State<QuangPrivateScreen> createState() => _QuangPrivateScreenState();
 }
@@ -273,7 +276,7 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
   Widget build(BuildContext context) {
     final visible = channels.where((c) => c.name.toLowerCase().contains(search.text.toLowerCase())).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Private'), actions: [
+      appBar: widget.embedded ? null : AppBar(title: const Text('Private'), actions: [
         IconButton(tooltip: 'Khóa và thoát', icon: const Icon(Icons.lock), onPressed: () => Navigator.pop(context)),
       ]),
       bottomNavigationBar: SafeArea(top: false, child: Padding(
@@ -303,7 +306,7 @@ class _QuangPrivateScreenState extends State<QuangPrivateScreen> {
           : ListView.builder(padding: const EdgeInsets.only(bottom: 24), itemCount: visible.length, itemBuilder: (ctx, i) {
             final c = visible[i];
             return ListTile(leading: const Icon(Icons.live_tv), title: Text(c.name),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c, startMuted: true))),
+              onTap: () { if (widget.onPlay != null) { widget.onPlay!(c); } else { Navigator.push(context, MaterialPageRoute(builder: (_) => QuangNativePlayer(channel: c, startMuted: true))); } },
               trailing: IconButton(tooltip: 'Xóa kênh', icon: const Icon(Icons.delete_outline), onPressed: () => _delete(c)));
           })),
       ])),
