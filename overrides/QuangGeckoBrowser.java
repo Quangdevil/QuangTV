@@ -42,7 +42,7 @@ public final class QuangGeckoBrowser extends LinearLayout {
 
     public QuangGeckoBrowser(Context context, boolean applicationPage, Listener listener) {
         super(context);this.listener=listener;appPage=applicationPage;
-        setOrientation(VERTICAL);setBackgroundColor(BG);
+        setOrientation(VERTICAL);setBackgroundColor(BG);setFocusableInTouchMode(true);requestFocus();
         header=new LinearLayout(context);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(8),dp(6),dp(8),dp(6));
         Button home=button("☁", "Trang đầu Mây", this::home);header.addView(home,new LayoutParams(dp(48),dp(48)));
         address=new EditText(context);address.setTextColor(TEXT);address.setHintTextColor(0xff93a7b3);address.setTextSize(15);
@@ -131,7 +131,7 @@ public final class QuangGeckoBrowser extends LinearLayout {
         String target=raw==null?"":raw.trim();if(target.isEmpty()){home();return;}
         if(!http(target)){if(!target.contains(" ")&&target.contains(".")&&!target.contains("://"))target="https://"+target;else target="https://duckduckgo.com/?q="+Uri.encode(target);}
         if(!ready){pending=target;return;}if(!http(target))return;
-        focused=new WeakReference<>(this);pageHome(false);media.clear();address.clearFocus();
+        focused=new WeakReference<>(this);pageHome(false);media.clear();address.setText(target);address.clearFocus();
         InputMethodManager ime=(InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);if(ime!=null)ime.hideSoftInputFromWindow(address.getWindowToken(),0);
         session.setActive(active);session.loadUri(target);view.requestFocus();
     }
