@@ -199,6 +199,8 @@ jobs:
           grep -q 'QUANGTV_YOUTUBE_HISTORY_PASS' playback-evidence/ota-test-result.txt
           grep -q 'QUANGTV_MAY_HOME_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_INLINE_HOME_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_PINNED_PLAYER_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_NATIVE_MODULES_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_EMBED_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_CONTROLS_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_DEMO_START_PASS' playback-evidence/browser-test-result.txt
@@ -226,6 +228,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          grep -q QUANGTV_PINNED_PLAYER_PASS playback-evidence/browser-test-result.txt
+          grep -q QUANGTV_NATIVE_MODULES_PASS playback-evidence/browser-test-result.txt
           VERSION="1.3.0"
           TAG="quangtv-v${VERSION}-build${{ env.BUILD_NUMBER }}"
           APK="QuangTV-v${VERSION}-build${{ env.BUILD_NUMBER }}-arm64.apk"
