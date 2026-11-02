@@ -47,7 +47,19 @@ Future<List<MediaItem>> quangAutoMediaItems({http.Client? client}) async {
       if (uri == null || !['https', 'http'].contains(uri.scheme) || uri.host.isEmpty) continue;
       items[id] = MediaItem(id: id, title: title, album: 'QuangTV Auto', playable: true);
     }
-    return items.values.toList();
+    final ordered = items.values.toList();
+    int vtvNumber(MediaItem item) {
+      if (QuangVtvSource.channelId(item.title) == null) return 100000;
+      return int.tryParse(RegExp(r'^VTV\s*(\d+)', caseSensitive: false)
+          .firstMatch(item.title.trim())?.group(1) ?? '') ?? 99999;
+    }
+    ordered.sort((a, b) {
+      final group = vtvNumber(a).compareTo(vtvNumber(b));
+      if (group != 0) return group;
+      final title = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      return title != 0 ? title : a.id.compareTo(b.id);
+    });
+    return ordered;
   } catch (_) {
     return [];
   }
@@ -66,3 +78,13 @@ Future<List<String>> quangAutoPlaybackSources(MediaItem item, {http.Client? clie
 
 Map<String, String> quangAutoPlaybackHeaders(MediaItem item) =>
     QuangVtvSource.channelId(item.title) == null ? const {} : QuangVtvSource.headers;
+
+/// AA can request a single item's metadata separately from starting playback.
+/// Resolve from the same public catalog; never authorize an arbitrary URL.
+Future<MediaItem?> quangAutoMediaItem(String mediaId, {http.Client? client}) async {
+  final items = await quangAutoMediaItems(client: client);
+  for (final item in items) {
+    if (item.id == mediaId) return item;
+  }
+  return null;
+}

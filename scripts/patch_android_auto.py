@@ -43,7 +43,7 @@ def patch(app=APP):
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
         </activity>
         <service android:name="app.tvviewer.player.QuangAutoService"
-            android:exported="true" android:label="QuangTV · Mây">
+            android:exported="true" android:label="Mây · Video" android:icon="@drawable/quang_auto_video">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
@@ -124,6 +124,11 @@ def patch(app=APP):
             content = re.sub(r'^.*_currentUrl(?:\s*=.*|;)\n', '', content, flags=re.MULTILINE)
             handler.write_text(content)
     resources = app / 'src/main/res'
+    (resources / 'drawable').mkdir(parents=True, exist_ok=True)
+    (resources / 'drawable/quang_auto_video.xml').write_text('''<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#8AE4D1" android:pathData="M19.35,10.04C18.67,6.59 15.64,4 12,4C9.11,4 6.6,5.64 5.35,8.04C2.34,8.36 0,10.91 0,14C0,17.31 2.69,20 6,20H19C21.76,20 24,17.76 24,15C24,12.36 21.95,10.22 19.35,10.04Z"/>
+    <path android:fillColor="#0B3330" android:pathData="M10,9L10,16L16,12.5Z"/>
+</vector>''')
     (resources / 'xml').mkdir(parents=True, exist_ok=True)
     (resources / 'xml/quangtv_automotive_app.xml').write_text(
         '<?xml version="1.0" encoding="utf-8"?>\n<automotiveApp><uses name="media" /><uses name="projection" /></automotiveApp>\n')
@@ -167,6 +172,7 @@ dependencies {
 
 
 AUDIO_BROWSER = '''  // QuangTV Auto media browser
+  int _autoPlaybackGeneration = 0;
   @override
   Future<List<MediaItem>> getChildren(String parentMediaId, [Map<String, dynamic>? options]) async {
     if (parentMediaId != AudioService.browsableRootId) return [];
@@ -174,12 +180,17 @@ AUDIO_BROWSER = '''  // QuangTV Auto media browser
   }
 
   @override
+  Future<MediaItem?> getMediaItem(String mediaId) => quangAutoMediaItem(mediaId);
+
+  @override
   Future<void> playFromMediaId(String mediaId, [Map<String, dynamic>? extras]) async {
-    final items = await quangAutoMediaItems();
-    final selected = items.where((item) => item.id == mediaId).firstOrNull;
-    if (selected == null) return; // Never accept arbitrary external media URLs.
+    final request = ++_autoPlaybackGeneration;
+    final selected = await getMediaItem(mediaId);
+    if (selected == null || request != _autoPlaybackGeneration) return;
     await stop();
+    if (request != _autoPlaybackGeneration) return;
     _channelName = selected.title;
+    queue.add([selected]);
     mediaItem.add(selected);
     try {
       _updatePlaybackState(playing: false, state: AudioProcessingState.loading);
@@ -189,19 +200,29 @@ AUDIO_BROWSER = '''  // QuangTV Auto media browser
       for (final source in sources) {
         try {
           await _audioPlayer.setUrl(source, headers: quangAutoPlaybackHeaders(selected));
+          if (request != _autoPlaybackGeneration) return;
           prepared = true;
           break;
-        } catch (error) { lastSourceError = error; }
+        } catch (error) {
+          if (request != _autoPlaybackGeneration) return;
+          lastSourceError = error;
+        }
       }
       if (!prepared) throw lastSourceError ?? StateError('Không có nguồn phát');
       _isBackgroundActive = true;
-      unawaited(_audioPlayer.play().catchError((Object error) {
+      unawaited(_audioPlayer.play().catchError((Object error) async {
+        if (request != _autoPlaybackGeneration) return;
+        await _audioPlayer.stop();
+        if (request != _autoPlaybackGeneration) return;
         _isBackgroundActive = false;
         _updatePlaybackState(playing: false, state: AudioProcessingState.idle);
         logger.error('Android Auto audio playback failed', error);
       }));
       _updatePlaybackState(playing: true);
     } catch (error) {
+      if (request != _autoPlaybackGeneration) return;
+      await _audioPlayer.stop();
+      if (request != _autoPlaybackGeneration) return;
       _isBackgroundActive = false;
       _updatePlaybackState(playing: false, state: AudioProcessingState.idle);
       logger.error('Android Auto audio source failed', error);

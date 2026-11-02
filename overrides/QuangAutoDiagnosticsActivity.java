@@ -13,7 +13,19 @@ public final class QuangAutoDiagnosticsActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
         TextView report = new TextView(this);
         String trail = getSharedPreferences("quangtv_auto_diagnostics", 0).getString("trail", "Chưa ghi nhận lần mở trên xe.");
-        String text = "QuangTV Auto – Chẩn đoán\nAndroid " + android.os.Build.VERSION.RELEASE
+        String installSource;
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                android.content.pm.InstallSourceInfo info = getPackageManager().getInstallSourceInfo(getPackageName());
+                installSource = "Initiating installer: " + info.getInitiatingPackageName()
+                        + "\nRecorded installer: " + info.getInstallingPackageName();
+            } else installSource = "Installer: " + getPackageManager().getInstallerPackageName(getPackageName());
+        } catch (Exception error) { installSource = "Không đọc được nguồn cài: " + error.getClass().getSimpleName(); }
+        String version;
+        try { android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0); version = info.versionName + " (" + (android.os.Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode) + ")"; }
+        catch (Exception ignored) { version = "?"; }
+        String text = "QuangTV Auto – Chẩn đoán\n" + getPackageName() + " · " + version
+                + "\n" + installSource + "\nAndroid " + android.os.Build.VERSION.RELEASE
                 + " · " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL + "\n\n" + trail;
         report.setText(text);
         report.setTextIsSelectable(true);

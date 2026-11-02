@@ -15,6 +15,20 @@ void main() {
     expect(items.single.id, 'https://example.com/live.m3u8');
     expect(items.single.playable, true);
   });
+  test('VTV is first in numeric order even when cached catalog is alphabetical', () async {
+    SharedPreferences.setMockInitialValues({'quangtv_auto_channels': jsonEncode([
+      {'name':'An Giang TV', 'url':'https://example.com/ag'},
+      {'name':'VTV10 HD', 'url':'https://example.com/v10'},
+      {'name':'VTV3 HD', 'url':'https://example.com/v3'},
+      {'name':'VTV1 HD', 'url':'https://example.com/v1'},
+      {'name':'VTV2 HD', 'url':'https://example.com/v2'},
+    ])});
+    final items = await quangAutoMediaItems();
+    expect(items.map((i) => i.title), ['VTV1 HD','VTV2 HD','VTV3 HD','VTV10 HD','An Giang TV']);
+    final item = await quangAutoMediaItem('https://example.com/v3');
+    expect(item?.title, 'VTV3 HD');
+    expect(await quangAutoMediaItem('https://unknown.example/live'), isNull);
+  });
   test('Cold AA start fetches public catalog without a phone Activity and caches it', () async {
     SharedPreferences.setMockInitialValues({});
     var calls = 0;
