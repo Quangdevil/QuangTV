@@ -50,7 +50,7 @@ public final class QuangGeckoBrowser extends LinearLayout {
         address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);
         address.setImeOptions(EditorInfo.IME_ACTION_GO|EditorInfo.IME_FLAG_NO_EXTRACT_UI);
         address.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_GO){navigate(address.getText().toString());return true;}return false;});
-        address.setOnFocusChangeListener((v,focused)->{if(focused&&listener!=null)listener.searchRequested();});
+        address.setOnClickListener(v->{if(listener!=null)listener.searchRequested();});
         header.addView(address,new LayoutParams(0,dp(48),1));
         header.addView(button("→","Truy cập",()->navigate(address.getText().toString())),new LayoutParams(dp(48),dp(48)));
         tabButton=button("1","Các tab",this::showTabs);header.addView(tabButton,new LayoutParams(dp(48),dp(48)));
