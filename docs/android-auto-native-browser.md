@@ -1,6 +1,8 @@
 # Native Mây browser and Android Auto candidate
 
-Current tested candidate: **build 21**, source 0508b8e8146217ff5f0e181ae8477e721e3037c4. Its exact CI artifact passed native fullscreen/QuangTube motion, parked-state gate, return-to-menu and URL checks on DHU. Real Samsung/vehicle admission and Google acceptance remain unverified; this is not a completed real-car rollout.
+Latest findings: [build 24 consumer installation and audio repair](android-auto-consumer-install.md). The previous developer DHU profile did not validate consumer admission; see that report for the corrected method.
+
+Previous tested candidate: **build 21**, source 0508b8e8146217ff5f0e181ae8477e721e3037c4. Its exact CI artifact passed native fullscreen/QuangTube motion, parked-state gate, return-to-menu and URL checks on DHU. Real Samsung/vehicle admission and Google acceptance remain unverified; this is not a completed real-car rollout.
 
 The Auto variant now uses bundled GeckoView 159.0.20261022150525 with native Android browser controls, tab/home/bookmark UI, and a native task rail in the legacy projected activity. It does not use Android WebView for that browser. Websites and the hosted Mây TV/Tube/Podcast/Radio/Private destinations remain web content rendered by Gecko; this is not a rewrite of those destinations as Android widgets.
 
