@@ -12,7 +12,7 @@ public final class QuangAutoDiagnosticsActivity extends Activity {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         TextView report = new TextView(this);
-        String trail = getSharedPreferences("quangtv_auto_diagnostics", 0).getString("trail", "Chưa ghi nhận lần mở trên xe.");
+        String trail = getSharedPreferences("quangtv_auto_diagnostics", 0).getString("trail", "Chưa ghi nhận phần Mây · Video khởi chạy. Mở mục Âm thanh không tạo dấu vết này.");
         String installSource;
         try {
             if (android.os.Build.VERSION.SDK_INT >= 30) {

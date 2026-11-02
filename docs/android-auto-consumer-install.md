@@ -26,3 +26,17 @@ After reconnecting this consumer-model head unit, **Mây · Video** appeared alo
 Download [build 24](https://github.com/Quangdevil/QuangTV/releases/tag/auto-preview2-build24) and [official KingInstaller 2.5](https://github.com/fcaronte/KingInstaller/releases/tag/2.5). Select this APK in KingInstaller, leave Root/Shizuku OFF, press Install as king and confirm Update. Install over the existing Preview 2; do not uninstall. Reconnect Android Auto and choose the mint cloud **Mây · Video** icon. **QuangTV · Âm thanh** remains an audio-only service. Future APK updates should use this installer route too; the app's own updater is not verified to preserve this provenance.
 
 Actual One UI 9 / VF8 admission remains unconfirmed. This is a preview and does not establish Google approval. No production OTA or merge is part of this release. The browser uses GeckoView with native browser controls; hosted task pages remain web content.
+
+## Real-car follow-up: video entry reached, parked signal missing
+
+User reports Fermata × Mây shows exactly “Đang chờ trạng thái đỗ từ Android Auto…”. This proves its projected activity is running and the custom gate has no usable driving-status sample. It does not prove that the vehicle itself reports moving, or that installer trust is still the blocker for that app. The two apps bundle byte-identical aauto.aar (SHA256 99337c3b591ac9670c12b508da38886aedba61dd494f39f5f166f02580ec584b).
+
+QuangTV's MediaBrowser route deliberately uses _audioPlayer and has no video surface or Mây rail. Its audio UI alone cannot establish a decoder failure or prove its projection activity started. The Mây rail is constructed before the parked gate; missing rail plus an audio list indicates a different route from the waiting screen.
+
+QuangTV source now logs support, registration result, missing latest sample and exceptions for each of sensors 11 and 2 independently, plus gate transitions. An optional sensor failure cannot skip the remaining sensor setup. Empty status data resets knowledge; invalid speed fails closed. The diagnostic wording explicitly identifies the video route. No parked restriction is removed and no unknown state is treated as parked. A vehicle sensor report is still required to distinguish unsupported from failed registration or missing events. No real-car fix is claimed from these source changes.
+
+## Shared connection-lifecycle repair
+
+Both previews now share ParkedSensorMonitor and LegacyParkedSensors. The manager is reacquired after a late connection/disconnect, support and failed subscriptions are retried once per second while visible, and resume begins a fresh session. Status registration must succeed before cached status is consumed. Speed errors are isolated. Old queued callbacks are rejected by a connection generation. No signal, malformed status or disconnection continues to block playback; no manual parked override exists.
+
+The Java regression harness covers late manager readiness, false subscription/retry, optional speed exceptions, unsupported/missing driving status, motion, malformed samples, stop/resume and reconnect. The CI runs it before the APK build. This repairs the one-shot setup bug but cannot manufacture a driving-status signal that a head unit does not expose.

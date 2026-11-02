@@ -40,6 +40,9 @@ jobs:
       - name: Test and apply integration
         run: |
           python3 -m unittest discover -s tests -p test_android_auto_patch.py
+          mkdir -p "$RUNNER_TEMP/parked-tests"
+          javac -d "$RUNNER_TEMP/parked-tests" overrides/ParkedSensorMonitor.java tests/auto_probe/ParkedSensorMonitorTest.java
+          java -cp "$RUNNER_TEMP/parked-tests" ParkedSensorMonitorTest
           python3 scripts/patch_quangtv.py
           python3 scripts/patch_android_auto.py
       - name: Resolve Flutter dependencies

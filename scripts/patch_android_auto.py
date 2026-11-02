@@ -22,6 +22,11 @@ def patch(app=APP):
     for name in ('QuangAutoActivity.java', 'QuangAutoService.java', 'QuangAutoDiagnostics.java', 'QuangAutoDiagnosticsActivity.java', 'QuangGeckoBrowser.java', 'QuangGeckoActivity.java'):
         shutil.copyfile(ROOT / 'overrides' / name, source / name)
 
+    car_source = app / 'src/main/java/app/quangtv/car'
+    car_source.mkdir(parents=True, exist_ok=True)
+    for name in ('ParkedSensorMonitor.java', 'LegacyParkedSensors.java'):
+        shutil.copyfile(ROOT / 'overrides' / name, car_source / name)
+
     manifest = app / 'src/main/AndroidManifest.xml'
     text = manifest.read_text()
     # The upstream media browser service was private. Android Auto is a separate
