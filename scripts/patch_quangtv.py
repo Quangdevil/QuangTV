@@ -143,6 +143,8 @@ gradle = Path('upstream/flutter_app/android/app/build.gradle')
 gradle_source = gradle.read_text()
 assert 'applicationId "app.tvviewer.player"' in gradle_source
 gradle_source = gradle_source.replace('applicationId "app.tvviewer.player"', 'applicationId "com.quangduren.quangtv"', 1)
+gradle_source = gradle_source.replace('compileSdk 35', 'compileSdk 36', 1)
+gradle_source = gradle_source.replace('namespace "app.tvviewer.player"', 'namespace "app.tvviewer.player"\n    ndkVersion "28.2.13676358"', 1)
 # The release APK must always use a persistent private keystore, never a fallback debug key.
 gradle_source = gradle_source.replace(
     'signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug',

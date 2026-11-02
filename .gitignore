@@ -1,0 +1,12 @@
+upstream/
+.local-build/
+playback-evidence/
+.DS_Store
+__pycache__/
+*.jks
+*.keystore
+*.p12
+*.pem
+key.properties
+.env
+.env.*

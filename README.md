@@ -1,5 +1,7 @@
 # QuangTV — Android IPTV build
 
+Build local trên Mac Apple Silicon: xem [hướng dẫn macOS](docs/build-macos.md). Chạy `bash scripts/build_macos.sh --qa` để tạo APK kiểm thử cài song song; bản phát hành vẫn yêu cầu khóa ký lâu dài.
+
 Build based on MIT-licensed [TV Viewer](https://github.com/tv-viewer-app/tv_viewer), pinned to upstream commit `188df516a8acb4a2fda0d65fed8b6199c734603f`.
 
 This repository contains a GitHub Actions build recipe and maintained QuangTV overrides, rather than a complete upstream source fork.
