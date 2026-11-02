@@ -84,7 +84,7 @@ public final class QuangGeckoBrowser extends LinearLayout {
                             JSONObject config=new JSONObject();
                             try {Map<String,Object> proxy=QuangProxy.INSTANCE.state(context.getApplicationContext());config.put("enabled",Boolean.TRUE.equals(proxy.get("enabled")));config.put("port",proxy.get("localPort"));}
                             catch(Exception error){try{config.put("enabled",true).put("port",9);}catch(JSONException ignored){}}
-                            return GeckoResult.fromValue(config);
+                            return GeckoResult.fromValue(config.toString());
                         }
                         if(browser!=null&&!browser.closed&&"media".equals(data.optString("op")))browser.receiveMedia(data);
                         return GeckoResult.fromValue(null);

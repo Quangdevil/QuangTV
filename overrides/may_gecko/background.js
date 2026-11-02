@@ -2,7 +2,7 @@
 const ads=new Set(['doubleclick.net','googlesyndication.com','googleadservices.com','adnxs.com','taboola.com','outbrain.com','popads.net','popcash.net','exoclick.com','juicyads.com','trafficjunky.net']);
 const blocked=url=>{try{let h=new URL(url).hostname;while(h){if(ads.has(h))return true;const i=h.indexOf('.');if(i<0)break;h=h.slice(i+1);}}catch{}return false;};
 let lastConfig=null,at=0;
-async function config(){if(lastConfig&&Date.now()-at<500)return lastConfig;lastConfig=await browser.runtime.sendNativeMessage('may',{op:'config'});at=Date.now();return lastConfig;}
+async function config(){if(lastConfig&&Date.now()-at<500)return lastConfig;const raw=await browser.runtime.sendNativeMessage('may',{op:'config'});lastConfig=typeof raw==='string'?JSON.parse(raw):raw;if(!lastConfig||typeof lastConfig.enabled!=='boolean')throw new Error('Invalid native proxy state');at=Date.now();return lastConfig;}
 browser.proxy.onRequest.addListener(async details=>{try{const c=await config();return c.enabled?{type:'http',host:'127.0.0.1',port:Number(c.port)||9,failoverTimeout:0}:{type:'direct'};}catch{return {type:'http',host:'127.0.0.1',port:9,failoverTimeout:0};}},{urls:['<all_urls>']});
 browser.webRequest.onBeforeRequest.addListener(d=>({cancel:blocked(d.url)}),{urls:['<all_urls>']},['blocking']);
 const pending=new Map();
