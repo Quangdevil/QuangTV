@@ -37,12 +37,12 @@ jobs:
               test "$(gh api repos/$GH_REPO/actions/runs/41868899371 --jq .conclusion)" = success
               gh api repos/$GH_REPO/compare/73ecca3dc67c06c2d99f75b325bc7f3d8a54f697...3790f8e3f02ccba11246a49cbd90cdef32993ed3 > "$RUNNER_TEMP/qa-diff.json"
               python3 - "$RUNNER_TEMP/qa-diff.json" <<'PY'
-              import json,sys
-              j=json.load(open(sys.argv[1]))
-              allowed={'.github/workflows/compile-native-modules.yml','scripts/test_browser.sh','tests/browser_test.dart'}
-              assert j['status']=='ahead' and set(f['filename'] for f in j['files'])<=allowed
-              print('QUANGTV_QA_PRODUCTION_SOURCE_IDENTICAL_PASS')
-              PY
+          import json,sys
+          j=json.load(open(sys.argv[1]))
+          allowed={'.github/workflows/compile-native-modules.yml','scripts/test_browser.sh','tests/browser_test.dart'}
+          assert j['status']=='ahead' and set(f['filename'] for f in j['files'])<=allowed
+          print('QUANGTV_QA_PRODUCTION_SOURCE_IDENTICAL_PASS')
+          PY
               exit 0
             fi
             sleep 15
