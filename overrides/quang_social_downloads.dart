@@ -76,10 +76,10 @@ class _QuangSocialDownloadsState extends State<QuangSocialDownloads> {
   void dispose() { request++; input.dispose(); super.dispose(); }
   @override
   Widget build(BuildContext context) {
-    if (browserPage.isNotEmpty) return Column(children: [
+    if (browserPage.isNotEmpty) { return Column(children: [
       if (!widget.fullscreen) ListTile(dense: true, leading: IconButton(tooltip: 'Về tải video', icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => browserPage = '')), title: const Text('Phát video rồi chọn Bắt video')),
       Expanded(child: QuangNativeBrowser(key: ValueKey(browserPage), initialUrl: browserPage, direct: true, fullscreen: widget.fullscreen, onFullscreen: widget.onFullscreen)),
-    ]);
+    ]); }
     if (files) return Column(children: [ListTile(leading: IconButton(tooltip: 'Về tải video', icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => files = false)), title: const Text('Tải video')), const Expanded(child: QuangNativeDownloads())]);
     final choices = (video?['choices'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
     return ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 24), children: [

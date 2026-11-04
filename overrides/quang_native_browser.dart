@@ -118,7 +118,7 @@ class _QuangNativeBrowserState extends State<QuangNativeBrowser> {
       if(!mounted||request!=generation)return;
       if(!replace&&page.isNotEmpty){previous.add(page);next.clear();}
       page=url;tabs[tabIndex].url=url;address.text=url;media.clear();
-      const capture="""<script>(()=>{const seen=new Set();const send=(u,mediaElement=false)=>{if(u&&!seen.has(u)&&seen.size<120){seen.add(u);parent.postMessage({type:'quang-media',url:u,mediaElement},'*')}};const scan=()=>{document.querySelectorAll('video,video source').forEach(v=>send(v.currentSrc||v.src,true));document.querySelectorAll('meta[property^="og:video"],meta[itemprop="contentUrl"]').forEach(m=>send(m.content,true));performance.getEntriesByType('resource').forEach(r=>{if(r.initiatorType==='video'||/[.](mp4|m3u8|webm|m4v)(?:$|[?&])/i.test(r.name))send(r.name,r.initiatorType==='video')});};addEventListener('loadedmetadata',scan,true);addEventListener('message',e=>{if(e.source===parent&&e.data?.type==='quang-pause')document.querySelectorAll('video,audio').forEach(v=>v.pause())});setInterval(scan,1500);scan()})();</script>""";
+      const capture=r"""<script>(()=>{const seen=new Set();const send=(u,mediaElement=false)=>{if(u&&!seen.has(u)&&seen.size<120){seen.add(u);parent.postMessage({type:'quang-media',url:u,mediaElement},'*')}};const scan=()=>{document.querySelectorAll('video,video source').forEach(v=>send(v.currentSrc||v.src,true));document.querySelectorAll('meta[property^="og:video"],meta[itemprop="contentUrl"]').forEach(m=>send(m.content,true));performance.getEntriesByType('resource').forEach(r=>{if(r.initiatorType==='video'||/[.](mp4|m3u8|webm|m4v)(?:$|[?&])/i.test(r.name))send(r.name,r.initiatorType==='video')});};addEventListener('loadedmetadata',scan,true);addEventListener('message',e=>{if(e.source===parent&&e.data?.type==='quang-pause')document.querySelectorAll('video,audio').forEach(v=>v.pause())});setInterval(scan,1500);scan()})();</script>""";
       final html=jsonEncode((data?['html']?.toString() ?? '')+capture).replaceAll('<',r'\u003c');
       final shell='''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0;background:#0b111a}</style></head><body><script>
       const f=document.createElement('iframe');f.setAttribute('sandbox','allow-scripts allow-forms');f.allow='fullscreen; autoplay';f.allowFullscreen=true;f.referrerPolicy='no-referrer';f.srcdoc=$html;document.body.append(f);
@@ -229,7 +229,7 @@ class _QuangNativeDownloadsState extends State<QuangNativeDownloads> {
     setState(()=>busy=true);
     try{
       final removed=await api.invokeMethod<bool>('deleteDownload',{'key':file['key']}) ?? false;
-      if(mounted)setState((){if(removed)files.removeWhere((e)=>e['key']==file['key']);else message='Chưa xóa được tệp. Hãy thử lại.';});
+      if(mounted)setState((){if(removed){files.removeWhere((e)=>e['key']==file['key']);}else{message='Chưa xóa được tệp. Hãy thử lại.';}});
       return removed;
     }on PlatformException catch(e){if(mounted)setState(()=>message=e.message ?? 'Không xóa được tệp.');return false;}
     finally{if(mounted)setState(()=>busy=false);}
