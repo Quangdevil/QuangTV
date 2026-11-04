@@ -1,7 +1,7 @@
 name: Verify social downloads and native browser
 on:
   push:
-    branches: [qa/social-downloads]
+    branches: [qa/social-downloads, qa/social-live-session]
 permissions:
   contents: read
 jobs:
