@@ -91,6 +91,7 @@ jobs:
       - name: Test browser, native playback, controls and OTA on Android
         id: android_tests
         env:
+          QUANGTV_TEST_NAME: 'Native modules play and keep download folders in the shared shell'
           DISPLAY: ':99'
           LIBGL_ALWAYS_SOFTWARE: 'true'
           GALLIUM_DRIVER: llvmpipe
