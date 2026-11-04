@@ -62,7 +62,7 @@ jobs:
           flutter pub get
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
-        run: flutter analyze lib/screens/quang_native_browser.dart lib/screens/quang_native_tube.dart lib/screens/quang_may_shell.dart lib/screens/quang_vtv_source.dart lib/screens/quang_network.dart lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
+        run: flutter analyze lib/screens/quang_social_downloads.dart lib/screens/quang_native_browser.dart lib/screens/quang_native_tube.dart lib/screens/quang_may_shell.dart lib/screens/quang_vtv_source.dart lib/screens/quang_network.dart lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
       - name: Test fresh anonymous VTVgo sources
         working-directory: upstream/flutter_app
         run: flutter test test/quang_vtv_source_test.dart
@@ -201,6 +201,9 @@ jobs:
           grep -q 'QUANGTV_INLINE_HOME_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_PINNED_PLAYER_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_NATIVE_MODULES_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_DOWNLOAD_BULK_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_SOCIAL_SHARE_PASS' playback-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_SOCIAL_LIVE_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_EMBED_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_CONTROLS_PASS' playback-evidence/browser-test-result.txt
           grep -q 'QUANGTV_MAY_DEMO_START_PASS' playback-evidence/browser-test-result.txt
@@ -230,6 +233,9 @@ jobs:
           set -euo pipefail
           grep -q QUANGTV_PINNED_PLAYER_PASS playback-evidence/browser-test-result.txt
           grep -q QUANGTV_NATIVE_MODULES_PASS playback-evidence/browser-test-result.txt
+          grep -q QUANGTV_DOWNLOAD_BULK_PASS playback-evidence/browser-test-result.txt
+          grep -q QUANGTV_SOCIAL_SHARE_PASS playback-evidence/browser-test-result.txt
+          grep -q QUANGTV_SOCIAL_LIVE_PASS playback-evidence/browser-test-result.txt
           VERSION="1.3.0"
           TAG="quangtv-v${VERSION}-build${{ env.BUILD_NUMBER }}"
           APK="QuangTV-v${VERSION}-build${{ env.BUILD_NUMBER }}-arm64.apk"

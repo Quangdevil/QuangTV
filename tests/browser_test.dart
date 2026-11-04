@@ -652,4 +652,51 @@ void main() {
       } catch (_) { debugPrint('QUANGTV_YOUTUBE_LIVE_UNVERIFIED networkTimeout=true'); }
     });
   }, timeout: const Timeout(Duration(minutes: 6)));
+  testWidgets('Douyin shared public clip downloads and opens a real local video', (tester) async {
+    const api=MethodChannel('quangtv/modules');
+    const bridge=MethodChannel('quangtv/browser');
+    await tester.pumpWidget(const MaterialApp(home:Scaffold(body:Text('Kiểm thử tải Douyin thực tế'))));
+    await tester.runAsync(() async {
+      String? ownedKey;
+      try {
+        await bridge.invokeMethod<void>('proxySave',{'enabled':false});
+        final result=await api.invokeMapMethod<String,dynamic>('socialResolve',{'text':'复制 https://v.douyin.com/5D5fVf9UNaw/ 打开抖音'}).timeout(const Duration(seconds:90));
+        expect(result?['platform'],'Douyin');
+        expect(result?['page'].toString(),contains('7698215485313940345'));
+        final choices=result?['choices'] as List? ?? [];
+        expect(choices,isNotEmpty,reason:'The actual shared video must provide a source, not a fixture');
+        final source=(choices.first as Map)['url'].toString();
+        expect(Uri.parse(source).path,contains('/play/'));
+        final id=await api.invokeMethod<Object>('socialDownload',{'url':source,'page':result?['page'],'name':'Douyin-live-${DateTime.now().millisecondsSinceEpoch}.mp4'}).timeout(const Duration(seconds:35));
+        ownedKey='download:$id';
+        var completed=false;
+        final end=DateTime.now().add(const Duration(seconds:90));
+        while(DateTime.now().isBefore(end)) {
+          final entries=await api.invokeListMethod<dynamic>('downloads') ?? [];
+          final own=entries.where((e)=>(e as Map)['key']==ownedKey).toList();
+          if(own.isNotEmpty&&own.first['complete']==true) {
+            expect(own.first['bytes'],greaterThan(100000));completed=true;break;
+          }
+          await Future<void>.delayed(const Duration(milliseconds:500));
+        }
+        expect(completed,true,reason:'DownloadManager must save the real MP4');
+        await api.invokeMethod<void>('openDownload',{'key':ownedKey});
+        var advanced=false;
+        final previewEnd=DateTime.now().add(const Duration(seconds:30));
+        while(DateTime.now().isBefore(previewEnd)) {
+          final state=await bridge.invokeMapMethod<String,dynamic>('downloadsInspect') ?? {};
+          if(state['previewPlaying']==true&&(state['previewPosition'] as num? ?? 0)>1000){advanced=true;break;}
+          await Future<void>.delayed(const Duration(milliseconds:500));
+        }
+        expect(advanced,true,reason:'The downloaded Douyin file must really play');
+        debugPrint('QUANGTV_SOCIAL_LIVE_PASS platform=Douyin exactSharedVideo=true realMp4Downloaded=true localVideoAdvanced=true sessionCookie=true');
+      }finally {
+        await bridge.invokeMethod<void>('downloadsAction',{'action':'close'});
+        await Future<void>.delayed(const Duration(milliseconds:500));
+        if(ownedKey!=null)await api.invokeMethod<bool>('deleteDownload',{'key':ownedKey});
+      }
+    });
+    await tester.pumpWidget(const SizedBox.shrink());
+  },timeout:const Timeout(Duration(minutes:5)));
+
 }
