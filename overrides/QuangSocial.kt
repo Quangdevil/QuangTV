@@ -17,8 +17,11 @@ object QuangSocial {
     private const val MAX_HTML = 6 * 1024 * 1024
     private val worker = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
+    private val trace=mutableListOf<Map<String,Any>>()
+    fun diagnostics():List<Map<String,Any>> = synchronized(trace){trace.toList()}
+    private fun recordTrace(value:Map<String,Any>){synchronized(trace){if(trace.size>=24)trace.removeAt(0);trace.add(value)}}
     private val pageDomains = listOf("facebook.com", "fb.com", "fb.watch", "tiktok.com", "douyin.com", "iesdouyin.com")
-    private val mobileUa = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    private val mobileUa = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"
     private fun isDomain(host: String, domain: String) = host == domain || host.endsWith(".$domain")
 
     /** Accept the entire copied share message, but never turn arbitrary text into a request. */
@@ -84,11 +87,15 @@ object QuangSocial {
                 connection.setRequestProperty("User-Agent", mobileUa)
                 connection.setRequestProperty("Accept", "text/html,application/xhtml+xml")
                 connection.setRequestProperty("Accept-Encoding", "identity")
-                connection.setRequestProperty("Referer", "https://www.douyin.com/")
+                connection.setRequestProperty("Referer", when(platform(raw)){"Douyin"->"https://www.douyin.com/";"TikTok"->"https://www.tiktok.com/";else->"https://www.facebook.com/"})
                 connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9")
-                cookies.get(uri, emptyMap()).forEach { (name, values) -> connection.setRequestProperty(name, values.joinToString("; ")) }
+                val outgoingCookies=cookies.get(uri, emptyMap())
+                outgoingCookies.forEach { (name, values) -> connection.setRequestProperty(name, values.joinToString("; ")) }
                 val code = connection.responseCode
                 cookies.put(uri, connection.headerFields)
+                // These public websites expect ordinary Cookie name=value pairs,
+                // not the legacy RFC 2965 $Version / quoted-value serialization.
+                cookies.cookieStore.cookies.forEach { it.version=0 }
                 if (code in listOf(301, 302, 303, 307, 308)) {
                     target = uri.resolve(connection.getHeaderField("Location") ?: error("Link chuyển hướng thiếu địa chỉ")).toString()
                 } else {
@@ -105,7 +112,11 @@ object QuangSocial {
                             out.write(buffer, 0, size)
                         }
                     }
-                    return Page(target, out.toString("UTF-8"))
+                    val html=out.toString("UTF-8")
+                    recordTrace(mapOf("host" to uri.host,"path" to uri.path,"status" to code,"bytes" to html.length,
+                        "cookies" to cookies.cookieStore.get(uri).size,"sentCookie" to outgoingCookies.values.any{it.isNotEmpty()},
+                        "hasItemList" to html.contains("item_list"),"hasPlayAddress" to html.contains("play_addr")))
+                    return Page(target, html)
                 }
             } finally { connection.disconnect() }
         }
@@ -142,16 +153,23 @@ object QuangSocial {
     fun resolve(context: Context, text: String, done: (Map<String, Any>?, String?) -> Unit) {
         worker.execute {
             try {
+                synchronized(trace){trace.clear()}
                 val input = shareUrl(text)
                 val cookies=java.net.CookieManager(null,java.net.CookiePolicy.ACCEPT_ORIGINAL_SERVER)
                 var page = fetch(input,cookies)
                 var result = parse(page.url, page.html)
-                // Some public Douyin share pages first set their anonymous session
-                // cookie and only include item_list in the next normal request.
-                // One retry only, without changing identity or solving challenges.
-                if(platform(input)=="Douyin" && (result["choices"] as? List<*>)?.isEmpty()==true &&
-                    !hasVisibleChallenge(page.html)) {
-                    page=fetch(page.url,cookies);result=parse(page.url,page.html)
+                // A short share can expand to a tracking-heavy reflow URL that
+                // omits the item even with a cookie. Read the same numeric video
+                // at its canonical public share page, retaining the anonymous jar.
+                val id=contentId(page.url)
+                if(platform(input)=="Douyin" && id!=null && (result["choices"] as? List<*>)?.isEmpty()==true && !hasVisibleChallenge(page.html)) {
+                    val canonical="https://www.iesdouyin.com/share/video/$id/"
+                    if(page.url!=canonical){page=fetch(canonical,cookies);result=parse(page.url,page.html)}
+                    // One ordinary session retry after the canonical page sets
+                    // its cookie. No account change or challenge bypass.
+                    if((result["choices"] as? List<*>)?.isEmpty()==true && !hasVisibleChallenge(page.html)) {
+                        page=fetch(canonical,cookies);result=parse(page.url,page.html)
+                    }
                 }
                 val choices = (result["choices"] as? List<*>)?.filterIsInstance<Map<String, Any>>() ?: emptyList()
                 val valid = choices.filter { choice -> try { validatePublicUrl(choice["url"] as String); true } catch (_: Exception) { false } }

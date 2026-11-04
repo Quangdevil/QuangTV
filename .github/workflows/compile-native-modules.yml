@@ -87,10 +87,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-modules-debug
+          overwrite: true
           path: upstream/flutter_app/build/app/outputs/flutter-apk/app-debug.apk
       - name: Test browser, native playback, controls and OTA on Android
         id: android_tests
         env:
+          QUANGTV_TEST_NAME: 'Native modules play and keep download folders in the shared shell'
           DISPLAY: ':99'
           LIBGL_ALWAYS_SOFTWARE: 'true'
           GALLIUM_DRIVER: llvmpipe
@@ -103,7 +105,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           pre-emulator-launch-script: bash scripts/setup_ci_graphics.sh
-          emulator-options: -no-window -show-kernel -no-snapshot -noaudio -no-boot-anim -gpu host -verbose -feature -Vulkan,-HardwareDecoder -memory 2048 -cores 2
+          emulator-options: -no-window -show-kernel -no-snapshot -noaudio -no-boot-anim -gpu host -verbose -feature -Vulkan,-HardwareDecoder -memory 1536 -cores 2
           script: |
             adb root
             adb wait-for-device

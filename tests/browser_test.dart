@@ -183,7 +183,8 @@ void main() {
       await tester.enterText(find.byType(TextField).first,'https://quangtv.fixture/');
       await tester.testTextInput.receiveAction(TextInputAction.go);
       await waitFor(()=>find.text('Bắt video (1)').evaluate().isNotEmpty);
-      expect(tester.getTopLeft(find.byKey(const ValueKey('browser-address'))).dy,greaterThan(tester.view.physicalSize.height/tester.view.devicePixelRatio*.5));
+      final browserRect=tester.getRect(find.byType(QuangNativeBrowser));
+      expect(tester.getTopLeft(find.byKey(const ValueKey('browser-address'))).dy,greaterThan(browserRect.top+browserRect.height*.5));
       expect(find.byKey(const ValueKey('browser-capture')).hitTestable(),findsOneWidget);
       await tester.tap(find.text('Bắt video (1)'));await tester.pump(const Duration(milliseconds:500));
       await tester.tap(find.byTooltip('Tải về'));await tester.pump(const Duration(seconds:2));
@@ -690,6 +691,9 @@ void main() {
         }
         expect(advanced,true,reason:'The downloaded Douyin file must really play');
         debugPrint('QUANGTV_SOCIAL_LIVE_PASS platform=Douyin exactSharedVideo=true realMp4Downloaded=true localVideoAdvanced=true sessionCookie=true');
+      }catch(_){
+        debugPrint('QUANGTV_SOCIAL_DIAGNOSTIC ${await api.invokeListMethod<dynamic>('socialDiagnostics')}');
+        rethrow;
       }finally {
         await bridge.invokeMethod<void>('downloadsAction',{'action':'close'});
         await Future<void>.delayed(const Duration(milliseconds:500));

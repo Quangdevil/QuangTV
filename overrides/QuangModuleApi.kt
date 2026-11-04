@@ -46,6 +46,7 @@ object QuangModuleApi {
             if(call.method=="playback"){result.success(mapOf("url" to "http://10.0.2.2:8765/fixture.mp4","title" to "Native Tube fixture","page" to "https://www.youtube.com/watch?v=aqz-KE-bpKQ","choices" to listOf(mapOf("url" to "http://10.0.2.2:8765/fixture.mp4","quality" to "Fixture"))));return}
             if(call.method=="browse" && Uri.parse(call.argument<String>("url") ?: "").host=="quangtv.fixture"){result.success(mapOf("url" to "https://quangtv.fixture/","html" to "<html><body><h1>Native browser fixture</h1><video controls src='http://10.0.2.2:8765/fixture.mp4'></video></body></html>"));return}
         }
+        if(debug && call.method=="socialDiagnostics"){result.success(QuangSocial.diagnostics());return}
         if(debug && call.method=="socialParseFixture") {try{result.success(QuangSocial.parse(call.argument<String>("page") ?: "",call.argument<String>("html") ?: ""))}catch(e:Exception){result.error("PARSE",e.message,null)};return}
         if(debug && call.method=="socialShareFixture") {a.intent=Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,call.argument<String>("text"));result.success(null);return}
         when(call.method){

@@ -45,7 +45,7 @@ if [[ -n "${QUANGTV_TEST_NAME:-}" ]]; then test_args+=(--plain-name "$QUANGTV_TE
 flutter test integration_test/browser_test.dart -d emulator-5554 "${test_args[@]}" 2>&1 | tee "$repo_root/playback-evidence/browser-test-result.txt"
 
 if [[ -n "${QUANGTV_TEST_NAME:-}" ]]; then
-  grep -q QUANGTV_MAY_HOME_PASS "$repo_root/playback-evidence/browser-test-result.txt"
+  grep -Eq 'QUANGTV_MAY_HOME_PASS|QUANGTV_NATIVE_MODULES_PASS' "$repo_root/playback-evidence/browser-test-result.txt"
   exit 0
 fi
 for marker in QUANGTV_APP_PROXY_PASS QUANGTV_PRIVATE_LAYOUT_PASS QUANGTV_BROWSER_PASS QUANGTV_BROWSER_PLAYER_PASS QUANGTV_PROXY_ANDROID_PASS QUANGTV_PROXY_VLC_PASS QUANGTV_BROWSER_UI_PASS QUANGTV_YOUTUBE_MUX_PASS; do
