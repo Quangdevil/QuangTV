@@ -66,6 +66,7 @@ class QuangMayShell extends StatelessWidget {
         task('radio', Icons.radio_outlined, 'Radio', selected: section == 3),
         task('private', Icons.lock_outline, 'Private', selected: section == 5),
         task('favorites', Icons.favorite_border, 'Ưa thích', selected: section == 4),
+        task('social', Icons.download_for_offline_outlined, 'Tải video', selected: section == 8),
         task('downloads', Icons.folder_outlined, 'Đã tải', selected: section == 7),
         const Divider(indent: 26, endIndent: 26),
         task('proxy', Icons.vpn_lock_outlined, 'Proxy'),

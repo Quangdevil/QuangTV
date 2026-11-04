@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:tv_viewer/screens/quang_native_browser.dart';
 import 'package:tv_viewer/screens/quang_native_tube.dart';
+import 'package:tv_viewer/screens/quang_social_downloads.dart';
 import 'package:tv_viewer/screens/quang_network.dart';
 import 'package:tv_viewer/screens/quang_proxy_screen.dart';
 import 'package:flutter/material.dart';
@@ -181,8 +182,10 @@ void main() {
       await menu('browser');expect(find.byType(QuangNativeBrowser),findsOneWidget);
       await tester.enterText(find.byType(TextField).first,'https://quangtv.fixture/');
       await tester.testTextInput.receiveAction(TextInputAction.go);
-      await waitFor(()=>find.text('Video (1)').evaluate().isNotEmpty);
-      await tester.tap(find.text('Video (1)'));await tester.pump(const Duration(milliseconds:500));
+      await waitFor(()=>find.text('Bắt video (1)').evaluate().isNotEmpty);
+      expect(tester.getTopLeft(find.byKey(const ValueKey('browser-address'))).dy,greaterThan(tester.view.physicalSize.height/tester.view.devicePixelRatio*.5));
+      expect(find.byKey(const ValueKey('browser-capture')).hitTestable(),findsOneWidget);
+      await tester.tap(find.text('Bắt video (1)'));await tester.pump(const Duration(milliseconds:500));
       await tester.tap(find.byTooltip('Tải về'));await tester.pump(const Duration(seconds:2));
       await menu('downloads');expect(find.byType(QuangNativeDownloads),findsOneWidget);
       await tester.tap(find.text('Video đã tải'));await tester.pump(const Duration(seconds:2));
@@ -192,6 +195,22 @@ void main() {
       await tester.drag(find.byType(Dismissible).first,const Offset(-600,0));
       await tester.pump(const Duration(seconds:2));
       expect(await api.invokeMethod<bool>('lastDeleteExists'),false);
+      for(final name in ['batch-a.mp4','batch-b.mp4']) {
+        await api.invokeMethod<Object>('download',{'url':'http://10.0.2.2:8765/fixture.mp4','name':name});
+      }
+      await waitFor(()=>find.byType(Dismissible).evaluate().length==2);
+      final batch=await api.invokeListMethod<dynamic>('downloads');
+      expect(batch!.where((e)=>e['complete']==true).length,2);
+      await tester.tap(find.byKey(const ValueKey('downloads-delete-all')));await tester.pump(const Duration(milliseconds:400));
+      expect(find.text('Xóa toàn bộ video?'),findsOneWidget);
+      await tester.tap(find.text('Hủy'));await tester.pump(const Duration(milliseconds:400));
+      expect(find.byType(Dismissible),findsNWidgets(2));
+      await tester.tap(find.byKey(const ValueKey('downloads-delete-all')));await tester.pump(const Duration(milliseconds:400));
+      await tester.tap(find.byKey(const ValueKey('downloads-confirm-delete-all')));await tester.pump(const Duration(seconds:2));
+      expect(await api.invokeListMethod<dynamic>('downloads'),isEmpty);
+      expect(await api.invokeListMethod<dynamic>('lastBatchDeleteExists'),[false,false]);
+      debugPrint('QUANGTV_DOWNLOAD_BULK_PASS cancelPreservesFiles=true confirmedDelete=true physicalFilesGone=true bottomNativeToolbar=true');
+
       debugPrint('QUANGTV_NATIVE_MODULES_PASS sharedShell=true nativeTubePlayback=true searchHistoryDelete=true browserCapture=true nativeFolders=true backgroundDownload=true physicalSwipeDelete=true');
     }finally{
       await tester.pumpWidget(const SizedBox.shrink());await tester.pump(const Duration(milliseconds:500));
@@ -201,6 +220,81 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     }
   },timeout:const Timeout(Duration(minutes:4)));
+
+
+  testWidgets('Social shares and public metadata parsers keep the requested video', (tester) async {
+    const api=MethodChannel('quangtv/modules');
+    final fixtures=jsonDecode(r'''[
+  {
+    "name": "douyin_prefers_playback_and_skips_other_video",
+    "page": "https://www.iesdouyin.com/share/video/7698215485313940345/",
+    "html": "<script>window._ROUTER_DATA = {\"loaderData\":{\"video\":{\"aweme_detail\":{\"aweme_id\":\"7698215485313940345\",\"desc\":\"Đúng video\",\"video\":{\"play_addr\":{\"url_list\":[\"https://video.example.org/play.mp4?x=1&y=2\"]},\"download_addr\":{\"url_list\":[\"https://video.example.org/watermarked.mp4\"]}}},\"suggested\":{\"aweme_id\":\"1111111111111111111\",\"video\":{\"play_addr\":{\"url_list\":[\"https://video.example.org/wrong.mp4\"]}}}}}};</script>",
+    "expectedTitle": "Đúng video",
+    "expectedFirstUrl": "https://video.example.org/play.mp4?x=1&y=2",
+    "expectedCount": 2,
+    "expectedWatermark": "unknown"
+  },
+  {
+    "name": "tiktok_hydration",
+    "page": "https://www.tiktok.com/@fixture/video/7698215485313940345",
+    "html": "<script id='__UNIVERSAL_DATA_FOR_REHYDRATION__' type='application/json'>{\"__DEFAULT_SCOPE__\":{\"webapp.video-detail\":{\"itemInfo\":{\"itemStruct\":{\"id\":\"7698215485313940345\",\"desc\":\"TikTok fixture\",\"video\":{\"playAddr\":\"https://video.example.org/tiktok.mp4\",\"downloadAddr\":\"https://video.example.org/tiktok-download.mp4\"}}}}}}</script>",
+    "expectedTitle": "TikTok fixture",
+    "expectedFirstUrl": "https://video.example.org/tiktok.mp4",
+    "expectedCount": 2,
+    "expectedWatermark": "unknown"
+  },
+  {
+    "name": "facebook_inline_json",
+    "page": "https://www.facebook.com/reel/7698215485313940345",
+    "html": "<meta property='og:title' content='Facebook fixture'><script>requireLazy([],function(){const data={\"browser_native_hd_url\":\"https:\\/\\/video.example.org\\/facebook.mp4?x=1\\u0026y=2\",\"browser_native_sd_url\":\"https:\\/\\/video.example.org\\/facebook-sd.mp4\"};});</script>",
+    "expectedTitle": "Facebook fixture",
+    "expectedFirstUrl": "https://video.example.org/facebook.mp4?x=1&y=2",
+    "expectedCount": 2,
+    "expectedWatermark": "unknown"
+  },
+  {
+    "name": "no_video_metadata_is_not_a_success",
+    "page": "https://www.iesdouyin.com/share/video/7698215485313940345/",
+    "html": "<html><h1>打开抖音</h1><script>window._ROUTER_DATA={\"loaderData\":{\"itemId\":\"7698215485313940345\"}};</script></html>",
+    "expectedTitle": "Video Douyin",
+    "expectedCount": 0,
+    "expectedStatus": "no_public_source"
+  },
+  {
+    "name": "reject_non_http_video_metadata",
+    "page": "https://www.facebook.com/reel/7698215485313940345",
+    "html": "<meta content='javascript:alert(1)' property='og:video'><meta property='og:video:url' content='file:///sdcard/secret.mp4'><meta property='og:video:secure_url' content='https://user:password@video.example.org/video.mp4'>",
+    "expectedCount": 0,
+    "expectedStatus": "no_public_source"
+  }
+]
+''') as List;
+    for(final raw in fixtures) {
+      final fixture=Map<String,dynamic>.from(raw as Map);
+      final result=await api.invokeMapMethod<String,dynamic>('socialParseFixture',{'page':fixture['page'],'html':fixture['html']});
+      final choices=(result?['choices'] as List? ?? []);
+      final urls=choices.map((e)=>(e as Map)['url']).toList();
+      expect(choices.length,fixture['expectedCount'],reason:fixture['name'].toString());
+      if(fixture.containsKey('expectedFirstUrl'))expect(urls.first,fixture['expectedFirstUrl']);
+      if(fixture.containsKey('expectedTitle'))expect(result?['title'],fixture['expectedTitle']);
+      if(fixture.containsKey('expectedStatus'))expect(result?['status'],fixture['expectedStatus']);
+      for(final choice in choices){expect((choice as Map)['watermark'],'unknown');}
+    }
+    expect(await api.invokeMethod<String>('socialPage',{'text':'复制打开抖音 https://v.douyin.com/5D5fVf9UNaw/ 8pm mda:/'}),'https://v.douyin.com/5D5fVf9UNaw/');
+    await expectLater(api.invokeMethod<String>('socialPage',{'text':'https://tiktok.com.attacker.example/video/1'}),throwsA(isA<PlatformException>()));
+    SharedPreferences.setMockInitialValues({'quangtv_cached_channels':'[]'});
+    await tester.pumpWidget(const MaterialApp(home:QuangDiscoverScreen(mayHome:true)));
+    await tester.pump(const Duration(seconds:1));
+    await api.invokeMethod<void>('socialShareFixture',{'text':'抖音 https://v.douyin.com/5D5fVf9UNaw/ 复制'});
+    await tester.pump(const Duration(seconds:2));
+    expect(find.byType(QuangSocialDownloads),findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('social-input'))).controller!.text,contains('https://v.douyin.com/5D5fVf9UNaw/'));
+    expect(find.byType(AppBar),findsOneWidget);
+    expect(find.byKey(const ValueKey('social-resolve')),findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());await tester.pump(const Duration(milliseconds:500));
+    SharedPreferences.setMockInitialValues({});
+    debugPrint('QUANGTV_SOCIAL_SHARE_PASS fullCaption=true nativeInbox=true sameShell=true platformParsers=true watermarkHonest=true');
+  });
 
   testWidgets('Background download survives leaving the app and files open and swipe-delete', (tester) async {
     const bridge=MethodChannel('quangtv/browser');

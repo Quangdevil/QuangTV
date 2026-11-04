@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 shutil.copyfile('overrides/quang_discover_screen.dart', 'upstream/flutter_app/lib/screens/quang_discover_screen.dart')
 shutil.copyfile('overrides/quang_may_shell.dart', 'upstream/flutter_app/lib/screens/quang_may_shell.dart')
-for module in ['quang_native_browser.dart','quang_native_tube.dart']:
+for module in ['quang_native_browser.dart','quang_native_tube.dart','quang_social_downloads.dart']:
     shutil.copyfile('overrides/'+module,'upstream/flutter_app/lib/screens/'+module)
 shutil.copyfile('overrides/quang_private_screen.dart', 'upstream/flutter_app/lib/screens/quang_private_screen.dart')
 shutil.copyfile('overrides/quang_web_screen.dart', 'upstream/flutter_app/lib/screens/quang_web_screen.dart')
@@ -276,7 +276,7 @@ activity.write_text(kotlin.replace('class MainActivity: FlutterActivity()',
 # Replace both full-width and compact Map actions with the same browser route.
 shutil.copyfile('overrides/quang_browser_screen.dart', 'upstream/flutter_app/lib/screens/quang_browser_screen.dart')
 shutil.copyfile('overrides/QuangBrowserActivity.kt', activity.parent / 'QuangBrowserActivity.kt')
-for source in ['QuangModuleApi.kt', 'QuangDownloads.kt', 'QuangDownloadService.kt', 'QuangDownloadsActivity.kt']:
+for source in ['QuangModuleApi.kt', 'QuangSocial.kt', 'QuangDownloads.kt', 'QuangDownloadService.kt', 'QuangDownloadsActivity.kt']:
     shutil.copyfile('overrides/' + source, activity.parent / source)
 s = home.read_text().replace("import 'map_screen.dart';", "import 'quang_browser_screen.dart';")
 s = s.replace('const MapScreen()', 'const QuangBrowserScreen()').replace('Icons.map', 'Icons.public')
@@ -287,6 +287,10 @@ marker = 'class MainActivity: com.ryanheise.audioservice.AudioServiceActivity() 
 assert marker in kotlin
 bridge = '''
     private var browserReply: MethodChannel.Result? = null
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
     override fun onPostResume() {
         super.onPostResume()
         if (!QuangYouTube.running && QuangDownloads.prefs(this).contains("youtube_pending_choice")) {
@@ -486,3 +490,15 @@ may_assets.mkdir(parents=True, exist_ok=True)
 shutil.copyfile('overrides/quang_may_gestures.js', may_assets / 'quang_may_gestures.js')
 
 shutil.copyfile('overrides/QuangBrowserTestHooks.kt', activity.parent / 'QuangBrowserTestHooks.kt')
+
+# Receive the original text share, including platform captions, without clipboard polling.
+import xml.etree.ElementTree as ET
+ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+android_ns = '{http://schemas.android.com/apk/res/android}'
+root = ET.fromstring(manifest.read_text())
+main_activity = next(node for node in root.iter('activity') if node.get(android_ns+'name') == '.MainActivity')
+share_filter = ET.SubElement(main_activity, 'intent-filter')
+ET.SubElement(share_filter, 'action', {android_ns+'name': 'android.intent.action.SEND'})
+ET.SubElement(share_filter, 'category', {android_ns+'name': 'android.intent.category.DEFAULT'})
+ET.SubElement(share_filter, 'data', {android_ns+'mimeType': 'text/plain'})
+manifest.write_text(ET.tostring(root, encoding='unicode'))

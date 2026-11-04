@@ -1,0 +1,44 @@
+[
+  {
+    "name": "douyin_prefers_playback_and_skips_other_video",
+    "page": "https://www.iesdouyin.com/share/video/7698215485313940345/",
+    "html": "<script>window._ROUTER_DATA = {\"loaderData\":{\"video\":{\"aweme_detail\":{\"aweme_id\":\"7698215485313940345\",\"desc\":\"Đúng video\",\"video\":{\"play_addr\":{\"url_list\":[\"https://video.example.org/play.mp4?x=1&y=2\"]},\"download_addr\":{\"url_list\":[\"https://video.example.org/watermarked.mp4\"]}}},\"suggested\":{\"aweme_id\":\"1111111111111111111\",\"video\":{\"play_addr\":{\"url_list\":[\"https://video.example.org/wrong.mp4\"]}}}}}};</script>",
+    "expectedTitle": "Đúng video",
+    "expectedFirstUrl": "https://video.example.org/play.mp4?x=1&y=2",
+    "expectedCount": 2,
+    "expectedWatermark": "unknown"
+  },
+  {
+    "name": "tiktok_hydration",
+    "page": "https://www.tiktok.com/@fixture/video/7698215485313940345",
+    "html": "<script id='__UNIVERSAL_DATA_FOR_REHYDRATION__' type='application/json'>{\"__DEFAULT_SCOPE__\":{\"webapp.video-detail\":{\"itemInfo\":{\"itemStruct\":{\"id\":\"7698215485313940345\",\"desc\":\"TikTok fixture\",\"video\":{\"playAddr\":\"https://video.example.org/tiktok.mp4\",\"downloadAddr\":\"https://video.example.org/tiktok-download.mp4\"}}}}}}</script>",
+    "expectedTitle": "TikTok fixture",
+    "expectedFirstUrl": "https://video.example.org/tiktok.mp4",
+    "expectedCount": 2,
+    "expectedWatermark": "unknown"
+  },
+  {
+    "name": "facebook_inline_json",
+    "page": "https://www.facebook.com/reel/7698215485313940345",
+    "html": "<meta property='og:title' content='Facebook fixture'><script>requireLazy([],function(){const data={\"browser_native_hd_url\":\"https:\\/\\/video.example.org\\/facebook.mp4?x=1\\u0026y=2\",\"browser_native_sd_url\":\"https:\\/\\/video.example.org\\/facebook-sd.mp4\"};});</script>",
+    "expectedTitle": "Facebook fixture",
+    "expectedFirstUrl": "https://video.example.org/facebook.mp4?x=1&y=2",
+    "expectedCount": 2,
+    "expectedWatermark": "unknown"
+  },
+  {
+    "name": "no_video_metadata_is_not_a_success",
+    "page": "https://www.iesdouyin.com/share/video/7698215485313940345/",
+    "html": "<html><h1>打开抖音</h1><script>window._ROUTER_DATA={\"loaderData\":{\"itemId\":\"7698215485313940345\"}};</script></html>",
+    "expectedTitle": "Video Douyin",
+    "expectedCount": 0,
+    "expectedStatus": "no_public_source"
+  },
+  {
+    "name": "reject_non_http_video_metadata",
+    "page": "https://www.facebook.com/reel/7698215485313940345",
+    "html": "<meta content='javascript:alert(1)' property='og:video'><meta property='og:video:url' content='file:///sdcard/secret.mp4'><meta property='og:video:secure_url' content='https://user:password@video.example.org/video.mp4'>",
+    "expectedCount": 0,
+    "expectedStatus": "no_public_source"
+  }
+]

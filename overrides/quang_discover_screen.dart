@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +16,7 @@ import 'quang_may_shell.dart';
 import 'quang_native_browser.dart';
 import 'quang_native_tube.dart';
 import 'quang_update_screen.dart';
+import 'quang_social_downloads.dart';
 
 class QuangDiscoverScreen extends StatefulWidget {
   final bool mayHome;
@@ -30,6 +32,9 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
   final searchController = TextEditingController();
   List<Channel> channels = [];
   int section = 0;
+  Timer? _shareTimer;
+  String _sharedVideoText = '';
+  bool _readingShare = false;
   Channel? _inlineChannel;
   Channel? _privateChannel;
   Widget? _audioView;
@@ -55,6 +60,23 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     super.initState();
     if (!licensesAdded) { licensesAdded = true; LicenseRegistry.addLicense(() async* { yield LicenseEntryWithLineBreaks(['NewPipeExtractor'], await rootBundle.loadString('assets/licenses/newpipe.txt')); }); }
     _restore();
+    if (widget.mayHome) {
+      _shareTimer = Timer.periodic(const Duration(seconds: 1), (_) => _consumeVideoShare());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _consumeVideoShare());
+    }
+  }
+
+  Future<void> _consumeVideoShare() async {
+    if (!mounted || _readingShare) return;
+    _readingShare = true;
+    try {
+      final text = await const MethodChannel('quangtv/modules').invokeMethod<String>('consumeShare');
+      if (mounted && text != null && text.isNotEmpty) {
+        setState(() { _sharedVideoText = text; section = 8; _homeFullscreen = false; });
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+    } on PlatformException { /* Retain the current task when no share is available. */ }
+    finally { _readingShare = false; }
   }
 
   Future<void> _showSettings() async {
@@ -402,6 +424,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
 
   @override
   void dispose() {
+    _shareTimer?.cancel();
     _homeScroll.dispose();
     urlController.dispose();
     searchController.dispose();
@@ -440,6 +463,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
       case 'update': await Navigator.push(context, MaterialPageRoute(builder: (_) => const QuangUpdateScreen())); break;
       case 'settings': await _showSettings(); break;
       case 'downloads': setState(()=>section=7); break;
+      case 'social': setState(()=>section=8); break;
     }
     } finally {
       if (mounted) setState(() => _inlineActive = true);
@@ -529,6 +553,7 @@ class _QuangDiscoverScreenState extends State<QuangDiscoverScreen> {
     if (section==1) return QuangNativeTube(legacySearches:youtubeHistory,fullscreen:_homeFullscreen,onFullscreen:_moduleFullscreen);
     if (section==6) return QuangNativeBrowser(fullscreen:_homeFullscreen,onFullscreen:_moduleFullscreen);
     if (section==7) return const QuangNativeDownloads();
+    if (section==8) return QuangSocialDownloads(initialText:_sharedVideoText,fullscreen:_homeFullscreen,onFullscreen:_moduleFullscreen);
     if (section==5) {
       final selected=_privateChannel;
       final player=selected==null ? const SizedBox.shrink() : QuangNativePlayer(key:_privatePlayerKey,channel:selected,startMuted:true,embedded:true,onFullscreenChanged:_moduleFullscreen);

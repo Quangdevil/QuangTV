@@ -21,22 +21,93 @@ object QuangModuleApi {
     private val main=Handler(Looper.getMainLooper())
     private var fixture=false
     private var lastDeleted:Uri?=null
+    private var lastBatchDeleted=listOf<Uri>()
     private fun rows(c:Context,key:String):List<JSONObject> {
         val a=try{JSONArray(c.getSharedPreferences("quangtube_history",0).getString(key,"[]"))}catch(_:Exception){JSONArray()}
         return (0 until a.length()).mapNotNull{a.optJSONObject(it)}
     }
     private fun save(c:Context,key:String,items:List<JSONObject>){val a=JSONArray();items.take(100).forEach{a.put(it)};c.getSharedPreferences("quangtube_history",0).edit().putString(key,a.toString()).apply()}
     private fun record(c:Context,key:String,item:JSONObject,field:String){save(c,key,listOf(item)+rows(c,key).filter{it.optString(field)!=item.optString(field)})}
+    private fun mediaHeaders(a:Activity,url:String,page:String?):Map<String,String> {
+        val headers=mutableMapOf("User-Agent" to android.webkit.WebSettings.getDefaultUserAgent(a))
+        val target=Uri.parse(url)
+        if(target.scheme !in listOf("http","https") || target.host.isNullOrEmpty())return headers
+        page?.let { val uri=Uri.parse(it);if(uri.scheme in listOf("http","https")&&!uri.host.isNullOrEmpty())headers["Referer"]=it }
+        android.webkit.CookieManager.getInstance().getCookie(url)?.takeIf{it.isNotBlank()}?.let{headers["Cookie"]=it}
+        return headers
+    }
     fun handle(a:Activity,call:MethodCall,result:MethodChannel.Result){
         val debug=a.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         if(call.method=="testFixture" && debug){fixture=call.argument<Boolean>("enabled")==true;result.success(null);return}
+        if(call.method=="lastBatchDeleteExists" && debug){result.success(lastBatchDeleted.map{QuangDownloads.exists(a,it)});return}
         if(call.method=="lastDeleteExists" && debug){result.success(QuangDownloads.exists(a,lastDeleted));return}
         if(fixture && debug){
             if(call.method=="catalog"){result.success(listOf(mapOf("url" to "https://www.youtube.com/watch?v=aqz-KE-bpKQ","title" to "Native Tube fixture","author" to "QuangTV QA","thumbnail" to "","duration" to 60)));return}
             if(call.method=="playback"){result.success(mapOf("url" to "http://10.0.2.2:8765/fixture.mp4","title" to "Native Tube fixture","page" to "https://www.youtube.com/watch?v=aqz-KE-bpKQ","choices" to listOf(mapOf("url" to "http://10.0.2.2:8765/fixture.mp4","quality" to "Fixture"))));return}
             if(call.method=="browse" && Uri.parse(call.argument<String>("url") ?: "").host=="quangtv.fixture"){result.success(mapOf("url" to "https://quangtv.fixture/","html" to "<html><body><h1>Native browser fixture</h1><video controls src='http://10.0.2.2:8765/fixture.mp4'></video></body></html>"));return}
         }
+        if(debug && call.method=="socialParseFixture") {try{result.success(QuangSocial.parse(call.argument<String>("page") ?: "",call.argument<String>("html") ?: ""))}catch(e:Exception){result.error("PARSE",e.message,null)};return}
+        if(debug && call.method=="socialShareFixture") {a.intent=Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,call.argument<String>("text"));result.success(null);return}
         when(call.method){
+            "consumeShare" -> {
+                val intent=a.intent
+                if(intent?.action==Intent.ACTION_SEND && intent.type=="text/plain") {
+                    val text=intent.getStringExtra(Intent.EXTRA_TEXT)?.take(16000)
+                    intent.removeExtra(Intent.EXTRA_TEXT);intent.action=Intent.ACTION_MAIN
+                    result.success(text)
+                }else result.success(null)
+            }
+            "socialPage" -> {try{result.success(QuangSocial.shareUrl(call.argument<String>("text") ?: ""))}catch(e:Exception){result.error("URL",e.message,null)}}
+            "socialResolve" -> QuangSocial.resolve(a.applicationContext,call.argument<String>("text") ?: ""){video,error->if(video!=null)result.success(video)else result.error("SOCIAL",error,null)}
+            "browserMediaHeaders" -> result.success(mediaHeaders(a,call.argument<String>("url") ?: "",call.argument<String>("page")))
+            "socialDownload" -> {
+                val initial=call.argument<String>("url") ?: ""
+                val page=call.argument<String>("page")
+                val ua=android.webkit.WebSettings.getDefaultUserAgent(a)
+                workers.execute {
+                    try {
+                        var target=initial
+                        var resolved:String?=null
+                        repeat(6) {
+                            if(resolved==null) {
+                                val uri=QuangSocial.validatePublicUrl(target)
+                                val conn=URL(target).openConnection() as HttpURLConnection
+                                try {
+                                    conn.instanceFollowRedirects=false;conn.connectTimeout=12000;conn.readTimeout=12000
+                                    conn.setRequestProperty("User-Agent",ua);conn.setRequestProperty("Range","bytes=0-1")
+                                    if(page!=null)conn.setRequestProperty("Referer",QuangSocial.shareUrl(page))
+                                    android.webkit.CookieManager.getInstance().getCookie(target)?.takeIf{it.isNotBlank()}?.let{conn.setRequestProperty("Cookie",it)}
+                                    val code=conn.responseCode
+                                    if(code in listOf(301,302,303,307,308))target=uri.resolve(conn.getHeaderField("Location") ?: error("Thiếu địa chỉ chuyển hướng")).toString()
+                                    else {
+                                        check(code in listOf(200,206)){"Nguồn video chưa cho tải (HTTP $code)"}
+                                        val type=conn.contentType ?: ""
+                                        check(type.startsWith("video/") || type.startsWith("application/octet-stream")){"Nguồn này chưa phải tệp video tải được"}
+                                        resolved=target
+                                    }
+                                }finally{conn.disconnect()}
+                            }
+                        }
+                        val source=resolved ?: error("Nguồn chuyển hướng quá nhiều lần")
+                        main.post {
+                            try {
+                                val name=(call.argument<String>("name") ?: "Video-${System.currentTimeMillis()}.mp4").replace(Regex("[^\\p{L}\\p{N} _.-]"),"_").take(140)
+                                result.success(QuangDownloads.enqueue(a,source,mediaHeaders(a,source,page),name))
+                            }catch(e:Exception){result.error("DOWNLOAD",e.message,null)}
+                        }
+                    }catch(e:Exception){main.post{result.error("DOWNLOAD",e.message,null)}}
+                }
+            }
+            "deleteDownloads" -> {
+                val keys=(call.argument<List<String>>("keys") ?: emptyList()).toSet()
+                val owned=QuangDownloads.entries(a).filter{it.key in keys}
+                lastBatchDeleted=owned.mapNotNull{it.uri}
+                var removed=0;var failed=0
+                owned.forEach{if(QuangDownloads.remove(a,it))removed++ else failed++}
+                result.success(mapOf("removed" to removed,"failed" to failed))
+            }
+            "retryDownload" -> {val entry=QuangDownloads.entries(a).firstOrNull{it.key==call.argument<String>("key")};result.success(entry!=null&&QuangDownloads.retry(a,entry))}
+
             "browse" -> {
                 val target=call.argument<String>("url") ?: "";val uri=Uri.parse(target)
                 if(uri.scheme !in listOf("http","https")||uri.host.isNullOrEmpty()){result.error("URL","Địa chỉ không hợp lệ",null);return}
@@ -95,7 +166,7 @@ object QuangModuleApi {
             "recordSearch" -> {val query=(call.argument<String>("query") ?: "").trim().take(300);if(query.isNotEmpty())record(a,"searches",JSONObject().put("query",query),"query");result.success(null)}
             "recordVideo" -> {val id=call.argument<String>("id") ?: "";if(id.matches(Regex("[A-Za-z0-9_-]{11}")))record(a,"videos",JSONObject().put("id",id).put("title",call.argument<String>("title") ?: "Video").put("thumbnail",call.argument<String>("thumbnail") ?: ""),"id");result.success(null)}
             "deleteHistory" -> {val key=if(call.argument<String>("kind")=="searches")"searches" else "videos";val field=if(key=="searches")"query" else "id";val value=call.argument<String>("value");save(a,key,if(value==null)emptyList()else rows(a,key).filter{it.optString(field)!=value});result.success(null)}
-            "download" -> {var url=call.argument<String>("url") ?: "";if(fixture && debug){val inner=Uri.parse(url).getQueryParameter("url");if(inner!=null&&Uri.parse(inner).host=="10.0.2.2")url=QuangProxy.downloadUrl(a,inner)};if(Uri.parse(url).scheme !in listOf("http","https")){result.error("URL","URL tải không hợp lệ",null);return};val name=(call.argument<String>("name") ?: "Video.mp4").replace(Regex("[^\\p{L}\\p{N} _.-]"),"_").take(140);result.success(QuangDownloads.enqueue(a,url,mapOf("User-Agent" to android.webkit.WebSettings.getDefaultUserAgent(a)),name))}
+            "download" -> {var url=call.argument<String>("url") ?: "";if(fixture && debug){val inner=Uri.parse(url).getQueryParameter("url");if(inner!=null&&Uri.parse(inner).host=="10.0.2.2")url=QuangProxy.downloadUrl(a,inner)};if(Uri.parse(url).scheme !in listOf("http","https")){result.error("URL","URL tải không hợp lệ",null);return};val name=(call.argument<String>("name") ?: "Video.mp4").replace(Regex("[^\\p{L}\\p{N} _.-]"),"_").take(140);result.success(QuangDownloads.enqueue(a,url,mediaHeaders(a,url,call.argument<String>("page")),name))}
             "downloads" -> result.success(QuangDownloads.entries(a).map{mapOf("key" to it.key,"name" to it.name,"state" to it.state,"bytes" to it.bytes,"total" to it.total,"complete" to it.complete,"active" to it.active,"detail" to it.detail)})
             "deleteDownload" -> {val entry=QuangDownloads.entries(a).firstOrNull{it.key==call.argument<String>("key")};lastDeleted=entry?.uri;result.success(entry!=null&&QuangDownloads.remove(a,entry))}
             "openDownload" -> {val key=call.argument<String>("key");if(QuangDownloads.entries(a).any{it.key==key&&it.complete})a.startActivity(Intent(a,QuangDownloadsActivity::class.java).putExtra("folder","videos").putExtra("openKey",key));result.success(null)}

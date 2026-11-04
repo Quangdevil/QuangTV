@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.provider.OpenableColumns
+import org.json.JSONObject
 
 /** App-owned downloads only: no broad storage permission or scanning other apps. */
 object QuangDownloads {
@@ -30,6 +31,11 @@ object QuangDownloads {
             .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "QuangTV/$filename")
         headers.forEach { (key,value) -> request.addRequestHeader(key,value) }
         val id=manager(c).enqueue(request)
+        // Retry metadata stays in app-private storage and is never returned to
+        // websites or logs. Reuse exactly the original request, including its
+        // headers, rather than an unrelated copied URL.
+        val metadata=JSONObject().put("url",url).put("name",filename).put("headers",JSONObject(headers))
+        prefs(c).edit().putString("download_request:$id",metadata.toString()).apply()
         val ids=prefs(c).getStringSet("downloads",emptySet())!!.toMutableSet();ids.add(id.toString())
         prefs(c).edit().putStringSet("downloads",ids).apply()
         return id
@@ -65,14 +71,45 @@ object QuangDownloads {
         if(entry.key=="youtube:active") { QuangYouTube.cancel();return true }
         return try {
             if(entry.id!=null) {
+                val owned=prefs(c).getStringSet("downloads",emptySet())!!.toMutableSet()
+                if(entry.id.toString() !in owned)return false
                 manager(c).remove(entry.id)
-                val ids=prefs(c).getStringSet("downloads",emptySet())!!.toMutableSet();ids.remove(entry.id.toString())
-                prefs(c).edit().putStringSet("downloads",ids).apply()
+                // DownloadManager removes its owned file. Verify physical
+                // deletion before forgetting registry state.
+                if(exists(c,entry.uri)) {
+                    c.contentResolver.delete(entry.uri!!,null,null)
+                    if(exists(c,entry.uri))return false
+                }
+                owned.remove(entry.id.toString())
+                prefs(c).edit().putStringSet("downloads",owned).remove("download_request:${entry.id}").apply()
+                true
             } else if(entry.uri!=null) {
-                c.contentResolver.delete(entry.uri,null,null)
-                val saved=prefs(c).getStringSet("local_videos",emptySet())!!.toMutableSet();saved.remove(entry.uri.toString())
+                val saved=prefs(c).getStringSet("local_videos",emptySet())!!.toMutableSet()
+                if(entry.uri.toString() !in saved)return false
+                if(exists(c,entry.uri))c.contentResolver.delete(entry.uri,null,null)
+                if(exists(c,entry.uri))return false
+                saved.remove(entry.uri.toString())
                 prefs(c).edit().putStringSet("local_videos",saved).apply()
-            }
+                true
+            } else false
+        } catch (_: Exception) { false }
+    }
+    @Synchronized fun retry(c: Context, entry: Entry): Boolean {
+        if(entry.id==null || entry.active || entry.complete)return false
+        if(entry.id.toString() !in prefs(c).getStringSet("downloads",emptySet())!!)return false
+        return try {
+            val source=JSONObject(prefs(c).getString("download_request:${entry.id}",null) ?: return false)
+            val url=source.getString("url")
+            if(Uri.parse(url).scheme !in listOf("http","https"))return false
+            val original=source.optString("name","Video.mp4")
+            val dot=original.lastIndexOf('.')
+            val name=if(dot>0)original.substring(0,dot)+"-retry-${System.currentTimeMillis()}"+original.substring(dot) else original+"-retry-${System.currentTimeMillis()}.mp4"
+            val h=source.optJSONObject("headers") ?: JSONObject()
+            val headers=h.keys().asSequence().associateWith{h.optString(it)}
+            enqueue(c,url,headers,name)
+            // Preserve the failed item if cancellation/deletion itself fails;
+            // never claim it was removed just because a new request was queued.
+            remove(c,entry)
             true
         } catch (_: Exception) { false }
     }

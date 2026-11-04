@@ -1,13 +1,13 @@
-name: Compile native modules
+name: Verify social downloads and native browser
 on:
   push:
-    branches: [qa/native-modules]
+    branches: [qa/social-downloads]
 permissions:
   contents: read
 jobs:
   home:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout QuangTV build recipe
         uses: actions/checkout@v4
@@ -49,7 +49,7 @@ jobs:
           flutter pub get
       - name: Analyze QuangTV Dart code
         working-directory: upstream/flutter_app
-        run: flutter analyze lib/screens/quang_native_browser.dart lib/screens/quang_native_tube.dart lib/screens/quang_may_shell.dart lib/screens/quang_vtv_source.dart lib/screens/quang_network.dart lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
+        run: flutter analyze lib/screens/quang_social_downloads.dart lib/screens/quang_native_browser.dart lib/screens/quang_native_tube.dart lib/screens/quang_may_shell.dart lib/screens/quang_vtv_source.dart lib/screens/quang_network.dart lib/screens/quang_discover_screen.dart lib/screens/quang_native_player.dart lib/screens/quang_audio_screen.dart lib/screens/quang_update_screen.dart lib/screens/quang_browser_screen.dart lib/screens/quang_proxy_screen.dart integration_test/browser_test.dart
       - name: Cache pinned FFmpeg test tools
         uses: actions/cache@v4
         with:
