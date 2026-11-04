@@ -57,7 +57,8 @@ object QuangModuleApi {
                     result.success(text)
                 }else result.success(null)
             }
-            "socialPage" -> {try{result.success(QuangSocial.shareUrl(call.argument<String>("text") ?: ""))}catch(e:Exception){result.error("URL",e.message,null)}}
+            "socialShareUrl" -> {try{result.success(QuangSocial.shareUrl(call.argument<String>("text") ?: ""))}catch(e:Exception){result.error("URL",e.message,null)}}
+            "socialPage" -> QuangSocial.resolvePage(call.argument<String>("text") ?: ""){url,error->if(url!=null)result.success(url)else result.error("URL",error,null)}
             "socialResolve" -> QuangSocial.resolve(a.applicationContext,call.argument<String>("text") ?: ""){video,error->if(video!=null)result.success(video)else result.error("SOCIAL",error,null)}
             "browserMediaHeaders" -> result.success(mediaHeaders(a,call.argument<String>("url") ?: "",call.argument<String>("page")))
             "socialDownload" -> {

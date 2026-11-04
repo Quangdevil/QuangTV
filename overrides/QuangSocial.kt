@@ -108,6 +108,16 @@ object QuangSocial {
         error("Link chuyển hướng quá nhiều lần")
     }
 
+    fun resolvePage(text:String,done:(String?,String?)->Unit) {
+        worker.execute {
+            try {
+                val input=shareUrl(text)
+                val target=if(contentId(input)!=null)input else fetch(input).url
+                main.post{done(target,null)}
+            }catch(e:Exception){main.post{done(null,e.message ?: "Không mở được link chia sẻ")}}
+        }
+    }
+
     @Suppress("UNUSED_PARAMETER")
     fun resolve(context: Context, text: String, done: (Map<String, Any>?, String?) -> Unit) {
         worker.execute {

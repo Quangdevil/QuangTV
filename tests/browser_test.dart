@@ -280,8 +280,8 @@ void main() {
       if(fixture.containsKey('expectedStatus'))expect(result?['status'],fixture['expectedStatus']);
       for(final choice in choices){expect((choice as Map)['watermark'],'unknown');}
     }
-    expect(await api.invokeMethod<String>('socialPage',{'text':'复制打开抖音 https://v.douyin.com/5D5fVf9UNaw/ 8pm mda:/'}),'https://v.douyin.com/5D5fVf9UNaw/');
-    await expectLater(api.invokeMethod<String>('socialPage',{'text':'https://tiktok.com.attacker.example/video/1'}),throwsA(isA<PlatformException>()));
+    expect(await api.invokeMethod<String>('socialShareUrl',{'text':'复制打开抖音 https://v.douyin.com/5D5fVf9UNaw/ 8pm mda:/'}),'https://v.douyin.com/5D5fVf9UNaw/');
+    await expectLater(api.invokeMethod<String>('socialShareUrl',{'text':'https://tiktok.com.attacker.example/video/1'}),throwsA(isA<PlatformException>()));
     SharedPreferences.setMockInitialValues({'quangtv_cached_channels':'[]'});
     await tester.pumpWidget(const MaterialApp(home:QuangDiscoverScreen(mayHome:true)));
     await tester.pump(const Duration(seconds:1));

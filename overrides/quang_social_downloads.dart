@@ -64,12 +64,13 @@ class _QuangSocialDownloadsState extends State<QuangSocialDownloads> {
     } finally { if (mounted) setState(() => busy = false); }
   }
   Future<void> _openPage() async {
+    setState(() => busy = true);
     try {
       final url = await api.invokeMethod<String>('socialPage', {'text': input.text});
       if (mounted && url != null) setState(() { browserPage = url; files = false; });
     } on PlatformException catch (e) {
       if (mounted) setState(() => error = e.message ?? 'Link không hợp lệ.');
-    }
+    } finally { if (mounted) setState(() => busy = false); }
   }
   @override
   void dispose() { request++; input.dispose(); super.dispose(); }
