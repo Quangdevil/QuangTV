@@ -67,7 +67,7 @@ object QuangSocial {
         Regex("(?:^|&)(?:aweme_id|modal_id|v)=(\\d{10,})(?:&|$)").find(uri.rawQuery ?: "")?.let { return it.groupValues[1] }
         return null
     }
-    private fun fetch(raw: String): Page {
+    private fun fetch(raw: String, cookies: java.net.CookieManager = java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ORIGINAL_SERVER)): Page {
         var target = raw
         var expectedId = contentId(raw)
         repeat(6) {
@@ -84,7 +84,11 @@ object QuangSocial {
                 connection.setRequestProperty("User-Agent", mobileUa)
                 connection.setRequestProperty("Accept", "text/html,application/xhtml+xml")
                 connection.setRequestProperty("Accept-Encoding", "identity")
+                connection.setRequestProperty("Referer", "https://www.douyin.com/")
+                connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9")
+                cookies.get(uri, emptyMap()).forEach { (name, values) -> connection.setRequestProperty(name, values.joinToString("; ")) }
                 val code = connection.responseCode
+                cookies.put(uri, connection.headerFields)
                 if (code in listOf(301, 302, 303, 307, 308)) {
                     target = uri.resolve(connection.getHeaderField("Location") ?: error("Link chuyển hướng thiếu địa chỉ")).toString()
                 } else {
@@ -108,6 +112,22 @@ object QuangSocial {
         error("Link chuyển hướng quá nhiều lần")
     }
 
+    private fun hasVisibleChallenge(html:String):Boolean {
+        val lower=html.lowercase();val visible=StringBuilder();var cursor=0
+        while(cursor<html.length && visible.length<200000) {
+            val script=lower.indexOf("<script",cursor);val style=lower.indexOf("<style",cursor)
+            val start=when{script<0->style;style<0->script;else->minOf(script,style)}
+            if(start<0){visible.append(html.substring(cursor).take(200000-visible.length));break}
+            visible.append(html.substring(cursor,start).take(200000-visible.length))
+            val tag=if(start==script)"script" else "style"
+            val end=lower.indexOf("</$tag",start)
+            if(end<0)break
+            val close=lower.indexOf('>',end);if(close<0)break
+            cursor=close+1
+        }
+        return Regex("captcha|verify you are human|请完成验证|请进行验证|安全验证|滑动验证|访问频繁",RegexOption.IGNORE_CASE).containsMatchIn(visible)
+    }
+
     fun resolvePage(text:String,done:(String?,String?)->Unit) {
         worker.execute {
             try {
@@ -123,14 +143,22 @@ object QuangSocial {
         worker.execute {
             try {
                 val input = shareUrl(text)
-                val page = fetch(input)
-                val result = parse(page.url, page.html)
+                val cookies=java.net.CookieManager(null,java.net.CookiePolicy.ACCEPT_ORIGINAL_SERVER)
+                var page = fetch(input,cookies)
+                var result = parse(page.url, page.html)
+                // Some public Douyin share pages first set their anonymous session
+                // cookie and only include item_list in the next normal request.
+                // One retry only, without changing identity or solving challenges.
+                if(platform(input)=="Douyin" && (result["choices"] as? List<*>)?.isEmpty()==true &&
+                    !hasVisibleChallenge(page.html)) {
+                    page=fetch(page.url,cookies);result=parse(page.url,page.html)
+                }
                 val choices = (result["choices"] as? List<*>)?.filterIsInstance<Map<String, Any>>() ?: emptyList()
                 val valid = choices.filter { choice -> try { validatePublicUrl(choice["url"] as String); true } catch (_: Exception) { false } }
                 if (valid.isEmpty()) {
                     val label = platform(input)
                     val reason = when {
-                        Regex("captcha|verify you are human|验证|访问频繁", RegexOption.IGNORE_CASE).containsMatchIn(page.html) -> "$label yêu cầu xác minh. Mở video trong trình duyệt để kiểm tra."
+                        hasVisibleChallenge(page.html) -> "$label yêu cầu xác minh. Mở video trong trình duyệt để kiểm tra."
                         else -> "Chưa lấy được nguồn $label công khai. Video có thể cần đăng nhập, bị giới hạn hoặc cấu trúc trang đã đổi. Thử mở video trong trình duyệt và phát để bắt nguồn."
                     }
                     main.post { done(null, reason) }
@@ -152,7 +180,12 @@ object QuangSocial {
         var budget = 60000
         fun decoded(value: String): String = value.replace("&amp;", "&").replace("&#38;", "&").replace("&#x26;", "&").replace("\\/", "/")
         fun add(raw: String, quality: String, source: String) {
-            val url = decoded(raw)
+            val candidate = decoded(raw)
+            val original = try { URI(candidate) } catch (_: Exception) { return }
+            val host=original.host?.lowercase() ?: return
+            // Choose the public playback variant when Douyin exposes its
+            // downloadable playwm variant. This does not edit video pixels.
+            val url=if(label=="Douyin" && (host=="aweme.snssdk.com" || isDomain(host,"iesdouyin.com") || isDomain(host,"douyin.com")) && original.path=="/aweme/v1/playwm/")candidate.replace("/aweme/v1/playwm/","/aweme/v1/play/")else candidate
             val uri = try { URI(url) } catch (_: Exception) { return }
             if (uri.scheme !in listOf("https", "http") || uri.host.isNullOrEmpty() || uri.userInfo != null || uri.port !in listOf(-1, 80, 443) || url.length > 12000 || sources.size >= 24) return
             sources.putIfAbsent(url, mapOf("url" to url, "quality" to quality, "watermark" to "unknown", "source" to source))

@@ -40,5 +40,14 @@
     "html": "<meta content='javascript:alert(1)' property='og:video'><meta property='og:video:url' content='file:///sdcard/secret.mp4'><meta property='og:video:secure_url' content='https://user:password@video.example.org/video.mp4'>",
     "expectedCount": 0,
     "expectedStatus": "no_public_source"
+  },
+  {
+    "name": "douyin_public_playback_variant",
+    "page": "https://www.iesdouyin.com/share/video/7698215485313940345/",
+    "html": "<script>window._ROUTER_DATA={\"loaderData\": {\"video_(id)/page\": {\"videoInfoRes\": {\"item_list\": [{\"aweme_id\": \"7698215485313940345\", \"desc\": \"SSR cookie session shape\", \"video\": {\"play_addr\": {\"url_list\": [\"https://aweme.snssdk.com/aweme/v1/playwm/?video_id=fixture&ratio=720p\"]}}}]}}}};</script>",
+    "expectedTitle": "SSR cookie session shape",
+    "expectedFirstUrl": "https://aweme.snssdk.com/aweme/v1/play/?video_id=fixture&ratio=720p",
+    "expectedCount": 1,
+    "expectedWatermark": "unknown"
   }
 ]
