@@ -24,6 +24,30 @@ jobs:
             sleep 15
           done
           exit 1
+      - name: Wait for corrected keyboard viewport and bulk deletion QA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 100); do
+            STATE=$(gh api repos/$GH_REPO/actions/runs/41868899371 --jq .status)
+            if [ "$STATE" = completed ]; then
+              test "$(gh api repos/$GH_REPO/actions/runs/41868899371 --jq .head_sha)" = 3790f8e3f02ccba11246a49cbd90cdef32993ed3
+              test "$(gh api repos/$GH_REPO/actions/runs/41868899371 --jq .conclusion)" = success
+              gh api repos/$GH_REPO/compare/73ecca3dc67c06c2d99f75b325bc7f3d8a54f697...3790f8e3f02ccba11246a49cbd90cdef32993ed3 > "$RUNNER_TEMP/qa-diff.json"
+              python3 - "$RUNNER_TEMP/qa-diff.json" <<'PY'
+              import json,sys
+              j=json.load(open(sys.argv[1]))
+              allowed={'.github/workflows/compile-native-modules.yml','scripts/test_browser.sh','tests/browser_test.dart'}
+              assert j['status']=='ahead' and set(f['filename'] for f in j['files'])<=allowed
+              print('QUANGTV_QA_PRODUCTION_SOURCE_IDENTICAL_PASS')
+              PY
+              exit 0
+            fi
+            sleep 15
+          done
+          exit 1
       - name: Signed candidate
         uses: actions/download-artifact@v4
         with:
@@ -38,6 +62,13 @@ jobs:
           run-id: 41867014018
           github-token: ${{ github.token }}
           path: evidence
+      - name: Corrected viewport and bulk deletion evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: native-playback-evidence-
+          run-id: 41868899371
+          github-token: ${{ github.token }}
+          path: corrected-evidence
       - name: Verify evidence and publish exact APK
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,8 +76,8 @@ jobs:
         run: |
           set -euo pipefail
           grep -q 'QUANGTV_PINNED_PLAYER_PASS' evidence/browser-test-result.txt
-          grep -q 'QUANGTV_NATIVE_MODULES_PASS' evidence/browser-test-result.txt
-          grep -q 'QUANGTV_DOWNLOAD_BULK_PASS' evidence/browser-test-result.txt
+          grep -q 'QUANGTV_NATIVE_MODULES_PASS' corrected-evidence/browser-test-result.txt
+          grep -q 'QUANGTV_DOWNLOAD_BULK_PASS' corrected-evidence/browser-test-result.txt
           grep -q 'QUANGTV_SOCIAL_SHARE_PASS' evidence/browser-test-result.txt
           grep -q 'QUANGTV_SOCIAL_LIVE_PASS' evidence/browser-test-result.txt
           grep -q 'QUANGTV_INLINE_HOME_PASS' evidence/browser-test-result.txt
